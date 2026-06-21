@@ -11,7 +11,6 @@ from reportlab.lib.utils import ImageReader
 st.set_page_config(layout="wide")
 st.title("📊 AVM - Engenharia de Avaliações")
 
-# Função de PDF
 def gerar_laudo_pdf(d, fig, eq_str, info, graus):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -25,6 +24,7 @@ def gerar_laudo_pdf(d, fig, eq_str, info, graus):
     c.drawString(50, y, f"Fundamentação: {graus[0]} | Precisão: {graus[1]}")
     y -= 20
     c.drawString(50, y, f"V.U. Médio: R$ {d['vu']:,.2f} | Total: R$ {d['total']:,.2f}")
+    
     img_buf = io.BytesIO()
     fig.savefig(img_buf, format='png')
     img_buf.seek(0)
@@ -41,14 +41,21 @@ if arquivo is not None:
     target = st.sidebar.selectbox("Coluna Alvo:", df.columns)
     features = st.sidebar.multiselect("Variáveis Explicativas:", [c for c in df.columns if c != target])
     
+    st.sidebar.header("📝 Dados do Imóvel")
     info = {
         "Endereço": st.sidebar.text_input("Endereço"),
+        "Complemento": st.sidebar.text_input("Complemento"),
         "Bairro": st.sidebar.text_input("Bairro"),
-        "Informante": st.sidebar.text_input("Informante")
+        "Informante": st.sidebar.text_input("Informante"),
+        "Telefone": st.sidebar.text_input("Telefone")
     }
 
     if features and target:
-        df_c = df.dropna(subset=features + [target])
+        df_c = df.copy()
+        for col in features + [target]:
+            df_c[col] = pd.to_numeric(df_c[col].astype(str).str.replace(',', '.'), errors='coerce')
+        df_c = df_c.dropna(subset=features + [target])
+
         if not df_c.empty:
             modelo = LinearRegression().fit(df_c[features], df_c[target])
             eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
@@ -63,9 +70,7 @@ if arquivo is not None:
                 std = np.std(df_c[target] - preds)
                 min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
                 
-                # AQUI ESTÁ A SEGURANÇA: Só calcula o total se 'features' tiver conteúdo
-                total = vu * inputs[features[0]] if len(features) > 0 else vu
-                
+                total = vu * inputs[features[0]] if features else vu
                 graus = ("Grau III" if len(df_c) >= 12 else "Grau I", "Grau III" if (max_v-min_v)/(2*vu) < 0.2 else "Grau I")
                 
                 c1, c2, c3 = st.columns(3)
@@ -74,7 +79,7 @@ if arquivo is not None:
                 c3.metric("V.U. Máximo", f"R$ {max_v:,.2f}")
                 
                 st.markdown(f"### Valor Total Estimado: R$ {total:,.2f}")
-                st.info(f"Fundamentação: {graus[0]} | Precisão: {graus[1]}")
+                st.info(f"Fundamentação: {graus[0]} | Precisão: {graus[1]} | Amostra: {len(df_c)}")
                 
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
                 ax1.scatter(df_c[target], preds); ax1.set_title("Aderência")
@@ -83,5 +88,3 @@ if arquivo is not None:
                 
                 pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus)
                 st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf")
-        else:
-            st.error("Dados insuficientes.")
