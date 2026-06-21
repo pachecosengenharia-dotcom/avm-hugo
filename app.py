@@ -19,22 +19,18 @@ def gerar_laudo_pdf(d, fig, eq_str, inputs, info_imovel):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, 820, "Laudo Tecnico Completo (NBR 14653)")
+    c.drawString(50, 820, "Laudo Tecnico (NBR 14653)")
     c.setFont("Helvetica", 10)
-    
     y = 790
     for k, v in info_imovel.items():
         c.drawString(50, y, f"{k}: {v}"); y -= 15
-        
     y -= 10
     c.drawString(50, y, "Equacao do Modelo:"); y -= 15
     for i in range(0, len(eq_str), 80):
         c.drawString(50, y, eq_str[i:i+80]); y -= 12
-    
     y -= 10
     c.drawString(50, y, f"RESULTADOS: Min: R$ {d['min']:,.2f} | Medio: R$ {d['vu']:,.2f} | Max: R$ {d['max']:,.2f}")
-    c.drawString(50, y-15, f"VALOR TOTAL ESTIMADO: R$ {d['total']:,.2f}")
-    
+    c.drawString(50, y-15, f"VALOR TOTAL: R$ {d['total']:,.2f}")
     if fig is not None:
         img_buf = io.BytesIO()
         fig.savefig(img_buf, format='png')
@@ -44,7 +40,7 @@ def gerar_laudo_pdf(d, fig, eq_str, inputs, info_imovel):
     return buffer
 
 arquivo = st.sidebar.file_uploader("Carregar CSV", type=["csv", "txt"])
-fig = None 
+fig = None
 
 if arquivo:
     raw_data = arquivo.getvalue().decode('latin-1')
@@ -52,7 +48,8 @@ if arquivo:
     df = pd.read_csv(io.StringIO(raw_data), sep=sep)
     df.columns = [normalizar(c) for c in df.columns]
     
-    target = st.sidebar.selectbox("Coluna Valor Unitario:", df.columns.tolist())
+    # Busca automática da coluna alvo
+    target = next((c for c in df.columns if any(x in c for x in ['valor', 'preco', 'unitario'])), df.columns[-1])
     features = st.sidebar.multiselect("Variaveis Explicativas:", [c for c in df.columns if c != target])
     
     st.sidebar.header("📝 Dados do Imovel")
