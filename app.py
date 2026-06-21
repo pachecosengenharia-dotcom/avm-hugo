@@ -15,60 +15,80 @@ st.title("📊 AVM - Engenharia de Avaliações")
 def normalizar(texto):
     return unicodedata.normalize('NFKD', str(texto)).encode('ASCII', 'ignore').decode('utf-8').lower().strip()
 
-def limpar_coluna(col):
-    # Converte strings de moeda/formato brasileiro para float, mantendo o que já é número
-    return pd.to_numeric(col.astype(str).str.replace(r'[^\d,.-]', '', regex=True).str.replace('.', '', regex=False).str.replace(',', '.'), errors='coerce')
+def limpar_numero(valor):
+    try:
+        # Remove R$, espaços e pontos de milhar, troca vírgula por ponto
+        s = str(valor).replace('R$', '').replace('.', '').replace(',', '.')
+        return float(s)
+    except:
+        return np.nan
+
+def gerar_laudo_pdf(d, fig, eq_str, inputs, info_imovel):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, 820, "Laudo Tecnico (NBR 14653)")
+    c.setFont("Helvetica", 10)
+    
+    y = 790
+    for k, v in info_imovel.items():
+        c.drawString(50, y, f"{k}: {v}"); y -= 15
+        
+    y -= 10
+    c.drawString(50, y, "Equacao do Modelo:"); y -= 12
+    c.drawString(50, y-15, eq_str[:90])
+    
+    y -= 40
+    c.drawString(50, y, f"V.U. Estimado: R$ {d['vu']:,.2f} | Total: R$ {d['total']:,.2f}")
+    
+    img_buf = io.BytesIO()
+    fig.savefig(img_buf, format='png')
+    img_buf.seek(0)
+    c.drawImage(ImageReader(img_buf), 50, y-200, width=400, height=180)
+    c.save(); buffer.seek(0)
+    return buffer
 
 arquivo = st.sidebar.file_uploader("Carregar CSV", type=["csv", "txt"])
-
 if arquivo:
     raw_data = arquivo.getvalue().decode('latin-1')
     sep = ';' if raw_data.count(';') > raw_data.count(',') else ','
     df = pd.read_csv(io.StringIO(raw_data), sep=sep)
     df.columns = [normalizar(c) for c in df.columns]
-    
-    # 1. Identificação de colunas com fallback
-    target = next((c for c in df.columns if any(x in c for x in ['valor', 'preco', 'unitario'])), df.columns[-1])
-    col_area = next((c for c in df.columns if 'area' in c), None)
-    
-    st.write(f"**Coluna Alvo detectada:** {target}")
-    st.write(f"**Coluna Área detectada:** {col_area}")
 
-    # 2. Limpeza rigorosa sem descartar linhas antes da hora
-    df_c = df.copy()
-    for col in df_c.columns:
-        df_c[col] = limpar_coluna(df_c[col])
+    # Detecta automaticamente colunas de Valor e Área
+    col_valor = next((c for c in df.columns if any(x in c for x in ['valor', 'preco', 'unitario'])), df.columns[-1])
+    col_area = next((c for c in df.columns if 'area' in c), df.columns[0])
     
-    # Agora removemos apenas se for estritamente necessário para o modelo
-    features = st.sidebar.multiselect("Variaveis Explicativas:", [c for c in df_c.columns if c not in [target, col_area]])
-    df_clean = df_c.dropna(subset=features + [target])
+    st.sidebar.info(f"Base: {len(df)} linhas | Alvo: {col_valor}")
+    features = st.sidebar.multiselect("Variaveis Explicativas:", [c for c in df.columns if c not in [col_valor, col_area]])
 
-    if not df_clean.empty and features:
-        modelo = LinearRegression().fit(df_clean[features], df_clean[target])
-        
-        # Exibição do Modelo
-        st.latex(f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)]))
-        
-        # Gráficos diagnósticos
+    st.sidebar.header("📝 Dados do Imovel")
+    info = {k: st.sidebar.text_input(k) for k in ["Endereco", "Bairro", "Informante"]}
+
+    if features and col_area:
+        df_clean = df.copy()
+        df_clean[col_valor] = df_clean[col_valor].apply(limpar_numero)
+        df_clean[col_area] = df_clean[col_area].apply(limpar_numero)
+        for f in features: df_clean[f] = df_clean[f].apply(limpar_numero)
+        df_clean = df_clean.dropna()
+
+        modelo = LinearRegression().fit(df_clean[features], df_clean[col_valor])
+        eq_str = f"{col_valor} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
+        st.latex(eq_str)
+
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
         preds = modelo.predict(df_clean[features])
-        ax1.scatter(df_clean[target], preds); ax1.set_title("Aderencia")
-        ax2.scatter(preds, df_clean[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Residuos")
+        ax1.scatter(df_clean[col_valor], preds); ax1.set_title("Aderencia")
+        ax2.scatter(preds, df_clean[col_valor] - preds); ax2.axhline(0, color='red'); ax2.set_title("Residuos")
         st.pyplot(fig)
 
-        # Inputs do Imóvel Avaliando
-        st.sidebar.header("⚙️ Parametros")
-        inputs = {f: st.sidebar.number_input(f"{f} (Mediana: {df_clean[f].median():.1f})", value=float(df_clean[f].median())) for f in features}
-        area_aval = st.sidebar.number_input("Area do Imovel Avaliando:", value=float(df_clean[col_area].median()) if col_area else 1.0)
-        
-        if st.sidebar.button("Calcular"):
+        inputs = {f: st.sidebar.number_input(f"{f} (Mediana:{df_clean[f].median():.1f})", value=float(df_clean[f].median())) for f in features}
+        area_aval = st.sidebar.number_input("Area do imovel avaliando:", value=float(df_clean[col_area].median()))
+
+        if st.sidebar.button("Calcular Precificacao"):
             vu = modelo.predict(np.array([list(inputs.values())]))[0]
-            # Cálculo de Intervalo NBR 14653
-            std = np.std(df_clean[target] - preds)
-            min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
-            
             st.metric("V.U. Estimado", f"R$ {vu:,.2f}")
-            st.metric("Valor Total", f"R$ {vu * area_aval:,.2f}")
+            st.metric("Valor Total Estimado", f"R$ {vu * area_aval:,.2f}")
             
-            # Mostra contagem de dados usados
-            st.info(f"Modelo treinado com {len(df_clean)} amostras.")
+            pdf = gerar_laudo_pdf({'vu': vu, 'total': vu * area_aval}, fig, eq_str, inputs, info)
+            st.download_button("📥 Baixar Laudo Profissional", pdf, "laudo.pdf")
