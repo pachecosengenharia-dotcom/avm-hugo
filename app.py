@@ -41,7 +41,6 @@ if arquivo is not None:
     target = st.sidebar.selectbox("Coluna Alvo:", df.columns)
     features = st.sidebar.multiselect("Variáveis Explicativas:", [c for c in df.columns if c != target])
     
-    st.sidebar.header("📝 Dados do Imóvel")
     info = {
         "Endereço": st.sidebar.text_input("Endereço"),
         "Bairro": st.sidebar.text_input("Bairro"),
@@ -64,8 +63,8 @@ if arquivo is not None:
                 std = np.std(df_c[target] - preds)
                 min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
                 
-                # CORREÇÃO DEFINITIVA: Seleciona a primeira variável como padrão se 'area' não existir
-                total = vu * inputs[features[0]] 
+                # AQUI ESTÁ A SEGURANÇA: Só calcula o total se 'features' tiver conteúdo
+                total = vu * inputs[features[0]] if len(features) > 0 else vu
                 
                 graus = ("Grau III" if len(df_c) >= 12 else "Grau I", "Grau III" if (max_v-min_v)/(2*vu) < 0.2 else "Grau I")
                 
@@ -79,4 +78,10 @@ if arquivo is not None:
                 
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
                 ax1.scatter(df_c[target], preds); ax1.set_title("Aderência")
-                ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color
+                ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
+                st.pyplot(fig)
+                
+                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus)
+                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf")
+        else:
+            st.error("Dados insuficientes.")
