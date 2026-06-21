@@ -30,7 +30,7 @@ def gerar_laudo_pdf(d, fig, eq_str, inputs, info_imovel):
         c.drawString(50, y, eq_str[i:i+80]); y -= 12
     y -= 10
     c.drawString(50, y, f"RESULTADOS: Min: R$ {d['min']:,.2f} | Medio: R$ {d['vu']:,.2f} | Max: R$ {d['max']:,.2f}")
-    c.drawString(50, y-15, f"VALOR TOTAL: R$ {d['total']:,.2f}")
+    c.drawString(50, y-15, f"VALOR TOTAL ESTIMADO: R$ {d['total']:,.2f}")
     if fig is not None:
         img_buf = io.BytesIO()
         fig.savefig(img_buf, format='png')
@@ -40,24 +40,25 @@ def gerar_laudo_pdf(d, fig, eq_str, inputs, info_imovel):
     return buffer
 
 arquivo = st.sidebar.file_uploader("Carregar CSV", type=["csv", "txt"])
-fig = None
-
 if arquivo:
     raw_data = arquivo.getvalue().decode('latin-1')
     sep = ';' if raw_data.count(';') > raw_data.count(',') else ','
     df = pd.read_csv(io.StringIO(raw_data), sep=sep)
     df.columns = [normalizar(c) for c in df.columns]
     
-    # Busca automática da coluna alvo
-    target = next((c for c in df.columns if any(x in c for x in ['valor', 'preco', 'unitario'])), df.columns[-1])
-    features = st.sidebar.multiselect("Variaveis Explicativas:", [c for c in df.columns if c != target])
+    # 1. Seleção Manual para garantir precisão
+    target = st.sidebar.selectbox("Coluna do Valor Unitario (Ex: v.u.):", df.columns.tolist())
+    # 2. Seleção Manual da Área para o cálculo do total
+    col_area = st.sidebar.selectbox("Coluna da Area Privativa (para o Total):", df.columns.tolist())
+    
+    features = st.sidebar.multiselect("Variaveis Explicativas (Sem a Area):", [c for c in df.columns if c != target and c != col_area])
     
     st.sidebar.header("📝 Dados do Imovel")
     info_imovel = {k: st.sidebar.text_input(k) for k in ["Endereco", "Bairro", "Informante"]}
     
-    if features and target:
+    if features and target and col_area:
         df_c = df.copy()
-        for col in features + [target]:
+        for col in features + [target, col_area]:
             df_c[col] = pd.to_numeric(df_c[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.'), errors='coerce')
         df_c = df_c.dropna()
 
@@ -73,13 +74,13 @@ if arquivo:
 
             st.sidebar.header("⚙️ Parametros")
             inputs = {f: st.sidebar.number_input(f"{f} (Min:{df_c[f].min():.1f} | Max:{df_c[f].max():.1f})", value=float(df_c[f].median())) for f in features}
+            area_imovel = st.sidebar.number_input("Area do imovel avaliando:", value=float(df_c[col_area].median()))
             
             if st.sidebar.button("Calcular Precificacao"):
                 vu = modelo.predict(np.array([list(inputs.values())]))[0]
                 std = np.std(df_c[target] - modelo.predict(df_c[features]))
                 min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
-                col_area = next((c for c in features if 'area' in c), None)
-                total = vu * inputs[col_area] if col_area else vu
+                total = vu * area_imovel
                 
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Minimo", f"R$ {min_v:,.2f}")
