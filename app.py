@@ -19,7 +19,7 @@ def gerar_laudo_pdf(d, fig, eq_str, inputs, info_imovel):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, 820, "Laudo Tecnico de Avaliacao (NBR 14653)")
+    c.drawString(50, 820, "Laudo Tecnico Completo (NBR 14653)")
     c.setFont("Helvetica", 10)
     
     y = 790
@@ -44,14 +44,15 @@ def gerar_laudo_pdf(d, fig, eq_str, inputs, info_imovel):
     return buffer
 
 arquivo = st.sidebar.file_uploader("Carregar CSV", type=["csv", "txt"])
+fig = None 
+
 if arquivo:
     raw_data = arquivo.getvalue().decode('latin-1')
     sep = ';' if raw_data.count(';') > raw_data.count(',') else ','
     df = pd.read_csv(io.StringIO(raw_data), sep=sep)
     df.columns = [normalizar(c) for c in df.columns]
     
-    # REINSERIDO: Seleção manual do Valor Unitário para garantir precisão
-    target = st.sidebar.selectbox("Coluna Valor Unitario (Precisa ser Correta):", df.columns.tolist())
+    target = st.sidebar.selectbox("Coluna Valor Unitario:", df.columns.tolist())
     features = st.sidebar.multiselect("Variaveis Explicativas:", [c for c in df.columns if c != target])
     
     st.sidebar.header("📝 Dados do Imovel")
@@ -68,11 +69,9 @@ if arquivo:
             eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
             st.latex(eq_str)
             
-            # Gráficos de Aderência e Resíduos
-            preds = modelo.predict(df_c[features])
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
-            ax1.scatter(df_c[target], preds); ax1.set_title("Aderencia")
-            ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Residuos")
+            ax1.scatter(df_c[target], modelo.predict(df_c[features])); ax1.set_title("Aderencia")
+            ax2.scatter(modelo.predict(df_c[features]), df_c[target] - modelo.predict(df_c[features])); ax2.axhline(0, color='red'); ax2.set_title("Residuos")
             st.pyplot(fig)
 
             st.sidebar.header("⚙️ Parametros")
@@ -80,8 +79,16 @@ if arquivo:
             
             if st.sidebar.button("Calcular Precificacao"):
                 vu = modelo.predict(np.array([list(inputs.values())]))[0]
-                std = np.std(df_c[target] - preds)
+                std = np.std(df_c[target] - modelo.predict(df_c[features]))
                 min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
-                
                 col_area = next((c for c in features if 'area' in c), None)
-                total =
+                total = vu * inputs[col_area] if col_area else vu
+                
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Minimo", f"R$ {min_v:,.2f}")
+                c2.metric("Medio", f"R$ {vu:,.2f}")
+                c3.metric("Maximo", f"R$ {max_v:,.2f}")
+                st.metric("Valor Total Estimado", f"R$ {total:,.2f}")
+                
+                pdf = gerar_laudo_pdf({'vu': vu, 'min': min_v, 'max': max_v, 'total': total}, fig, eq_str, inputs, info_imovel)
+                st.download_button("📥 Baixar Laudo Profissional", pdf, "laudo_final.pdf")
