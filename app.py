@@ -35,9 +35,12 @@ def gerar_laudo_pdf(d, fig, eq_str, inputs, info_extra, variaveis_limites):
     c.drawString(50, y, "Variáveis e Limites Utilizados:")
     c.setFont("Helvetica", 9)
     y -= 15
-    for var, val in inputs.items():
-        lim = variaveis_limites[var]
-        c.drawString(50, y, f"- {var}: {val:.2f} (Limites: {lim['min']:.2f} a {lim['max']:.2f})")
+            variaveis_limites = {}
+            for f in features:
+                variaveis_limites[f] = {
+                    'min': float(df_c[f].min()), 
+                    'max': float(df_c[f].max())
+                }
         y -= 12
     y -= 20
     c.setFont("Helvetica-Bold", 11)
