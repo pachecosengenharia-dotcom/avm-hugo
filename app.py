@@ -118,4 +118,5 @@ if arquivo:
                 c3.metric("V.U. Máximo", f"R$ {max_v:,.2f}")
                 
                 pdf = gerar_laudo_pdf({'vu': vu, 'min': min_v, 'max': max_v, 'total': total}, fig, eq_str, inputs, info_extra, variaveis_limites)
-                st.download_button("📥
+                # Substitua a linha do botão por esta versão simples e segura:
+st.download_button("Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
