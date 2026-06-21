@@ -48,11 +48,9 @@ if arquivo:
     df = pd.read_csv(io.StringIO(raw_data), sep=sep)
     df.columns = [normalizar(c) for c in df.columns]
     
-    # Identificação Automática (Lógica de Engenharia)
-    target = next((c for c in df.columns if any(x in c for x in ['valor', 'preco', 'unitario'])), None)
+    target = next((c for c in df.columns if any(x in c for x in ['valor', 'preco', 'unitario'])), df.columns[-1])
     col_area = next((c for c in df.columns if 'area' in c), None)
     
-    # Variáveis Explicativas: todas as numéricas, menos o alvo e a área
     features = st.sidebar.multiselect("Variaveis Explicativas:", [c for c in df.columns if c not in [target, col_area]])
     
     st.sidebar.header("📝 Dados do Imovel")
@@ -65,3 +63,30 @@ if arquivo:
         df_c = df_c.dropna()
 
         if not df_c.empty:
+            modelo = LinearRegression().fit(df_c[features], df_c[target])
+            eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
+            st.latex(eq_str)
+            
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
+            ax1.scatter(df_c[target], modelo.predict(df_c[features])); ax1.set_title("Aderencia")
+            ax2.scatter(modelo.predict(df_c[features]), df_c[target] - modelo.predict(df_c[features])); ax2.axhline(0, color='red'); ax2.set_title("Residuos")
+            st.pyplot(fig)
+
+            st.sidebar.header("⚙️ Parametros")
+            inputs = {f: st.sidebar.number_input(f"{f} (Min:{df_c[f].min():.1f} | Max:{df_c[f].max():.1f})", value=float(df_c[f].median())) for f in features}
+            area_imovel = st.sidebar.number_input("Area do imovel avaliando:", value=float(df_c[col_area].median()))
+            
+            if st.sidebar.button("Calcular Precificacao"):
+                vu = modelo.predict(np.array([list(inputs.values())]))[0]
+                std = np.std(df_c[target] - modelo.predict(df_c[features]))
+                min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
+                total = vu * area_imovel
+                
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Minimo", f"R$ {min_v:,.2f}")
+                c2.metric("Medio", f"R$ {vu:,.2f}")
+                c3.metric("Maximo", f"R$ {max_v:,.2f}")
+                st.metric("Valor Total Estimado", f"R$ {total:,.2f}")
+                
+                pdf = gerar_laudo_pdf({'vu': vu, 'min': min_v, 'max': max_v, 'total': total}, fig, eq_str, inputs, info_imovel)
+                st.download_button("📥 Baixar Laudo Profissional", pdf, "laudo_final.pdf")
