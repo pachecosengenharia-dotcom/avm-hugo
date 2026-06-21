@@ -2,127 +2,103 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
-import matplotlib.pyplot as plt
-import seaborn as sns
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
 import io
-import re
+import unicodedata
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Engenharia de Avaliações", layout="wide")
+st.set_page_config(layout="wide")
+st.title("📊 AVM - Engenharia de Avaliações")
 
-st.title("📊 Sistema Profissional de Engenharia de Avaliações")
-st.markdown("Insira sua planilha de mercado e ajuste os parâmetros para calcular o valor de mercado.")
+def normalizar(texto):
+    return unicodedata.normalize('NFKD', str(texto)).encode('ASCII', 'ignore').decode('utf-8').lower().strip()
 
-# Barra Lateral - Upload dos Dados
-st.sidebar.header("📁 Base de Dados")
-arquivo_upload = st.sidebar.file_uploader("Arraste sua planilha (.csv)", type=["csv"])
-
-if arquivo_upload:
-    try:
-        df = pd.read_csv(arquivo_upload, delimiter=';', encoding='latin-1')
-        if len(df.columns) <= 1:
-            df = pd.read_csv(arquivo_upload, delimiter=',', encoding='latin-1')
-    except:
-        df = pd.read_csv(arquivo_upload, delimiter=',', encoding='latin-1')
-        
-    df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-
-    # Mapeamento Inteligente de Colunas
-    mapeamento_colunas = {}
-    for col in df.columns:
-        col_normalizada = col.lower().strip()
-        if any(x in col_normalizada for x in ['prec', 'val', 'vlr', 'montante']): mapeamento_colunas[col] = 'Preco'
-        elif any(x in col_normalizada for x in ['are', 'm2', 'm²', 'metrag', 'dimen']): mapeamento_colunas[col] = 'Area'
-        elif any(x in col_normalizada for x in ['quart', 'dorm', 'quar']): mapeamento_colunas[col] = 'Quartos'
-        elif any(x in col_normalizada for x in ['vag', 'garag']): mapeamento_colunas[col] = 'Vagas'
-        elif any(x in col_normalizada for x in ['cons', 'estad']): mapeamento_colunas[col] = 'Conservacao'
-        elif any(x in col_normalizada for x in ['setor', 'bairro', 'local', 'fator']): mapeamento_colunas[col] = 'Setor_Urbano'
-
-    df = df.rename(columns=mapeamento_colunas)
-    colunas_obrigatorias = ['Preco', 'Area', 'Setor_Urbano']
+def gerar_laudo_pdf(d, fig, eq_str, inputs, info_imovel):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, 820, "Laudo Tecnico de Avaliacao (NBR 14653)")
+    c.setFont("Helvetica", 10)
     
-    if not all(c in df.columns for c in colunas_obrigatorias):
-        st.error(f"Não mapeamos as colunas essenciais. Colunas na planilha: {list(df.columns)}")
-    else:
-        if 'Quartos' not in df.columns: df['Quartos'] = 2
-        if 'Vagas' not in df.columns: df['Vagas'] = 1
-        if 'Conservacao' not in df.columns: df['Conservacao'] = 2
+    # Informações do Imóvel
+    y = 790
+    for k, v in info_imovel.items():
+        c.drawString(50, y, f"{k.capitalize()}: {v}")
+        y -= 15
+        
+    # Equação
+    y -= 10
+    c.drawString(50, y, "Equacao do Modelo:")
+    y -= 15
+    for i in range(0, len(eq_str), 80):
+        c.drawString(50, y, eq_str[i:i+80]); y -= 12
+    
+    # Variáveis
+    y -= 10
+    c.drawString(50, y, "Variaveis de Entrada:")
+    y -= 15
+    for k, v in inputs.items():
+        c.drawString(60, y, f"- {k.capitalize()}: {v:.2f}"); y -= 15
+        
+    # Resultados
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(50, y-10, f"V.U. Medio: R$ {d['vu']:,.2f} | Total: R$ {d['total']:,.2f}")
+    
+    if fig is not None:
+        img_buf = io.BytesIO()
+        fig.savefig(img_buf, format='png')
+        img_buf.seek(0)
+        c.drawImage(ImageReader(img_buf), 50, y-200, width=400, height=180)
+    c.save(); buffer.seek(0)
+    return buffer
 
-        def limpar_numero(valor):
-            txt = str(valor).strip().replace('R$', '').replace(' ', '')
-            if not txt or txt.lower() in ['nan', 'null', '']: return np.nan
-            if ',' in txt and '.' in txt: txt = txt.replace('.', '')
-            txt = txt.replace(',', '.')
-            txt = re.sub(r'[^\d.]', '', txt)
-            try: return float(txt)
-            except: return np.nan
+arquivo = st.sidebar.file_uploader("Carregar CSV", type=["csv", "txt"])
+if arquivo:
+    raw_data = arquivo.getvalue().decode('latin-1')
+    sep = ';' if raw_data.count(';') > raw_data.count(',') else ','
+    df = pd.read_csv(io.StringIO(raw_data), sep=sep)
+    df.columns = [normalizar(c) for c in df.columns]
+    
+    # Busca automática da coluna de valor
+    target = next((c for c in df.columns if 'valor' in c or 'preco' in c or 'unitario' in c), df.columns[-1])
+    features = st.sidebar.multiselect("Variaveis Explicativas:", [c for c in df.columns if c != target])
+    
+    # Coleta de Dados do Imóvel Avaliando
+    st.sidebar.header("📝 Dados do Imovel")
+    info_imovel = {
+        "Endereco": st.sidebar.text_input("Endereco"),
+        "Complemento": st.sidebar.text_input("Complemento"),
+        "Bairro": st.sidebar.text_input("Bairro"),
+        "Informante": st.sidebar.text_input("Informante/Contato")
+    }
+    
+    if features and target:
+        df_c = df.copy()
+        for col in features + [target]:
+            df_c[col] = pd.to_numeric(df_c[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.'), errors='coerce')
+        df_c = df_c.dropna()
 
-        for col in ['Preco', 'Area', 'Quartos', 'Vagas', 'Conservacao', 'Setor_Urbano']:
-            df[col] = df[col].apply(limpar_numero)
-
-        df['Quartos'] = df['Quartos'].fillna(2)
-        df['Vagas'] = df['Vagas'].fillna(1)
-        df['Conservacao'] = df['Conservacao'].fillna(2)
-        df['Setor_Urbano'] = df['Setor_Urbano'].fillna(1.0)
-        df = df.dropna(subset=['Preco', 'Area'])
-
-        # Painel de Controle das Características do Imóvel avaliando
-        st.sidebar.header("⚙️ Características do Imóvel")
-        area_avaliando = st.sidebar.number_input("Área Útil (m²)", value=75.0, step=1.0)
-        quartos_avaliando = st.sidebar.slider("Quantidade de Quartos", 1, 5, 2)
-        vagas_avaliando = st.sidebar.slider("Vagas de Garagem", 0, 5, 1)
-        conservacao_avaliando = st.sidebar.selectbox("Estado de Conservação", [1, 2, 3], format_func=lambda x: {1:"Regular", 2:"Bom", 3:"Excelente"}[x])
-        setor_urbano_avaliando = st.sidebar.number_input("Fator de Bairro / Setor Urbano", value=1.0, step=0.1)
-
-        if len(df) >= 3:
-            # Modelo Regressivo Multifatorial
-            X = df[['Area', 'Quartos', 'Vagas', 'Conservacao', 'Setor_Urbano']]
-            y = df['Preco']
-            modelo = LinearRegression().fit(X, y)
+        if not df_c.empty:
+            modelo = LinearRegression().fit(df_c[features], df_c[target])
+            eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
+            st.latex(eq_str)
             
-            dados_imovel = np.array([[area_avaliando, quartos_avaliando, vagas_avaliando, conservacao_avaliando, setor_urbano_avaliando]])
-            preco_estimado = max(0, modelo.predict(dados_imovel)[0])
-            r2_score = modelo.score(X, y)
-            limite_inferior, limite_superior = preco_estimado * 0.85, preco_estimado * 1.15
-
-            # Exibição dos Resultados (Métricas)
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Valor de Mercado Estimado", f"R$ {preco_estimado:,.2f}")
-            c2.metric("Intervalo Admissível (Mín/Máx)", f"R$ {limite_inferior:,.2f} a R$ {limite_superior:,.2f}")
-            c3.metric("Precisão do Modelo (R²)", f"{f'{r2_score*100:.2f}%' if r2_score > 0 else 'N/A'}")
-
-            # Gráfico Interativo
-            fig, ax = plt.subplots(figsize=(8, 3.5))
-            sns.scatterplot(data=df, x='Area', y='Preco', color='#002d62', alpha=0.6, ax=ax, label="Amostras")
-            ax.scatter([area_avaliando], [preco_estimado], color='#d9534f', s=150, marker='*', label="Avaliando")
-            ax.set_title("Modelo de Regressão Linear")
-            ax.grid(True, alpha=0.3)
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.scatter(modelo.predict(df_c[features]), df_c[target])
             st.pyplot(fig)
 
-            # Estruturação do PDF
-            img_buf = io.BytesIO()
-            fig.savefig(img_buf, format='png', dpi=200)
-            img_buf.seek(0)
+            st.sidebar.header("⚙️ Parametros")
+            inputs = {f: st.sidebar.number_input(f"{f} (Min:{df_c[f].min():.1f} | Max:{df_c[f].max():.1f})", value=float(df_c[f].median())) for f in features}
             
-            pdf_buf = io.BytesIO()
-            doc = SimpleDocTemplate(pdf_buf, pagesize=letter)
-            styles = getSampleStyleSheet()
-            story = [
-                Paragraph("LAUDO DE AVALIAÇÃO TÉCNICA MERCADOLÓGICA", ParagraphStyle('T', fontSize=18, textColor=colors.HexColor('#002d62'), alignment=1)),
-                Spacer(1, 15),
-                Paragraph(f"<b>Área Proposta:</b> {area_avaliando} m² | <b>Quartos:</b> {quartos_avaliando} | <b>Vagas:</b> {vagas_avaliando}<br/><b>Valor de Mercado Inferido: R$ {preco_estimado:,.2f}</b>", styles['Normal']),
-                Spacer(1, 15),
-                Image(img_buf, width=400, height=180)
-            ]
-            doc.build(story)
-            pdf_buf.seek(0)
-
-            st.sidebar.markdown("---")
-            st.sidebar.download_button(label="📥 Baixar Laudo Oficial (PDF)", data=pdf_buf, file_name="Laudo_Profissional.pdf", mime="application/pdf")
-        else:
-            st.warning("Dados insuficientes na planilha para gerar cálculos técnicos.")
-else:
-    st.info("💡 Por favor, faça o upload de uma planilha .csv na barra lateral para iniciar.")
+            if st.sidebar.button("Calcular Precificacao"):
+                vu = modelo.predict(np.array([list(inputs.values())]))[0]
+                col_area = next((c for c in features if 'area' in c), None)
+                total = vu * inputs[col_area] if col_area else vu
+                
+                st.metric("V.U. Medio Estimado", f"R$ {vu:,.2f}")
+                st.metric("Valor Total Estimado", f"R$ {total:,.2f}")
+                
+                pdf = gerar_laudo_pdf({'vu': vu, 'min': 0, 'max': 0, 'total': total}, fig, eq_str, inputs, info_imovel)
+                st.download_button("📥 Baixar Laudo Profissional", pdf, "laudo_final.pdf")
