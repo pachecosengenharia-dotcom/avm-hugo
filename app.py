@@ -59,11 +59,17 @@ def gerar_laudo_pdf(d, fig, eq_str, inputs, info_extra, variaveis_limites):
     c.drawString(50, y-30, f"Intervalo 95%: R$ {d['min']:,.2f} a R$ {d['max']:,.2f}")
     
     # Gráfico
-    img_buf = io.BytesIO()
-    fig.savefig(img_buf, format='png')
-    img_buf.seek(0)
-    c.drawImage(ImageReader(img_buf), 50, 50, width=450, height=220)
-    
+            preds = modelo.predict(df_c[features])
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
+            
+            ax1.scatter(df_c[target], preds)
+            ax1.set_title("Aderência")
+            
+            ax2.scatter(preds, df_c[target] - preds)
+            ax2.axhline(0, color='red')
+            ax2.set_title("Resíduos")
+            
+            st.pyplot(fig)
     c.save()
     buffer.seek(0)
     return buffer
