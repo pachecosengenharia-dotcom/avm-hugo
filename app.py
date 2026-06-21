@@ -7,7 +7,6 @@ import io
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
-from reportlab.lib.pagesizes import A4
 
 st.set_page_config(layout="wide")
 st.title("📊 AVM - Engenharia de Avaliações")
@@ -15,32 +14,22 @@ st.title("📊 AVM - Engenharia de Avaliações")
 def gerar_laudo_pdf(d, fig, eq_str, inputs, info_extra, variaveis_limites):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    
-    # Cabeçalho
     c.setFont("Helvetica-Bold", 14)
     c.drawString(50, 820, "Laudo Técnico de Avaliação (NBR 14653)")
-    
-    # Dados Informativos
     c.setFont("Helvetica", 10)
     y = 790
     for label, val in info_extra.items():
         c.drawString(50, y, f"{label}: {val}")
         y -= 15
-        
-    # Equação (Com quebra de linha automática)
     y -= 10
     c.setFont("Helvetica-Bold", 10)
     c.drawString(50, y, "Equação do Modelo:")
     c.setFont("Helvetica", 9)
     y -= 15
-    
-    # Lógica para quebrar a string da equação em pedaços de 80 caracteres
     max_chars = 80
     for i in range(0, len(eq_str), max_chars):
         c.drawString(50, y, eq_str[i:i+max_chars])
         y -= 12
-    
-    # Variáveis e Limites
     y -= 10
     c.setFont("Helvetica-Bold", 10)
     c.drawString(50, y, "Variáveis e Limites Utilizados:")
@@ -50,31 +39,19 @@ def gerar_laudo_pdf(d, fig, eq_str, inputs, info_extra, variaveis_limites):
         lim = variaveis_limites[var]
         c.drawString(50, y, f"- {var}: {val:.2f} (Limites: {lim['min']:.2f} a {lim['max']:.2f})")
         y -= 12
-        
-    # Resultados (Incluindo Valor Total)
     y -= 20
     c.setFont("Helvetica-Bold", 11)
     c.drawString(50, y, f"V.U. Médio: R$ {d['vu']:,.2f}")
     c.drawString(50, y-15, f"Valor Total Estimado: R$ {d['total']:,.2f}")
     c.drawString(50, y-30, f"Intervalo 95%: R$ {d['min']:,.2f} a R$ {d['max']:,.2f}")
-    
-    # Gráfico
-            preds = modelo.predict(df_c[features])
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
-            
-            ax1.scatter(df_c[target], preds)
-            ax1.set_title("Aderência")
-            
-            ax2.scatter(preds, df_c[target] - preds)
-            ax2.axhline(0, color='red')
-            ax2.set_title("Resíduos")
-            
-            st.pyplot(fig)
+    img_buf = io.BytesIO()
+    fig.savefig(img_buf, format='png')
+    img_buf.seek(0)
+    c.drawImage(ImageReader(img_buf), 50, 50, width=450, height=220)
     c.save()
     buffer.seek(0)
     return buffer
 
-# Carregamento do arquivo
 arquivo = st.sidebar.file_uploader("Carregar Base (CSV)", type=["csv", "txt"])
 
 if arquivo:
@@ -105,6 +82,16 @@ if arquivo:
             eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
             st.latex(eq_str)
             
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
+            # Gráficos em blocos alinhados
             preds = modelo.predict(df_c[features])
-            ax1.scatter(df_c[target], preds
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
+            ax1.scatter(df_c[target], preds)
+            ax1.set_title("Aderência")
+            ax2.scatter(preds, df_c[target] - preds)
+            ax2.axhline(0, color='red')
+            ax2.set_title("Resíduos")
+            st.pyplot(fig)
+
+            st.sidebar.header("📊 Parâmetros de Entrada")
+            inputs = {f: st.sidebar.number_input(f"{f}", value=float(df_c[f].median())) for f in features}
+            variaveis_limites = {f: {'min': df_c[f].min
