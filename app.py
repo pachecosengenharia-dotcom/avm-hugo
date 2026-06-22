@@ -34,19 +34,28 @@ if arquivo:
     target = st.sidebar.selectbox("Coluna Alvo (Preço):", options=df.columns)
     features = st.sidebar.multiselect("Variáveis Explicativas:", options=[c for c in df.columns if c != target])
 
+    # ... após o carregamento do arquivo ...
     if features and target:
-        df_c = df.dropna(subset=features + [target])
-        modelo = LinearRegression().fit(df_c[features], df_c[target])
+        # Cria uma cópia limpa do DataFrame
+        df_c = df.copy()
         
-        st.sidebar.markdown("### Valores para Avaliação")
-        inputs = {}
-        extrapolou = False
-        for f in features:
-            val = st.sidebar.number_input(f"{f}", value=float(df_c[f].median()), key=f"input_{f}")
-            inputs[f] = val
-            if val < df_c[f].min() or val > df_c[f].max():
-                extrapolou = True
+        # 1. FORÇA CONVERSÃO NUMÉRICA E REMOVE O QUE NÃO FOR NÚMERO
+        cols_usadas = features + [target]
+        for col in cols_usadas:
+            # Substitui vírgula por ponto, converte pra número e força NaN onde der erro
+            df_c[col] = pd.to_numeric(df_c[col].astype(str).str.replace(',', '.'), errors='coerce')
         
+        # 2. REMOVE LINHAS VAZIAS (ESSENCIAL PARA O SKLEARN)
+        df_c = df_c.dropna(subset=cols_usadas)
+        
+        # Verifica se sobrou amostra válida
+        if len(df_c) < 3:
+            st.error(f"Erro: Sobraram apenas {len(df_c)} dados válidos após a limpeza. Verifique se o CSV tem valores numéricos nas colunas selecionadas.")
+        else:
+            # 3. AGORA O FIT FUNCIONA SEM ERRO
+            modelo = LinearRegression().fit(df_c[features], df_c[target])
+            
+            # ... (seu código de input e botão continua aqui) ...
         if st.sidebar.button("Calcular Precificação", key="btn_calc"):
             if extrapolou:
                 st.error("Erro: Variáveis fora do limite amostral!")
