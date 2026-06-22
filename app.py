@@ -166,11 +166,27 @@ arquivo = st.sidebar.file_uploader("Carregar Base (CSV)", type=["csv", "txt"])
 
 
 
+import unicodedata # Adicione este import no topo do seu arquivo
+
+# Função para remover acentos dos nomes das colunas
+def normalizar_texto(texto):
+    nfkd = unicodedata.normalize('NFKD', str(texto))
+    return "".join([c for c in nfkd if not unicodedata.combining(c)])
+
 if arquivo:
+    # 1. Tenta ler o arquivo de forma segura
+    try:
+        df = pd.read_csv(arquivo, encoding='utf-8', sep=None, engine='python')
+    except:
+        arquivo.seek(0)
+        df = pd.read_csv(arquivo, encoding='latin-1', sep=None, engine='python')
 
-    df = pd.read_csv(arquivo, encoding='latin-1', sep=None, engine='python')
-
-    df.columns = df.columns.str.strip()
+    # 2. Corrige os nomes das colunas aqui (isso resolve o erro no celular)
+    df.columns = [normalizar_texto(col).strip() for col in df.columns]
+    
+    # 3. Restante da lógica (target, features, etc)
+    target = st.sidebar.selectbox("Coluna Alvo:", df.columns)
+    # ... resto do código ...
 
     target = st.sidebar.selectbox("Coluna Alvo:", df.columns)
 
