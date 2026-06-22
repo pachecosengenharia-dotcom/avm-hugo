@@ -10,64 +10,46 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
-# Função para normalizar texto (limpeza de acentos para evitar problemas no celular)
+# --- Funções Auxiliares ---
 def normalizar_texto(texto):
     nfkd = unicodedata.normalize('NFKD', str(texto))
     return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
-# Função para Gerar o PDF
 def gerar_laudo_pdf(d, fig, eq_str, info, graus, inputs, min_v, max_v):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     c.setFont("Helvetica-Bold", 16)
     c.drawString(50, height - 50, "Laudo Técnico de Avaliação (NBR 14653)")
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, height - 90, "Dados do Imóvel:")
     c.setFont("Helvetica", 10)
-    y = height - 110
+    y = height - 90
     for k, v in info.items():
         c.drawString(50, y, f"{k}: {v}")
         y -= 20
-    y -= 10
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, "Equação do Modelo:")
-    y -= 20
+    c.drawString(50, y - 10, "Equação do Modelo:")
     c.setFont("Courier", 8)
-    linhas_eq = textwrap.wrap(eq_str, width=100)
-    for linha in linhas_eq:
+    y -= 40
+    for linha in textwrap.wrap(eq_str, width=100):
         c.drawString(50, y, linha)
         y -= 12
-    y -= 20
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, "Variáveis e Parâmetros Utilizados:")
-    y -= 20
+    c.drawString(50, y - 10, "Resultados:")
     c.setFont("Helvetica", 10)
-    for k, v in inputs.items():
-        c.drawString(50, y, f"- {k}: {v:.2f}")
-        y -= 15
+    y -= 30
+    c.drawString(50, y, f"V.U. Estimado: R$ {d['vu']:,.2f} | Intervalo: R$ {min_v:,.2f} a R$ {max_v:,.2f}")
     y -= 20
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, "Resultados da Avaliação:")
-    c.setFont("Helvetica", 10)
-    y -= 20
-    c.drawString(50, y, f"V.U. Mínimo: R$ {min_v:,.2f} | V.U. Médio: R$ {d['vu']:,.2f} | V.U. Máximo: R$ {max_v:,.2f}")
-    y -= 20
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, f"VALOR TOTAL ESTIMADO: R$ {d['total']:,.2f}")
-    y -= 20
-    c.setFont("Helvetica", 10)
     c.drawString(50, y, f"Fundamentação: {graus[0]} | Precisão: {graus[1]}")
-    y -= 220
     img_buf = io.BytesIO()
     fig.savefig(img_buf, format='png', bbox_inches='tight')
     img_buf.seek(0)
-    c.drawImage(ImageReader(img_buf), 50, y, width=400, height=200)
+    c.drawImage(ImageReader(img_buf), 50, y - 250, width=400, height=200)
     c.showPage()
     c.save()
     buffer.seek(0)
     return buffer
 
+# --- Interface ---
 st.set_page_config(layout="wide", page_title="AVM - Engenharia de Avaliações")
 st.title("📊 AVM - Engenharia de Avaliações")
 
@@ -79,18 +61,12 @@ if arquivo:
     except:
         arquivo.seek(0)
         df = pd.read_csv(arquivo, encoding='latin-1', sep=None, engine='python')
-
+    
     df.columns = [normalizar_texto(col).strip() for col in df.columns]
-
-    target = st.sidebar.selectbox("Coluna Alvo:", options=df.columns, key="target_col")
-    features = st.sidebar.multiselect("Variáveis Explicativas:", options=[c for c in df.columns if c != target], key="features_col")
-
-    st.sidebar.header("📝 Dados do Imóvel")
-    info = {
-        "Endereço": st.sidebar.text_input("Endereço", key="info_end"),
-        "Bairro": st.sidebar.text_input("Bairro", key="info_bairro"),
-        "Informante": st.sidebar.text_input("Informante", key="info_inf")
-    }
+    target = st.sidebar.selectbox("Coluna Alvo:", options=df.columns, key="t")
+    features = st.sidebar.multiselect("Variáveis Explicativas:", options=[c for c in df.columns if c != target], key="f")
+    
+    info = {"Endereço": st.sidebar.text_input("Endereço"), "Bairro": st.sidebar.text_input("Bairro")}
 
     if features and target:
         df_c = df.copy()
@@ -104,33 +80,10 @@ if arquivo:
             st.latex(eq_str)
 
             inputs = {}
-            st.sidebar.markdown("### Valores para Avaliação")
             for f in features:
-                min_f, max_f = df_c[f].min(), df_c[f].max()
-                val = st.sidebar.number_input(f"{f} (Min: {min_f:.2f} | Max: {max_f:.2f})", value=float(df_c[f].median()), key=f"inp_{f}")
+                # Limites dinâmicos extraídos da planilha
+                min_f, max_f = float(df_c[f].min()), float(df_c[f].max())
+                
+                val = st.sidebar.number_input(f"{f} (Limites: {min_f:.2f} - {max_f:.2f})", value=float(df_c[f].median()), key=f"in_{f}")
                 inputs[f] = val
                 if val < min_f or val > max_f:
-                    st.sidebar.warning(f"⚠️ Extrapolação em {f}!")
-
-            if st.sidebar.button("Calcular Precificação", key="btn_calc"):
-                vu = modelo.predict(np.array([list(inputs.values())]))[0]
-                preds = modelo.predict(df_c[features])
-                std = np.std(df_c[target] - preds)
-                min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
-                total = vu * inputs[features[0]] if features else vu
-                graus = ("Grau III" if len(df_c) >= 12 else "Grau I", "Grau III" if (max_v-min_v)/(2*vu) < 0.2 else "Grau I")
-
-                cols = st.columns(3)
-                cols[0].metric("V.U. Mínimo", f"R$ {min_v:,.2f}")
-                cols[1].metric("V.U. Médio", f"R$ {vu:,.2f}")
-                cols[2].metric("V.U. Máximo", f"R$ {max_v:,.2f}")
-                st.markdown(f"### Valor Total Estimado: R$ {total:,.2f}")
-
-                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-                ax1.scatter(df_c[target], preds); ax1.set_title("Aderência")
-                ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
-                st.pyplot(fig)
-                
-                # BOTÃO PARA BAIXAR O PDF
-                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, min_v, max_v)
-                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
