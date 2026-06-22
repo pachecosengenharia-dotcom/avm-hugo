@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
+# --- Funções Auxiliares ---
 def normalizar_texto(texto):
     nfkd = unicodedata.normalize('NFKD', str(texto))
     return "".join([c for c in nfkd if not unicodedata.combining(c)])
@@ -22,6 +23,7 @@ def gerar_laudo_pdf(vu, fund, prec):
     buffer.seek(0)
     return buffer
 
+# --- Interface ---
 st.set_page_config(layout="wide", page_title="AVM - Engenharia de Avaliações")
 st.title("📊 AVM - Engenharia de Avaliações")
 
@@ -51,10 +53,10 @@ if arquivo:
                 inputs[f] = st.sidebar.number_input(f"{f} (Lim: {min_f:.1f}-{max_f:.1f})", value=float(df_c[f].median()))
             
             if st.sidebar.button("Calcular Precificação"):
+                # Modelo e Cálculos
                 modelo = LinearRegression().fit(df_c[features], df_c[target])
                 vu = modelo.predict(np.array([list(inputs.values())]))[0]
                 preds = modelo.predict(df_c[features])
-                
                 residuos = df_c[target] - preds
                 std = np.std(residuos)
                 min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
@@ -65,7 +67,7 @@ if arquivo:
                 amp = (max_v - min_v) / (2 * vu)
                 prec = "Grau III" if amp <= 0.2 else "Grau II" if amp <= 0.3 else "Grau I"
 
-                # Exibição dos resultados
+                # Exibição (Tudo dentro do botão)
                 st.latex(f"{target} = {modelo.intercept_:.2f} + " + " + ".join([f"{c:.2f}*{n}" for n, c in zip(features, modelo.coef_)]))
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("V.U. Mínimo", f"R$ {min_v:,.2f}")
@@ -76,6 +78,14 @@ if arquivo:
                 st.markdown(f"### Valor Total Estimado: R$ {total:,.2f}")
                 st.write(f"**Fundamentação:** {fund} | **Precisão:** {prec}")
                 
+                # Gráficos
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
                 ax1.scatter(df_c[target], preds)
-                ax1.set_
+                ax1.set_title("Aderência")
+                ax2.scatter(preds, residuos)
+                ax2.axhline(0, color='red')
+                ax2.set_title("Resíduos")
+                st.pyplot(fig)
+                
+                pdf = gerar_laudo_pdf(vu, fund, prec)
+                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
