@@ -87,4 +87,4 @@ if arquivo is not None:
                 st.pyplot(fig)
                 
                 pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus)
-                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_pdf")
+                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf")
