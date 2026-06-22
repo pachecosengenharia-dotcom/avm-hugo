@@ -32,7 +32,7 @@ def gerar_laudo_pdf(d, fig, eq_str, info, graus, inputs, min_v, max_v):
         c.drawString(50, y, f"{k}: {v}")
         y -= 20
     
-    # Equação do Modelo
+    # Equação do Modelo (com quebra de linha)
     y -= 10
     c.setFont("Helvetica-Bold", 12)
     c.drawString(50, y, "Equação do Modelo:")
@@ -79,15 +79,11 @@ def gerar_laudo_pdf(d, fig, eq_str, info, graus, inputs, min_v, max_v):
     buffer.seek(0)
     return buffer
 
-# Interface Lateral
+# Interface Lateral e Lógica Principal
 arquivo = st.sidebar.file_uploader("Carregar Base (CSV)", type=["csv", "txt"])
 
 if arquivo:
-    try:
-        df = pd.read_csv(arquivo, encoding='utf-8', sep=None, engine='python')
-    except:
-        df = pd.read_csv(arquivo, encoding='latin-1', sep=None, engine='python')
-        
+    df = pd.read_csv(arquivo, encoding='latin-1', sep=None, engine='python')
     df.columns = df.columns.str.strip()
     target = st.sidebar.selectbox("Coluna Alvo:", df.columns)
     features = st.sidebar.multiselect("Variáveis Explicativas:", [c for c in df.columns if c != target])
@@ -107,7 +103,6 @@ if arquivo:
 
         if not df_c.empty:
             modelo = LinearRegression().fit(df_c[features], df_c[target])
-            # Correção de Sintaxe abaixo:
             eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
             st.latex(eq_str)
             
@@ -128,3 +123,9 @@ if arquivo:
                 st.markdown(f"### Valor Total Estimado: R$ {total:,.2f}")
                 
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+                ax1.scatter(df_c[target], preds); ax1.set_title("Aderência")
+                ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
+                st.pyplot(fig)
+                
+                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, min_v, max_v)
+                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
