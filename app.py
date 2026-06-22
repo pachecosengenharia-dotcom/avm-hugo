@@ -83,10 +83,17 @@ def gerar_laudo_pdf(d, fig, eq_str, info, graus, inputs, min_v, max_v):
 arquivo = st.sidebar.file_uploader("Carregar Base (CSV)", type=["csv", "txt"])
 
 if arquivo:
-    df = pd.read_csv(arquivo, encoding='latin-1', sep=None, engine='python')
-    df.columns = df.columns.str.strip()
-    target = st.sidebar.selectbox("Coluna Alvo:", df.columns)
-    features = st.sidebar.multiselect("Variáveis Explicativas:", [c for c in df.columns if c != target])
+    # Tenta ler com UTF-8, se falhar, tenta latin-1
+    try:
+        df = pd.read_csv(arquivo, encoding='utf-8', sep=None, engine='python')
+    except UnicodeDecodeError:
+        arquivo.seek(0) # Reinicia o cursor do arquivo
+        df = pd.read_csv(arquivo, encoding='latin-1', sep=None, engine='python')
+
+    # Limpeza forçada dos nomes das colunas para evitar caracteres invisíveis ou problemas de codificação
+    df.columns = df.columns.str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8').str.strip()
+    
+    # ... resto do seu código
     
     st.sidebar.header("📝 Dados do Imóvel")
     info = {
