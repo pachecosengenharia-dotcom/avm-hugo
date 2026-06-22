@@ -259,7 +259,27 @@ if arquivo:
 
             st.latex(eq_str)
 
-            
+            # ... (linhas anteriores do seu código)
+        st.latex(eq_str)
+        
+        # Bloco de inputs com verificação de extrapolação
+        inputs = {}
+        st.sidebar.markdown("### Valores para Avaliação")
+        
+        for f in features:
+            min_f, max_f = df_c[f].min(), df_c[f].max()
+            valor = st.sidebar.number_input(
+                f"{f} (Min: {min_f:.2f} | Max: {max_f:.2f})", 
+                value=float(df_c[f].median()), 
+                key=f"inp_{f}"
+            )
+            inputs[f] = valor
+            if valor < min_f or valor > max_f:
+                st.sidebar.warning(f"⚠️ Extrapolação em {f}!")
+        
+        # Botão de cálculo
+        if st.sidebar.button("Calcular Precificação", key="btn_calc"):
+            # ... (seu cálculo de modelo.predict continua aqui)
 
             inputs = {f: st.sidebar.number_input(f"{f}", value=float(df_c[f].median())) for f in features}
             # ... (dentro do seu bloco if not df_c.empty:)
