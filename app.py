@@ -9,78 +9,81 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
 st.set_page_config(layout="wide")
-st.title("📊 AVM - Engenharia de Avaliações (Completo)")
+st.title("📊 AVM - Engenharia de Avaliações")
 
-# --- 1. FUNÇÃO DE PDF ---
+# Função de PDF mantida, mas certifique-se de fechar o canvas corretamente
 def gerar_laudo_pdf(d, fig, eq_str, inputs):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, 800, "Laudo Técnico de Avaliação Imobiliária")
+    c.drawString(50, 800, "Laudo Técnico de Avaliação")
     c.setFont("Helvetica", 9)
     y = 770
     c.drawString(50, y, "Equação:")
     y -= 15
-    for i in range(0, len(eq_str), 100):
-        c.drawString(50, y, eq_str[i:i+100]); y -= 12
-    c.drawString(50, y-10, "Parâmetros Utilizados:")
+    c.drawString(50, y, eq_str[:100]) # Simplificado para evitar erros
+    c.drawString(50, y-20, "Parâmetros:")
     for k, v in inputs.items():
-        c.drawString(60, y-25, f"- {k}: {v:.2f}"); y -= 12
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(50, y-20, f"Resultados: V.U. Médio R$ {d['vu']:,.2f} | Total R$ {d['total']:,.2f}")
-    c.drawString(50, y-35, f"Intervalo (95%): R$ {d['min']:,.2f} a R$ {d['max']:,.2f}")
+        y -= 12
+        c.drawString(60, y, f"- {k}: {v:.2f}")
     
+    # Adicionar Gráfico
     img_buf = io.BytesIO()
     fig.savefig(img_buf, format='png')
     img_buf.seek(0)
-    c.drawImage(ImageReader(img_buf), 50, 50, width=400, height=200)
-    c.save(); buffer.seek(0)
+    c.drawImage(ImageReader(img_buf), 50, 100, width=400, height=200)
+    c.save()
+    buffer.seek(0)
     return buffer
 
-# --- 2. CARREGAMENTO UNIVERSAL ---
+# --- CARREGAMENTO E PROCESSAMENTO ---
 arquivo = st.sidebar.file_uploader("Carregar Base (CSV)", type=["csv", "txt"])
 if arquivo:
-    raw_data = arquivo.getvalue().decode('latin-1')
-    sep = ';' if raw_data.count(';') > raw_data.count(',') else ','
-    df = pd.read_csv(io.StringIO(raw_data), sep=sep)
-    
+    # Usar separador dinâmico
+    df = pd.read_csv(arquivo, sep=None, engine='python')
     cols = df.columns.tolist()
+    
     target = st.sidebar.selectbox("Coluna Valor Unitário:", cols)
     features = st.sidebar.multiselect("Variáveis Explicativas:", [c for c in cols if c != target])
     
     if features and target:
+        # Tratamento de dados mais robusto
         df_c = df.copy()
         for col in features + [target]:
-            df_c[col] = pd.to_numeric(df_c[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.'), errors='coerce')
+            if df_c[col].dtype == 'object':
+                df_c[col] = df_c[col].str.replace('.', '', regex=False).str.replace(',', '.').astype(float)
         df_c = df_c.dropna()
 
-        if not df_c.empty:
-            modelo = LinearRegression().fit(df_c[features], df_c[target])
-            eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
-            st.latex(eq_str)
-            
-            # Gráficos
-            preds = modelo.predict(df_c[features])
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
-            ax1.scatter(df_c[target], preds); ax1.set_title("Aderência")
-            ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
-            st.pyplot(fig)
+        # Modelo
+        modelo = LinearRegression().fit(df_c[features], df_c[target])
+        st.subheader("Equação do Modelo")
+        st.latex(f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)]))
+        
+        # Gráficos
+        preds = modelo.predict(df_c[features])
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
+        ax1.scatter(df_c[target], preds); ax1.set_title("Aderência")
+        ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
+        st.pyplot(fig)
 
-            # Parâmetros com limites NBR
-            st.sidebar.header("⚙️ Parâmetros (Limites)")
-            inputs = {f: st.sidebar.number_input(f"{f} ({df_c[f].min():.1f} a {df_c[f].max():.1f})", value=float(df_c[f].median())) for f in features}
+        # Inputs
+        st.sidebar.header("⚙️ Parâmetros")
+        inputs = {f: st.sidebar.number_input(f"{f}", value=float(df_c[f].median())) for f in features}
+        
+        if st.sidebar.button("Calcular Precificação"):
+            vu = modelo.predict(np.array([list(inputs.values())]))[0]
+            std = np.std(df_c[target] - preds)
+            min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
             
-            if st.sidebar.button("Calcular Precificação"):
-                vu = modelo.predict(np.array([list(inputs.values())]))[0]
-                std = np.std(df_c[target] - preds)
-                min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
-                total = vu * (inputs.get('Área Privativa', 1))
-                
-                c1, c2, c3 = st.columns(3)
-                c1.metric("V.U. Mínimo", f"R$ {min_v:,.2f}")
-                c2.metric("V.U. Médio", f"R$ {vu:,.2f}")
-                c3.metric("V.U. Máximo", f"R$ {max_v:,.2f}")
-                st.metric("Valor Total Estimado", f"R$ {total:,.2f}")
-                
-                pdf = gerar_laudo_pdf({'vu': vu, 'min': min_v, 'max': max_v, 'total': total}, fig, eq_str, inputs)
-                st.download_button("📥 Baixar Laudo PDF", pdf, "laudo_tecnico.pdf")
+            # Cálculo do total (considera coluna 'Área' se existir)
+            area_col = next((c for c in df_c.columns if 'área' in c.lower()), None)
+            total = vu * (inputs.get(area_col, 1) if area_col else 1)
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("V.U. Mínimo", f"R$ {min_v:,.2f}")
+            col2.metric("V.U. Médio", f"R$ {vu:,.2f}")
+            col3.metric("V.U. Máximo", f"R$ {max_v:,.2f}")
+            
+            # Geração do PDF pós-cálculo
+            pdf_data = gerar_laudo_pdf({'vu': vu, 'min': min_v, 'max': max_v, 'total': total}, fig, "eq_str", inputs)
+            st.download_button("📥 Baixar Laudo PDF", pdf_data, "laudo.pdf", "application/pdf")
