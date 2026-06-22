@@ -55,9 +55,49 @@ if arquivo:
                     st.sidebar.error(f"⚠️ {f} fora do campo amostral!")
                     extrapolou = True
             
+           # ... (código anterior de treino do modelo) ...
+
+            # Botão de Cálculo
             if st.sidebar.button("Calcular Precificação"):
+                # 1. Verifica Extrapolação
                 if extrapolou:
-                    st.error("Avaliação impedida: Variáveis fora do limite amostral (Proibido pela NBR).")
+                    st.error("Erro: Variáveis fora do limite amostral (Proibido pela NBR 14653).")
                 else:
+                    # 2. Realiza o cálculo APENAS aqui dentro
+                    try:
+                        # Prepara os dados para predição
+                        input_array = np.array([list(inputs.values())])
+                        vu = modelo.predict(input_array)[0]
+                        
+                        # Cálculos Estatísticos
+                        preds = modelo.predict(df_c[features])
+                        residuos = df_c[target] - preds
+                        
+                        # Intervalo de Confiança 80% (t-student)
+                        gl = len(df_c) - len(features) - 1
+                        t_score = stats.t.ppf(0.9, gl)
+                        std_res = np.std(residuos, ddof=len(features)+1)
+                        margem = t_score * std_res
+                        
+                        min_v, max_v = vu - margem, vu + margem
+                        var_relativa = (max_v - min_v) / (2 * vu)
+                        
+                        # 3. Exibição dos resultados (dentro do if do botão)
+                        c1, c2, c3 = st.columns(3)
+                        c1.metric("V.U. Mínimo (80%)", f"R$ {min_v:,.2f}")
+                        c2.metric("V.U. Estimado", f"R$ {vu:,.2f}")
+                        c3.metric("V.U. Máximo (80%)", f"R$ {max_v:,.2f}")
+                        
+                        grau_f, grau_p = calcular_graus_nbr(len(df_c), len(features), var_relativa)
+                        st.success(f"Fundamentação: **{grau_f}** | Precisão: **{grau_p}**")
+
+                        # Gráficos
+                        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+                        ax1.scatter(df_c[target], preds, alpha=0.6); ax1.set_title("Aderência")
+                        ax2.scatter(preds, residuos, alpha=0.6); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
+                        st.pyplot(fig)
+                        
+                    except Exception as e:
+                        st.error(f"Erro no cálculo: {e}")
                     # Predição e Intervalo de Confiança 80%
                     vu
