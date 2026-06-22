@@ -97,6 +97,7 @@ if arquivo:
                 preds = modelo.predict(df_c[features])
                 std = np.std(df_c[target] - preds)
                 min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
+                # Assume que a primeira variável explicativa é a área para o cálculo total, ajuste conforme necessário
                 total = vu * inputs[features[0]] if features else vu
                 graus = ("Grau III" if len(df_c) >= 12 else "Grau I", "Grau III" if (max_v-min_v)/(2*vu) < 0.2 else "Grau I")
                 
@@ -108,4 +109,9 @@ if arquivo:
                 
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
                 ax1.scatter(df_c[target], preds); ax1.set_title("Aderência")
-                ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Res
+                ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
+                st.pyplot(fig)
+                
+                # Botão de Download
+                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, min_v, max_v)
+                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
