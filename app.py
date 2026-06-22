@@ -262,6 +262,26 @@ if arquivo:
             
 
             inputs = {f: st.sidebar.number_input(f"{f}", value=float(df_c[f].median())) for f in features}
+            # ... (dentro do seu bloco if not df_c.empty:)
+
+        modelo = LinearRegression().fit(df_c[features], df_c[target])
+        eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
+        st.latex(eq_str)
+        
+        # O BLOCO DEVE COMEÇAR AQUI, SEM ESPAÇOS EXTRAS OU FALTANDO
+        inputs = {}
+        st.sidebar.markdown("### Valores para Avaliação")
+        
+        for f in features:
+            min_f, max_f = df_c[f].min(), df_c[f].max()
+            val = st.sidebar.number_input(
+                f"{f} (Min: {min_f:.2f} | Max: {max_f:.2f})", 
+                value=float(df_c[f].median()), 
+                key=f"inp_{f}"
+            )
+            inputs[f] = val
+            if val < min_f or val > max_f:
+                st.sidebar.warning(f"⚠️ Extrapolação em {f}!")
 
             
 
