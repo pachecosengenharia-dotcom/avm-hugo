@@ -10,11 +10,12 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
-# --- Funções Auxiliares ---
+# Função para normalizar texto (limpeza de acentos)
 def normalizar_texto(texto):
     nfkd = unicodedata.normalize('NFKD', str(texto))
     return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
+# Função para Gerar o PDF
 def gerar_laudo_pdf(d, fig, eq_str, info, graus, inputs, min_v, max_v):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -49,7 +50,7 @@ def gerar_laudo_pdf(d, fig, eq_str, info, graus, inputs, min_v, max_v):
     buffer.seek(0)
     return buffer
 
-# --- Interface ---
+# Interface
 st.set_page_config(layout="wide", page_title="AVM - Engenharia de Avaliações")
 st.title("📊 AVM - Engenharia de Avaliações")
 
@@ -63,8 +64,8 @@ if arquivo:
         df = pd.read_csv(arquivo, encoding='latin-1', sep=None, engine='python')
     
     df.columns = [normalizar_texto(col).strip() for col in df.columns]
-    target = st.sidebar.selectbox("Coluna Alvo:", options=df.columns, key="t")
-    features = st.sidebar.multiselect("Variáveis Explicativas:", options=[c for c in df.columns if c != target], key="f")
+    target = st.sidebar.selectbox("Coluna Alvo:", options=df.columns, key="t_alvo")
+    features = st.sidebar.multiselect("Variáveis Explicativas:", options=[c for c in df.columns if c != target], key="f_exp")
     
     info = {"Endereço": st.sidebar.text_input("Endereço"), "Bairro": st.sidebar.text_input("Bairro")}
 
@@ -81,9 +82,29 @@ if arquivo:
 
             inputs = {}
             for f in features:
-                # Limites dinâmicos extraídos da planilha
                 min_f, max_f = float(df_c[f].min()), float(df_c[f].max())
-                
                 val = st.sidebar.number_input(f"{f} (Limites: {min_f:.2f} - {max_f:.2f})", value=float(df_c[f].median()), key=f"in_{f}")
                 inputs[f] = val
                 if val < min_f or val > max_f:
+                    st.sidebar.warning(f"⚠️ Extrapolação em {f}: fora da amostra!")
+
+            if st.sidebar.button("Calcular Precificação", key="btn_calc"):
+                vu = modelo.predict(np.array([list(inputs.values())]))[0]
+                std = np.std(df_c[target] - modelo.predict(df_c[features]))
+                min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
+                
+                # Cálculo dos Graus NBR 14653
+                n, k = len(df_c), len(features)
+                fund = "Grau III" if n >= 3*k else "Grau II" if n >= 2*k else "Grau I"
+                amplitude = (max_v - min_v) / (2 * vu)
+                prec = "Grau III" if amplitude <= 0.2 else "Grau II" if amplitude <= 0.3 else "Grau I"
+                
+                st.metric("V.U. Médio", f"R$ {vu:,.2f}")
+                st.write(f"Fundamentação: {fund} | Precisão: {prec}")
+                
+                fig, ax = plt.subplots(figsize=(6, 3))
+                ax.scatter(df_c[target], modelo.predict(df_c[features]))
+                st.pyplot(fig)
+                
+                pdf = gerar_laudo_pdf({'vu': vu}, fig, eq_str, info, (fund, prec), inputs, min_v, max_v)
+                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
