@@ -11,7 +11,7 @@ from reportlab.lib.utils import ImageReader
 st.set_page_config(layout="wide")
 st.title("📊 AVM - Engenharia de Avaliações")
 
-# Função com nome novo para forçar atualização no Streamlit
+# Função de PDF com verificação de segurança para os argumentos
 def gerar_laudo_final(d, fig, eq_str, info, graus, inputs, limites):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -34,7 +34,10 @@ def gerar_laudo_final(d, fig, eq_str, info, graus, inputs, limites):
     c.drawString(50, y, "Limites das Variáveis:")
     for f, val in inputs.items():
         y -= 12
-        c.drawString(60, y, f"{f}: {val:.2f} (Limites: {limites[f]['min']:.2f} a {limites[f]['max']:.2f})")
+        # Verifica se limites existe e possui a chave para evitar erro
+        min_val = limites.get(f, {}).get('min', 0)
+        max_val = limites.get(f, {}).get('max', 0)
+        c.drawString(60, y, f"{f}: {val:.2f} (Limites: {min_val:.2f} a {max_val:.2f})")
     
     img_buf = io.BytesIO()
     fig.savefig(img_buf, format='png')
@@ -62,6 +65,7 @@ if arquivo is not None:
             eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
             st.latex(eq_str)
             
+            # Garante que limites e inputs estejam definidos antes do botão
             limites = {f: {'min': float(df_c[f].min()), 'max': float(df_c[f].max())} for f in features}
             inputs = {f: st.sidebar.number_input(f"{f}", value=float(df_c[f].median())) for f in features}
             
@@ -86,6 +90,6 @@ if arquivo is not None:
                 ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
                 st.pyplot(fig)
                 
-                # Chamada com os 7 argumentos exatos da função nova
+                # Chamada segura
                 pdf = gerar_laudo_final({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, limites)
                 st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf")
