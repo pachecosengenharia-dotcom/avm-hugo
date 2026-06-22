@@ -58,6 +58,9 @@ if arquivo:
            # ... (código anterior de treino do modelo) ...
 
             # Botão de Cálculo
+          # ... (código anterior de treino do modelo) ...
+
+            # Botão de Cálculo
             if st.sidebar.button("Calcular Precificação"):
                 # 1. Verifica Extrapolação
                 if extrapolou:
@@ -99,5 +102,3 @@ if arquivo:
                         
                     except Exception as e:
                         st.error(f"Erro no cálculo: {e}")
-                    # Predição e Intervalo de Confiança 80%
-                    vu
