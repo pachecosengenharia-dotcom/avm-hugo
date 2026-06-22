@@ -10,10 +10,63 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
-# Função para remover acentos
+# Função para normalizar texto (limpeza de acentos para evitar problemas no celular)
 def normalizar_texto(texto):
     nfkd = unicodedata.normalize('NFKD', str(texto))
     return "".join([c for c in nfkd if not unicodedata.combining(c)])
+
+# Função para Gerar o PDF
+def gerar_laudo_pdf(d, fig, eq_str, info, graus, inputs, min_v, max_v):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, height - 50, "Laudo Técnico de Avaliação (NBR 14653)")
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, height - 90, "Dados do Imóvel:")
+    c.setFont("Helvetica", 10)
+    y = height - 110
+    for k, v in info.items():
+        c.drawString(50, y, f"{k}: {v}")
+        y -= 20
+    y -= 10
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Equação do Modelo:")
+    y -= 20
+    c.setFont("Courier", 8)
+    linhas_eq = textwrap.wrap(eq_str, width=100)
+    for linha in linhas_eq:
+        c.drawString(50, y, linha)
+        y -= 12
+    y -= 20
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Variáveis e Parâmetros Utilizados:")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    for k, v in inputs.items():
+        c.drawString(50, y, f"- {k}: {v:.2f}")
+        y -= 15
+    y -= 20
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Resultados da Avaliação:")
+    c.setFont("Helvetica", 10)
+    y -= 20
+    c.drawString(50, y, f"V.U. Mínimo: R$ {min_v:,.2f} | V.U. Médio: R$ {d['vu']:,.2f} | V.U. Máximo: R$ {max_v:,.2f}")
+    y -= 20
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, f"VALOR TOTAL ESTIMADO: R$ {d['total']:,.2f}")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    c.drawString(50, y, f"Fundamentação: {graus[0]} | Precisão: {graus[1]}")
+    y -= 220
+    img_buf = io.BytesIO()
+    fig.savefig(img_buf, format='png', bbox_inches='tight')
+    img_buf.seek(0)
+    c.drawImage(ImageReader(img_buf), 50, y, width=400, height=200)
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
 
 st.set_page_config(layout="wide", page_title="AVM - Engenharia de Avaliações")
 st.title("📊 AVM - Engenharia de Avaliações")
@@ -54,11 +107,7 @@ if arquivo:
             st.sidebar.markdown("### Valores para Avaliação")
             for f in features:
                 min_f, max_f = df_c[f].min(), df_c[f].max()
-                val = st.sidebar.number_input(
-                    f"{f} (Min: {min_f:.2f} | Max: {max_f:.2f})", 
-                    value=float(df_c[f].median()), 
-                    key=f"inp_{f}"
-                )
+                val = st.sidebar.number_input(f"{f} (Min: {min_f:.2f} | Max: {max_f:.2f})", value=float(df_c[f].median()), key=f"inp_{f}")
                 inputs[f] = val
                 if val < min_f or val > max_f:
                     st.sidebar.warning(f"⚠️ Extrapolação em {f}!")
@@ -82,9 +131,6 @@ if arquivo:
                 ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
                 st.pyplot(fig)
                 
-                # (Nota: A função gerar_laudo_pdf deve estar definida antes deste bloco)
-                st.success("Cálculo realizado com sucesso!")
-
-            pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, min_v, max_v)
-
+                # BOTÃO PARA BAIXAR O PDF
+                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, min_v, max_v)
                 st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
