@@ -86,5 +86,5 @@ if arquivo is not None:
                 ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
                 st.pyplot(fig)
                 
-                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs)
-                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf")
+                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus)
+                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_pdf")
