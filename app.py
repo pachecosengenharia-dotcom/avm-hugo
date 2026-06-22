@@ -205,6 +205,29 @@ if arquivo:
     st.sidebar.header("📝 Dados do Imóvel")
 
     info = {
+        inputs = {}
+    st.sidebar.markdown("### Valores para Avaliação")
+    
+    for f in features:
+        min_f = df_c[f].min()
+        max_f = df_c[f].max()
+        
+        # Cria o campo de entrada e mostra o intervalo permitido
+        val = st.sidebar.number_input(
+            f"{f} (Min: {min_f:.2f} | Max: {max_f:.2f})", 
+            value=float(df_c[f].median())
+        )
+        inputs[f] = val
+        
+        # Verificação de Extrapolação
+        if val < min_f or val > max_f:
+            st.sidebar.warning(f"⚠️ Extrapolação em {f}!")
+    
+    # Lógica do botão de cálculo
+    if st.sidebar.button("Calcular Precificação", key="btn_calc"):
+        # Converter inputs para array para o modelo
+        vetor_input = np.array([list(inputs.values())])
+        vu = modelo.predict(vetor_input)[0]
 
         "Endereço": st.sidebar.text_input("Endereço"),
 
