@@ -49,7 +49,30 @@ if arquivo is not None:
         "Informante": st.sidebar.text_input("Informante"),
         "Telefone": st.sidebar.text_input("Telefone")
     }
+# Dentro do if st.sidebar.button("Calcular Precificação"):
+# ... (cálculos existentes)
 
+# Preparar estatísticas das variáveis
+stats = {}
+for f in features:
+    stats[f] = {
+        "min": df_c[f].min(),
+        "max": df_c[f].max(),
+        "var": df_c[f].var()
+    }
+
+# Preparar dicionário para o PDF
+dados_pdf = {
+    'vu': vu, 
+    'total': total,
+    'min_v': min_v,
+    'max_v': max_v,
+    'n_dados': len(df_c),
+    'stats': stats
+}
+
+# Chamada da função atualizada
+pdf = gerar_laudo_pdf(dados_pdf, fig, eq_str, info, graus)
     if features and target:
         df_c = df.copy()
         for col in features + [target]:
@@ -88,3 +111,49 @@ if arquivo is not None:
                 
                 pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus)
                 st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf")
+                def gerar_laudo_pdf(d, fig, eq_str, info, graus):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, 800, "Laudo Técnico de Avaliação (NBR 14653)")
+    
+    c.setFont("Helvetica", 10)
+    y = 770
+    # Dados do Imóvel
+    for k, v in info.items():
+        c.drawString(50, y, f"{k}: {v}")
+        y -= 15
+    
+    y -= 10
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(50, y, "Estatísticas do Modelo:")
+    c.setFont("Helvetica", 10)
+    y -= 15
+    c.drawString(50, y, f"Quantidade de Dados: {d['n_dados']}")
+    y -= 15
+    c.drawString(50, y, f"Equação: {eq_str}")
+    y -= 20
+    
+    # Detalhamento das Variáveis
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(50, y, "Variáveis utilizadas (Mín / Máx / Variância):")
+    c.setFont("Helvetica", 9)
+    y -= 15
+    for var, st in d['stats'].items():
+        c.drawString(60, y, f"- {var}: Mín: {st['min']:.2f} | Máx: {st['max']:.2f} | Var: {st['var']:.2f}")
+        y -= 12
+    
+    # Resultados Finais
+    y -= 20
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(50, y, f"Resultado: V.U. Médio R$ {d['vu']:,.2f} (Mín: R$ {d['min_v']:,.2f} | Máx: R$ {d['max_v']:,.2f})")
+    
+    # Inserção da Imagem
+    img_buf = io.BytesIO()
+    fig.savefig(img_buf, format='png')
+    img_buf.seek(0)
+    c.drawImage(ImageReader(img_buf), 50, 50, width=400, height=200)
+    
+    c.save()
+    buffer.seek(0)
+    return buffer
