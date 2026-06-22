@@ -85,6 +85,6 @@ if arquivo:
                 # (Nota: A função gerar_laudo_pdf deve estar definida antes deste bloco)
                 st.success("Cálculo realizado com sucesso!")
 
-                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, min_v, max_v)
+            pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, min_v, max_v)
 
                 st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
