@@ -102,3 +102,36 @@ if arquivo:
                         
                     except Exception as e:
                         st.error(f"Erro no cálculo: {e}")
+                        # --- Função PDF (Coloque no topo do script) ---
+def gerar_laudo_pdf(vu, total, info, grau_f, grau_p, inputs, min_v, max_v):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    c.drawString(50, 800, "LAUDO TÉCNICO DE AVALIAÇÃO - NBR 14653")
+    c.drawString(50, 780, f"Valor Unitário Estimado: R$ {vu:,.2f}")
+    c.drawString(50, 760, f"VALOR TOTAL ESTIMADO: R$ {total:,.2f}")
+    c.drawString(50, 740, f"Fundamentação: {grau_f} | Precisão: {grau_p}")
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+# --- Dentro do Botão "Calcular Precificação" ---
+if st.sidebar.button("Calcular Precificação"):
+    # ... (cálculos anteriores) ...
+    
+    # 1. Cálculo do Valor Total (Assumindo que a primeira feature é a Área Principal)
+    area_principal = list(inputs.values())[0] 
+    total = vu * area_principal
+    
+    # 2. Exibição
+    st.metric("Valor Total Estimado", f"R$ {total:,.2f}")
+    
+    # 3. Botão de Download do PDF
+    info_dict = {"Endereço": "Logradouro A", "Cidade": "Goiânia"} # Ajuste conforme necessário
+    pdf_buffer = gerar_laudo_pdf(vu, total, info_dict, grau_f, grau_p, inputs, min_v, max_v)
+    
+    st.download_button(
+        label="📥 Baixar Laudo Completo (PDF)",
+        data=pdf_buffer,
+        file_name="laudo_tecnico.pdf",
+        mime="application/pdf"
+    )
