@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import textwrap
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 from reportlab.lib.pagesizes import A4
@@ -31,39 +32,54 @@ def gerar_laudo_pdf(d, fig, eq_str, info, graus, inputs, min_v, max_v):
         c.drawString(50, y, f"{k}: {v}")
         y -= 20
     
-    # Modelo Matemático
+    # Equação do Modelo (com quebra de linha)
     y -= 10
     c.setFont("Helvetica-Bold", 12)
     c.drawString(50, y, "Equação do Modelo:")
-    c.setFont("Courier", 9)
     y -= 20
-    c.drawString(50, y, eq_str)
+    c.setFont("Courier", 8)
+    linhas_eq = textwrap.wrap(eq_str, width=100)
+    for linha in linhas_eq:
+        c.drawString(50, y, linha)
+        y -= 12
     
-    # Resultados
-    y -= 30
+    # Variáveis Utilizadas
+    y -= 20
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Variáveis e Parâmetros Utilizados:")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    for k, v in inputs.items():
+        c.drawString(50, y, f"- {k}: {v:.2f}")
+        y -= 15
+    
+    # Resultados Finais
+    y -= 20
     c.setFont("Helvetica-Bold", 12)
     c.drawString(50, y, "Resultados da Avaliação:")
     c.setFont("Helvetica", 10)
     y -= 20
     c.drawString(50, y, f"V.U. Mínimo: R$ {min_v:,.2f} | V.U. Médio: R$ {d['vu']:,.2f} | V.U. Máximo: R$ {max_v:,.2f}")
     y -= 20
-    c.drawString(50, y, f"Valor Total Estimado: R$ {d['total']:,.2f}")
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, f"VALOR TOTAL ESTIMADO: R$ {d['total']:,.2f}")
     y -= 20
+    c.setFont("Helvetica", 10)
     c.drawString(50, y, f"Fundamentação: {graus[0]} | Precisão: {graus[1]}")
     
-    # Gráficos
-    y -= 280
+    # Inserção do Gráfico
+    y -= 220
     img_buf = io.BytesIO()
     fig.savefig(img_buf, format='png', bbox_inches='tight')
     img_buf.seek(0)
-    c.drawImage(ImageReader(img_buf), 50, y, width=480, height=250)
+    c.drawImage(ImageReader(img_buf), 50, y, width=400, height=200)
     
     c.showPage()
     c.save()
     buffer.seek(0)
     return buffer
 
-# Interface Lateral
+# Interface Lateral e Lógica Principal
 arquivo = st.sidebar.file_uploader("Carregar Base (CSV)", type=["csv", "txt"])
 
 if arquivo:
@@ -97,21 +113,19 @@ if arquivo:
                 preds = modelo.predict(df_c[features])
                 std = np.std(df_c[target] - preds)
                 min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
-                # Assume que a primeira variável explicativa é a área para o cálculo total, ajuste conforme necessário
                 total = vu * inputs[features[0]] if features else vu
                 graus = ("Grau III" if len(df_c) >= 12 else "Grau I", "Grau III" if (max_v-min_v)/(2*vu) < 0.2 else "Grau I")
                 
-                # Exibição na Tela
                 cols = st.columns(3)
                 cols[0].metric("V.U. Mínimo", f"R$ {min_v:,.2f}")
                 cols[1].metric("V.U. Médio", f"R$ {vu:,.2f}")
                 cols[2].metric("V.U. Máximo", f"R$ {max_v:,.2f}")
+                st.markdown(f"### Valor Total Estimado: R$ {total:,.2f}")
                 
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
                 ax1.scatter(df_c[target], preds); ax1.set_title("Aderência")
                 ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
                 st.pyplot(fig)
                 
-                # Botão de Download
                 pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, min_v, max_v)
                 st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
