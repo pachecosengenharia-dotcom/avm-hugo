@@ -11,18 +11,21 @@ from reportlab.lib.utils import ImageReader
 
 import unicodedata
 
-def limpar(t):
-    # NFKD decompõe 'ç' em 'c' + 'cedilha'
-    # Combina com o filtro que remove qualquer caractere que não seja uma letra base
-    return "".join([c for c in unicodedata.normalize('NFKD', str(t)) if not unicodedata.combining(c)])
+def limpar(texto):
+    # Dicionário de tradução manual para garantir que não haja interrogações
+    substituicoes = {
+        'ç': 'c', 'Ç': 'C', 'ã': 'a', 'Ã': 'A', 'á': 'a', 'Á': 'A',
+        'à': 'a', 'À': 'A', 'â': 'a', 'Â': 'A', 'é': 'e', 'É': 'E',
+        'ê': 'e', 'Ê': 'E', 'í': 'i', 'Í': 'I', 'ó': 'o', 'Ó': 'O',
+        'ô': 'o', 'Ô': 'O', 'õ': 'o', 'Õ': 'O', 'ú': 'u', 'Ú': 'U'
+    }
+    texto = str(texto)
+    for caractere, substituto in substituicoes.items():
+        texto = texto.replace(caractere, substituto)
+    return texto
 
-
-
-def gerar_laudo_final(res, info, features, inputs, fig):
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, 820, "Laudo Tecnico de Avaliacao (NBR 14653)")
+# E na função gerar_laudo, certifique-se de envolver TODO texto assim:
+# Exemplo: c.drawString(50, 820, limpar("Laudo Técnico de Avaliação"))
     
     # 1. Dados do Imovel
     c.setFont("Helvetica-Bold", 11)
