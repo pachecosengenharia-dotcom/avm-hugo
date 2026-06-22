@@ -13,15 +13,33 @@ def normalizar_texto(texto):
     return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
 # Função para PDF corrigida
-def gerar_laudo_pdf(vu, fund, prec, eq_str):
+def gerar_laudo_pdf(vu, min_v, max_v, fund, prec, eq_str, total, n, features, inputs, fig):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
+    # Títulos e Cabeçalho
     c.setFont("Helvetica-Bold", 16)
     c.drawString(50, 800, "Laudo Técnico de Avaliação (NBR 14653)")
-    c.setFont("Helvetica", 12)
-    c.drawString(50, 770, f"V.U. Estimado: R$ {vu:,.2f}")
-    c.drawString(50, 750, f"Fundamentação: {fund} | Precisão: {prec}")
-    c.drawString(50, 730, f"Equação: {eq_str[:80]}...")
+    c.setFont("Helvetica", 10)
+    
+    # Informações Técnicas
+    c.drawString(50, 770, f"Total de Dados: {n}")
+    c.drawString(50, 755, f"Equação: {eq_str}")
+    c.drawString(50, 740, f"Variáveis: {', '.join(features)}")
+    
+    # Resultados Financeiros
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, 710, "Resultados da Precificação:")
+    c.setFont("Helvetica", 10)
+    c.drawString(50, 690, f"V.U. Mínimo: R$ {min_v:,.2f} | V.U. Médio: R$ {vu:,.2f} | V.U. Máximo: R$ {max_v:,.2f}")
+    c.drawString(50, 675, f"VALOR TOTAL ESTIMADO: R$ {total:,.2f}")
+    c.drawString(50, 650, f"Fundamentação: {fund} | Precisão: {prec}")
+    
+    # Inserção do Gráfico
+    img_buf = io.BytesIO()
+    fig.savefig(img_buf, format='png')
+    img_buf.seek(0)
+    c.drawImage(ImageReader(img_buf), 50, 400, width=400, height=200)
+    
     c.save()
     buffer.seek(0)
     return buffer
