@@ -12,23 +12,45 @@ def normalizar(t):
     return "".join([c for c in unicodedata.normalize('NFKD', str(t)) if not unicodedata.combining(c)])
 
 # Função que gera o PDF com todos os campos da NBR 14653
-def gerar_laudo_completo(vu, min_v, max_v, fund, prec, eq, total, n, info, features):
+def gerar_laudo_completo(vu, min_v, max_v, fund, prec, eq, total, n, info, features, inputs):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, 800, "Laudo Técnico de Avaliação (NBR 14653)")
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, 820, "Laudo Técnico de Avaliação (NBR 14653)")
     
+    # Dados do Imóvel
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, 790, "Dados do Imóvel:")
     c.setFont("Helvetica", 10)
     y = 770
     for k, v in info.items():
-        c.drawString(50, y, f"{k}: {v}"); y -= 15
+        c.drawString(60, y, f"{k}: {v}"); y -= 15
     
-    y -= 10
-    c.drawString(50, y, f"Total de Dados (n): {n} | Variáveis Utilizadas: {', '.join(features)}")
-    c.drawString(50, y-15, f"Equação: {eq}")
-    c.drawString(50, y-30, f"V.U. Médio: R$ {vu:,.2f} | Mín: R$ {min_v:,.2f} | Máx: R$ {max_v:,.2f}")
-    c.drawString(50, y-45, f"VALOR TOTAL ESTIMADO: R$ {total:,.2f}")
-    c.drawString(50, y-60, f"Fundamentação: {fund} | Precisão: {prec}")
+    # Equação
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y-10, "Equação do Modelo:")
+    c.setFont("Helvetica", 9)
+    # Quebra a equação em linhas para caber no PDF
+    c.drawString(60, y-25, eq[:90])
+    c.drawString(60, y-37, eq[90:])
+    
+    # Variáveis utilizadas
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y-60, "Variáveis e Parâmetros Utilizados:")
+    c.setFont("Helvetica", 10)
+    y_var = y-75
+    for f in features:
+        c.drawString(60, y_var, f"- {f}: {inputs[f]:.2f}")
+        y_var -= 13
+        
+    # Resultados
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y_var-10, "Resultados da Avaliação:")
+    c.setFont("Helvetica", 10)
+    c.drawString(60, y_var-25, f"V.U. Médio: R$ {vu:,.2f} | Mín: R$ {min_v:,.2f} | Máx: R$ {max_v:,.2f}")
+    c.drawString(60, y_var-37, f"VALOR TOTAL ESTIMADO: R$ {total:,.2f}")
+    c.drawString(60, y_var-49, f"Fundamentação: {fund} | Precisão: {prec} | Total de Dados: {n}")
+    
     c.save()
     buf.seek(0)
     return buf
