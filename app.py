@@ -88,17 +88,7 @@ if arquivo is not None:
                 
                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus)                 
                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf") 
-            
-                def gerar_laudo_pdf(dados, fig):
-                # Exemplo de como acessar dentro da função
-                vu = dados['resultados']['vu']
-                eq = dados['equacao']['expressao']
-                limites = dados['equacao']['limites']
-                
-                # ... aqui entra a lógica de escrita do PDF (usando ReportLab, FPDF, etc.)
-                # Exemplo: canvas.drawString(100, 700, f"Equação: {eq}")
-                # Exemplo: canvas.drawString(100, 680, f"Limites: {limites['min']} a {limites['max']}")
-                
+                                      
                 return bytes_do_pdf
                 st.download_button(
                 label="📥 Baixar Laudo Completo", data=pdf, 
