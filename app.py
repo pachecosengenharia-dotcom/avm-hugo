@@ -87,19 +87,9 @@ if arquivo is not None:
                 st.pyplot(fig)
                 
                # Prepare um dicionário contendo todos os dados necessários
-dados_laudo = {
-    'resultados': {
-        'vu': vu,
-        'total': total
-    },
-    'equacao': {
-        'expressao': eq_str,
-        # Adicione aqui os limites e valores que faltam
-        'limites': {'min': valor_min, 'max': valor_max},
-        'detalhes': info
-    },
-    'graus': graus
-}
+               dados_laudo = {'resultados': {'vu': vu, 'total': total}, 'equacao': {'expressao': eq_str,
+               # Adicione aqui os limites e valores que faltam
+               'limites': {'min': valor_min, 'max': valor_max}, 'detalhes': info}, 'graus': graus}
 
-# Chame a função passando esse dicionário único
-pdf = gerar_laudo_pdf(dados_laudo, fig)
+               # Chame a função passando esse dicionário único
+               pdf = gerar_laudo_pdf(dados_laudo, fig)
