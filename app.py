@@ -17,37 +17,31 @@ def gerar_pdf(vu, min_v, max_v, fund, prec, eq, total, n, info, features, inputs
     c.setFont("Helvetica-Bold", 14)
     c.drawString(50, 820, "Laudo Tecnico de Avaliacao (NBR 14653)")
     
-    # Identificação
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, 790, "Dados do Imovel:")
-    c.setFont("Helvetica", 10)
-    y = 770
+    y = 790
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "Dados do Imovel:"); y -= 15
+    c.setFont("Helvetica", 9)
     for k, v in info.items():
         c.drawString(60, y, remover_acentos(f"{k}: {v}")); y -= 15
     
-    # Equação
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y-10, "Equacao do Modelo:")
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y-10, "Equacao do Modelo:"); y -= 25
+    c.setFont("Helvetica", 8)
+    c.drawString(60, y, remover_acentos(eq[:95]))
+    
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y-20, "Variaveis Utilizadas:"); y -= 35
     c.setFont("Helvetica", 9)
-    c.drawString(60, y-25, remover_acentos(eq[:90]))
-    
-    # Variáveis
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y-50, "Variaveis e Parametros:")
-    y_var = y-65
-    c.setFont("Helvetica", 10)
     for f in features:
-        c.drawString(60, y_var, remover_acentos(f"- {f}: {inputs.get(f, 0):.2f}"))
-        y_var -= 13
+        c.drawString(60, y, remover_acentos(f"- {f}: {inputs.get(f, 0):.2f}"))
+        y -= 12
         
-    # Resultados
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y_var-10, "Resultados da Avaliacao:")
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y-10, "Resultados:"); y -= 25
     c.setFont("Helvetica", 10)
-    c.drawString(60, y_var-25, remover_acentos(f"V.U. Medio: R$ {vu:,.2f} | Min: R$ {min_v:,.2f} | Max: R$ {max_v:,.2f}"))
-    c.drawString(60, y_var-37, remover_acentos(f"VALOR TOTAL ESTIMADO: R$ {total:,.2f}"))
-    c.drawString(60, y_var-49, remover_acentos(f"Fundamentacao: {fund} | Precisao: {prec} | Dados: {n}"))
-    
+    c.drawString(60, y, remover_acentos(f"V.U. Medio: R$ {vu:,.2f} | Min: R$ {min_v:,.2f} | Max: R$ {max_v:,.2f}"))
+    c.drawString(60, y-15, remover_acentos(f"VALOR TOTAL: R$ {total:,.2f} | Dados: {n}"))
+    c.drawString(60, y-30, remover_acentos(f"Fundamentacao: {fund} | Precisao: {prec}"))
     c.save()
     buf.seek(0)
     return buf
@@ -55,7 +49,8 @@ def gerar_pdf(vu, min_v, max_v, fund, prec, eq, total, n, info, features, inputs
 st.set_page_config(layout="wide")
 st.title("📊 AVM - Engenharia de Avaliacoes")
 
-# Sidebar
+# Identificação
+st.sidebar.header("Identificacao")
 info = {k: st.sidebar.text_input(k) for k in ["Endereco", "Complemento", "Bairro", "Informante", "Telefone"]}
 arquivo = st.sidebar.file_uploader("Base (CSV)", type=["csv", "txt"])
 
@@ -72,16 +67,32 @@ if arquivo:
         
         inputs = {f: st.sidebar.number_input(f"{f} (Lim: 50-1500 se Setor)" if "setor" in remover_acentos(f).lower() else f"{f}", value=float(df[f].median())) for f in features}
 
-        if st.sidebar.button("Calcular Precificacao"):
+        # Botão único de processamento
+        if st.sidebar.button("Calcular e Gerar Laudo"):
+            # 1. Processamento
             modelo = LinearRegression().fit(df[features], df[target])
             vu = modelo.predict(np.array([list(inputs.values())]))[0]
             preds = modelo.predict(df[features])
             
-            # Cálculos NBR
+            # 2. Estatística NBR
             residuos = df[target] - preds
             std = np.std(residuos)
             min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
-            total = vu * inputs[features[0]] if features else vu
+            total = vu * inputs[features[0]]
             n, k = len(df), len(features)
             fund, prec = ("Grau III" if n >= 3*k else "Grau I"), ("Grau III" if (max_v-min_v)/(2*vu) <= 0.2 else "Grau I")
-            eq = f"{target} = {modelo.intercept_:.2f
+            eq = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
+
+            # 3. Exibição
+            st.latex(eq)
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("V.U. Min", f"R$ {min_v:,.2f}"); c2.metric("V.U. Med", f"R$ {vu:,.2f}")
+            c3.metric("V.U. Max", f"R$ {max_v:,.2f}"); c4.metric("Dados", n)
+            st.markdown(f"### Valor Total: R$ {total:,.2f}")
+            st.write(f"**Fundamentação:** {fund} | **Precisão:** {prec}")
+
+            # 4. Gráficos
+            fig, ax = plt.subplots(1, 2, figsize=(10, 4))
+            ax[0].scatter(df[target], preds); ax[0].set_title("Aderencia")
+            ax[1].scatter(preds, residuos); ax[1].axhline(0, color='red'); ax[1].set_title("Residuos")
+            st.pyplot(fig)
