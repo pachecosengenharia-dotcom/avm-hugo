@@ -8,6 +8,8 @@ import io
 
 import textwrap
 
+import unicodedata
+
 from sklearn.linear_model import LinearRegression
 
 import matplotlib.pyplot as plt
@@ -18,7 +20,9 @@ from reportlab.pdfgen import canvas
 
 from reportlab.lib.utils import ImageReader
 
-
+def normalizar_texto(texto):
+    nfkd = unicodedata.normalize('NFKD', str(texto))
+    return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
 # Configuração da Página
 
@@ -174,24 +178,28 @@ def normalizar_texto(texto):
     return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
 if arquivo:
-    # 1. Tenta ler o arquivo de forma segura
     try:
         df = pd.read_csv(arquivo, encoding='utf-8', sep=None, engine='python')
     except:
         arquivo.seek(0)
         df = pd.read_csv(arquivo, encoding='latin-1', sep=None, engine='python')
-
-    # 2. Corrige os nomes das colunas aqui (isso resolve o erro no celular)
+    
+    # Limpa nomes das colunas (isso remove os acentos e resolve o problema no celular)
     df.columns = [normalizar_texto(col).strip() for col in df.columns]
+
     
     # 3. Restante da lógica (target, features, etc)
-    target = st.sidebar.selectbox("Coluna Alvo:", df.columns)
-    # ... resto do código ...
-
-    target = st.sidebar.selectbox("Coluna Alvo:", df.columns)
-
-    features = st.sidebar.multiselect("Variáveis Explicativas:", [c for c in df.columns if c != target])
-
+    target = st.sidebar.selectbox(
+        "Coluna Alvo:", 
+        options=df.columns, 
+        key="target_col"
+    )
+    
+    features = st.sidebar.multiselect(
+        "Variáveis Explicativas:", 
+        options=[c for c in df.columns if c != target], 
+        key="features_col"
+    )
     
 
     st.sidebar.header("📝 Dados do Imóvel")
