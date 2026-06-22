@@ -79,4 +79,4 @@ if arquivo:
                 
                 # Geração do arquivo e botão dentro do bloco do botão de cálculo
                 pdf = gerar_laudo_final({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, limites)
-                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf")
+                st.download_button("📥 Baixar Laudo Completo", pdf)
