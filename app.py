@@ -86,10 +86,22 @@ if arquivo is not None:
                 ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
                 st.pyplot(fig)
                 
-               # Prepare um dicionário contendo todos os dados necessários
-               dados_laudo = {'resultados': {'vu': vu, 'total': total}, 'equacao': {'expressao': eq_str,
-               # Adicione aqui os limites e valores que faltam
-               'limites': {'min': valor_min, 'max': valor_max}, 'detalhes': info}, 'graus': graus}
-
-               # Chame a função passando esse dicionário único
-               pdf = gerar_laudo_pdf(dados_laudo, fig)
+               pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus)                 
+               st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf") 
+            
+                def gerar_laudo_pdf(dados, fig):
+                # Exemplo de como acessar dentro da função
+                vu = dados['resultados']['vu']
+                eq = dados['equacao']['expressao']
+                limites = dados['equacao']['limites']
+                
+                # ... aqui entra a lógica de escrita do PDF (usando ReportLab, FPDF, etc.)
+                # Exemplo: canvas.drawString(100, 700, f"Equação: {eq}")
+                # Exemplo: canvas.drawString(100, 680, f"Limites: {limites['min']} a {limites['max']}")
+                
+                return bytes_do_pdf
+                st.download_button(
+                label="📥 Baixar Laudo Completo", data=pdf, 
+                # Isso deve ser o objeto de bytes do seu PDF
+                file_name="laudo.pdf", mime="application/pdf"
+)
