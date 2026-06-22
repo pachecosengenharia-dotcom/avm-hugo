@@ -77,6 +77,5 @@ if arquivo:
                 c3.metric("V.U. Máximo", f"R$ {max_v:,.2f}")
                 st.metric("Valor Total Estimado", f"R$ {total:,.2f}")
                 
-                # Geração do arquivo e botão dentro do bloco do botão de cálculo
-                pdf = gerar_laudo_final({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, limites)
-                st.download_button("📥 Baixar Laudo Completo", pdf)
+                pdf = gerar_laudo_pdf({'vu': vu, 'min': min_v, 'max': max_v, 'total': total}, fig, eq_str, inputs)
+                st.download_button("📥 Baixar Laudo", pdf, "laudo.pdf")
