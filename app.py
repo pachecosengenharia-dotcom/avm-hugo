@@ -86,5 +86,20 @@ if arquivo is not None:
                 ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
                 st.pyplot(fig)
                 
-                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus)
-                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf")
+               # Prepare um dicionário contendo todos os dados necessários
+dados_laudo = {
+    'resultados': {
+        'vu': vu,
+        'total': total
+    },
+    'equacao': {
+        'expressao': eq_str,
+        # Adicione aqui os limites e valores que faltam
+        'limites': {'min': valor_min, 'max': valor_max},
+        'detalhes': info
+    },
+    'graus': graus
+}
+
+# Chame a função passando esse dicionário único
+pdf = gerar_laudo_pdf(dados_laudo, fig)
