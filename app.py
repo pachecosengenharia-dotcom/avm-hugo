@@ -8,25 +8,26 @@ import matplotlib.pyplot as plt
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-# --- Funções ---
 def normalizar_texto(texto):
     nfkd = unicodedata.normalize('NFKD', str(texto))
     return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
-def gerar_laudo_pdf(vu, fund, prec, eq_str):
+def gerar_laudo_pdf(vu, min_v, max_v, fund, prec, eq_str, total, n, features, fig):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    c.setFont("Helvetica-Bold", 16)
+    c.setFont("Helvetica-Bold", 14)
     c.drawString(50, 800, "Laudo Técnico de Avaliação (NBR 14653)")
-    c.setFont("Helvetica", 12)
-    c.drawString(50, 770, f"V.U. Estimado: R$ {vu:,.2f}")
-    c.drawString(50, 750, f"Fundamentação: {fund} | Precisão: {prec}")
-    c.drawString(50, 730, f"Equação: {eq_str}")
+    c.setFont("Helvetica", 10)
+    c.drawString(50, 780, f"Qtd. de Dados: {n}")
+    c.drawString(50, 765, f"Equação: {eq_str}")
+    c.drawString(50, 750, f"Variáveis: {', '.join(features)}")
+    c.drawString(50, 720, f"V.U. Médio: R$ {vu:,.2f} | Mín: R$ {min_v:,.2f} | Máx: R$ {max_v:,.2f}")
+    c.drawString(50, 705, f"VALOR TOTAL: R$ {total:,.2f}")
+    c.drawString(50, 690, f"Fundamentação: {fund} | Precisão: {prec}")
     c.save()
     buffer.seek(0)
     return buffer
 
-# --- Interface ---
 st.set_page_config(layout="wide", page_title="AVM - Engenharia de Avaliações")
 st.title("📊 AVM - Engenharia de Avaliações")
 
@@ -52,41 +53,6 @@ if arquivo:
         if not df_c.empty:
             inputs = {}
             for f in features:
-                min_f, max_f = float(df_c[f].min()), float(df_c[f].max())
-                inputs[f] = st.sidebar.number_input(f"{f} (Lim: {min_f:.1f}-{max_f:.1f})", value=float(df_c[f].median()))
-            
-            if st.sidebar.button("Calcular Precificação"):
-                modelo = LinearRegression().fit(df_c[features], df_c[target])
-                vu = modelo.predict(np.array([list(inputs.values())]))[0]
-                preds = modelo.predict(df_c[features])
-                
-                residuos = df_c[target] - preds
-                std = np.std(residuos)
-                min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
-                total = vu * inputs[features[0]]
-                
-                n, k = len(df_c), len(features)
-                fund = "Grau III" if n >= 3*k else "Grau II" if n >= 2*k else "Grau I"
-                amp = (max_v - min_v) / (2 * vu)
-                prec = "Grau III" if amp <= 0.2 else "Grau II" if amp <= 0.3 else "Grau I"
-                eq_str = f"{target} = {modelo.intercept_:.2f} + " + " + ".join([f"{c:.2f}*{n}" for n, c in zip(features, modelo.coef_)])
-
-                # Exibição
-                st.latex(eq_str)
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("V.U. Mínimo", f"R$ {min_v:,.2f}")
-                c2.metric("V.U. Médio", f"R$ {vu:,.2f}")
-                c3.metric("V.U. Máximo", f"R$ {max_v:,.2f}")
-                c4.metric("Qtd Dados", n)
-                
-                st.markdown(f"### Valor Total Estimado: R$ {total:,.2f}")
-                st.write(f"**Fundamentação:** {fund} | **Precisão:** {prec}")
-                
-                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-                ax1.scatter(df_c[target], preds)
-                ax2.scatter(preds, residuos)
-                st.pyplot(fig)
-                
-                # PDF gerado após os cálculos
-                pdf = gerar_laudo_pdf(vu, fund, prec, eq_str)
-                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
+                # Trava técnica: 50 a 1500 para qualquer variável com "Setor"
+                if "setor" in normalizar_texto(f).lower():
+                    min_f, max_f = 50.0,
