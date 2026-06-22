@@ -76,4 +76,35 @@ if arquivo:
         inputs = {}
         for f in features:
             f_clean = limpar(f)
-            min_v, max_v = (50.0, 1500.0) if "setor" in f_clean.lower() else (float
+            min_v, max_v = (50.0, 1500.0) if "setor" in f_clean.lower() else (float(df[f].min()), float(df[f].max()))
+            inputs[f] = st.sidebar.number_input(f"{f_clean} (Lim: {min_v:.0f}-{max_v:.0f})", value=float(df[f].median()))
+
+        if st.sidebar.button("Calcular e Gerar Laudo"):
+            modelo = LinearRegression().fit(df[features], df[target])
+            vu = modelo.predict(np.array([list(inputs.values())]))[0]
+            preds = modelo.predict(df[features])
+            residuos = df[target] - preds
+            std = np.std(residuos)
+            
+            res = {
+                "vu": vu, "min_v": vu - 1.96*std, "max_v": vu + 1.96*std,
+                "total": vu * inputs[features[0]], "n": len(df),
+                "fund": "Grau III" if len(df) >= 3*len(features) else "Grau I",
+                "prec": "Grau III" if ((vu+1.96*std)-(vu-1.96*std))/(2*vu) <= 0.2 else "Grau I",
+                "eq": f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
+            }
+            
+            st.latex(res["eq"])
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("V.U. Min", f"R$ {res['min_v']:,.2f}"); c2.metric("V.U. Med", f"R$ {res['vu']:,.2f}")
+            c3.metric("V.U. Max", f"R$ {res['max_v']:,.2f}"); c4.metric("Dados", res['n'])
+            st.markdown(f"### Valor Total Estimado: R$ {res['total']:,.2f}")
+            
+            fig, ax = plt.subplots(1, 2, figsize=(10, 4))
+            ax[0].scatter(df[target], preds); ax[0].set_title("Aderencia")
+            ax[1].scatter(preds, residuos); ax[1].axhline(0, color='red'); ax[1].set_title("Residuos")
+            st.pyplot(fig)
+            
+            pdf = gerar_laudo_final(res, info, features, inputs, fig)
+            st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
+            plt.close(fig)
