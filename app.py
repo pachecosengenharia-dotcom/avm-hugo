@@ -81,3 +81,6 @@ if arquivo:
                 ax2.axhline(0, color='red')
                 ax2.set_title("Resíduos")
                 st.pyplot(fig)
+                # BOTÃO PARA BAIXAR O PDF
+                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, min_v, max_v)
+                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
