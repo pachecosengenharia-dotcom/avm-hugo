@@ -11,7 +11,6 @@ from reportlab.lib.utils import ImageReader
 st.set_page_config(layout="wide")
 st.title("📊 AVM - Engenharia de Avaliações")
 
-# Função de PDF com verificação de segurança para os argumentos
 def gerar_laudo_final(d, fig, eq_str, info, graus, inputs, limites):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -34,10 +33,9 @@ def gerar_laudo_final(d, fig, eq_str, info, graus, inputs, limites):
     c.drawString(50, y, "Limites das Variáveis:")
     for f, val in inputs.items():
         y -= 12
-        # Verifica se limites existe e possui a chave para evitar erro
-        min_val = limites.get(f, {}).get('min', 0)
-        max_val = limites.get(f, {}).get('max', 0)
-        c.drawString(60, y, f"{f}: {val:.2f} (Limites: {min_val:.2f} a {max_val:.2f})")
+        min_v = limites.get(f, {}).get('min', 0)
+        max_v = limites.get(f, {}).get('max', 0)
+        c.drawString(60, y, f"{f}: {val:.2f} (Limites: {min_v:.2f} a {max_v:.2f})")
     
     img_buf = io.BytesIO()
     fig.savefig(img_buf, format='png')
@@ -65,10 +63,10 @@ if arquivo is not None:
             eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
             st.latex(eq_str)
             
-            # Garante que limites e inputs estejam definidos antes do botão
             limites = {f: {'min': float(df_c[f].min()), 'max': float(df_c[f].max())} for f in features}
             inputs = {f: st.sidebar.number_input(f"{f}", value=float(df_c[f].median())) for f in features}
             
+            # Botão de cálculo
             if st.sidebar.button("Calcular Precificação"):
                 vu = modelo.predict(np.array([list(inputs.values())]))[0]
                 preds = modelo.predict(df_c[features])
@@ -90,6 +88,6 @@ if arquivo is not None:
                 ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
                 st.pyplot(fig)
                 
-                # Chamada segura
+                # Geração do arquivo e botão dentro do bloco do botão de cálculo
                 pdf = gerar_laudo_final({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, limites)
                 st.download_button("📥 Baixar Laudo Completo", pdf, "laudo.pdf")
