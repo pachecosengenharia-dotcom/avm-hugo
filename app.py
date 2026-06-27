@@ -10,6 +10,8 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
 def limpar(t):
+    # 'NFKD' decompõe o caractere (ex: 'ç' vira 'c' + cedilha)
+    # 'combining' remove o marcador de acento, mantendo apenas a letra base
     return "".join([c for c in unicodedata.normalize('NFKD', str(t)) if not unicodedata.combining(c)])
 
 def gerar_laudo_final(data, info, features, inputs, fig):
