@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
-import textwrap
 import unicodedata
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
@@ -10,127 +9,96 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
-# Função para normalizar texto (limpeza de acentos para evitar problemas no celular)
 def normalizar_texto(texto):
     nfkd = unicodedata.normalize('NFKD', str(texto))
     return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
-# Função para Gerar o PDF
-def gerar_laudo_pdf(d, fig, eq_str, info, graus, inputs, min_v, max_v):
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, height - 50, "Laudo Técnico de Avaliação (NBR 14653)")
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, height - 90, "Dados do Imóvel:")
-    c.setFont("Helvetica", 10)
-    y = height - 110
+
+def gerar_laudo_final(data, info, features, inputs, fig):
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, 820, "Laudo Tecnico de Avaliacao (NBR 14653)")
+    
+    y = 790
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "Dados do Imovel:"); y -= 15
+    c.setFont("Helvetica", 9)
     for k, v in info.items():
-        c.drawString(50, y, f"{k}: {v}")
-        y -= 20
-    y -= 10
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, "Equação do Modelo:")
-    y -= 20
-    c.setFont("Courier", 8)
-    linhas_eq = textwrap.wrap(eq_str, width=100)
-    for linha in linhas_eq:
-        c.drawString(50, y, linha)
+        c.drawString(60, y, limpar(f"{k}: {v}")); y -= 12
+    
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y-10, "Equacao do Modelo:"); y -= 25
+    c.setFont("Helvetica", 8)
+    c.drawString(60, y, limpar(data['eq'][:90]))
+    
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y-20, "Variaveis e Parametros Utilizados:"); y -= 35
+    c.setFont("Helvetica", 9)
+    for f in features:
+        c.drawString(60, y, limpar(f"- {f}: {inputs.get(f, 0):.2f}"))
         y -= 12
-    y -= 20
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, "Variáveis e Parâmetros Utilizados:")
-    y -= 20
-    c.setFont("Helvetica", 10)
-    for k, v in inputs.items():
-        c.drawString(50, y, f"- {k}: {v:.2f}")
-        y -= 15
-    y -= 20
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, "Resultados da Avaliação:")
-    c.setFont("Helvetica", 10)
-    y -= 20
-    c.drawString(50, y, f"V.U. Mínimo: R$ {min_v:,.2f} | V.U. Médio: R$ {d['vu']:,.2f} | V.U. Máximo: R$ {max_v:,.2f}")
-    y -= 20
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, f"VALOR TOTAL ESTIMADO: R$ {d['total']:,.2f}")
-    y -= 20
-    c.setFont("Helvetica", 10)
-    c.drawString(50, y, f"Fundamentação: {graus[0]} | Precisão: {graus[1]}")
-    y -= 220
-    img_buf = io.BytesIO()
-    fig.savefig(img_buf, format='png', bbox_inches='tight')
-    img_buf.seek(0)
-    c.drawImage(ImageReader(img_buf), 50, y, width=400, height=200)
-    c.showPage()
+        
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y-10, "Resultados da Avaliacao:"); y -= 25
+    c.setFont("Helvetica", 9)
+    c.drawString(60, y, limpar(f"V.U. Medio: R$ {data['vu']:,.2f} | Min: R$ {data['min_v']:,.2f} | Max: R$ {data['max_v']:,.2f}"))
+    c.drawString(60, y-12, limpar(f"VALOR TOTAL ESTIMADO: R$ {data['total']:,.2f}"))
+    c.drawString(60, y-24, limpar(f"Fundamentacao: {data['fund']} | Precisao: {data['prec']} | Dados: {data['n']}"))
+    
+    img_data = io.BytesIO()
+    fig.savefig(img_data, format='png')
+    img_data.seek(0)
+    c.drawImage(ImageReader(img_data), 50, y-180, width=350, height=130)
     c.save()
-    buffer.seek(0)
-    return buffer
+    buf.seek(0)
+    return buf
 
-st.set_page_config(layout="wide", page_title="AVM - Engenharia de Avaliações")
-st.title("📊 AVM - Engenharia de Avaliações")
+st.set_page_config(layout="wide")
+st.title("📊 AVM - Engenharia de Avaliacoes")
 
-arquivo = st.sidebar.file_uploader("Carregar Base (CSV)", type=["csv", "txt"])
+info = {k: st.sidebar.text_input(k) for k in ["Endereco", "Complemento", "Bairro", "Informante", "Telefone"]}
+arquivo = st.sidebar.file_uploader("Base (CSV)", type=["csv", "txt"])
 
 if arquivo:
-    try:
-        df = pd.read_csv(arquivo, encoding='utf-8', sep=None, engine='python')
-    except:
-        arquivo.seek(0)
-        df = pd.read_csv(arquivo, encoding='latin-1', sep=None, engine='python')
-
-    df.columns = [normalizar_texto(col).strip() for col in df.columns]
-
-    target = st.sidebar.selectbox("Coluna Alvo:", options=df.columns, key="target_col")
-    features = st.sidebar.multiselect("Variáveis Explicativas:", options=[c for c in df.columns if c != target], key="features_col")
-
-    st.sidebar.header("📝 Dados do Imóvel")
-    info = {
-        "Endereço": st.sidebar.text_input("Endereço", key="info_end"),
-        "Bairro": st.sidebar.text_input("Bairro", key="info_bairro"),
-        "Informante": st.sidebar.text_input("Informante", key="info_inf")
-    }
+    df = pd.read_csv(arquivo, sep=None, engine='python', encoding_errors='replace')
+    df.columns = [limpar(col).strip() for col in df.columns]
+    target = st.sidebar.selectbox("Coluna Alvo:", options=df.columns)
+    features = st.sidebar.multiselect("Variaveis:", options=[c for c in df.columns if c != target])
 
     if features and target:
-        df_c = df.copy()
+        df = df.dropna(subset=features + [target])
         for col in features + [target]:
-            df_c[col] = pd.to_numeric(df_c[col].astype(str).str.replace(',', '.'), errors='coerce')
-        df_c = df_c.dropna()
+            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
+        
+        inputs = {}
+        for f in features:
+            f_clean = limpar(f)
+            min_v, max_v = (50.0, 1500.0) if "setor" in f_clean.lower() else (float(df[f].min()), float(df[f].max()))
+            inputs[f] = st.sidebar.number_input(f"{f_clean} (Lim: {min_v:.0f}-{max_v:.0f})", value=float(df[f].median()))
 
-        if not df_c.empty:
-            modelo = LinearRegression().fit(df_c[features], df_c[target])
-            eq_str = f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
-            st.latex(eq_str)
-
-            inputs = {}
-            st.sidebar.markdown("### Valores para Avaliação")
-            for f in features:
-                min_f, max_f = df_c[f].min(), df_c[f].max()
-                val = st.sidebar.number_input(f"{f} (Min: {min_f:.2f} | Max: {max_f:.2f})", value=float(df_c[f].median()), key=f"inp_{f}")
-                inputs[f] = val
-                if val < min_f or val > max_f:
-                    st.sidebar.warning(f"⚠️ Extrapolação em {f}!")
-
-            if st.sidebar.button("Calcular Precificação", key="btn_calc"):
-                vu = modelo.predict(np.array([list(inputs.values())]))[0]
-                preds = modelo.predict(df_c[features])
-                std = np.std(df_c[target] - preds)
-                min_v, max_v = vu - (1.96 * std), vu + (1.96 * std)
-                total = vu * inputs[features[0]] if features else vu
-                graus = ("Grau III" if len(df_c) >= 12 else "Grau I", "Grau III" if (max_v-min_v)/(2*vu) < 0.2 else "Grau I")
-
-                cols = st.columns(3)
-                cols[0].metric("V.U. Mínimo", f"R$ {min_v:,.2f}")
-                cols[1].metric("V.U. Médio", f"R$ {vu:,.2f}")
-                cols[2].metric("V.U. Máximo", f"R$ {max_v:,.2f}")
-                st.markdown(f"### Valor Total Estimado: R$ {total:,.2f}")
-
-                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-                ax1.scatter(df_c[target], preds); ax1.set_title("Aderência")
-                ax2.scatter(preds, df_c[target] - preds); ax2.axhline(0, color='red'); ax2.set_title("Resíduos")
-                st.pyplot(fig)
-                
-                # BOTÃO PARA BAIXAR O PDF
-                pdf = gerar_laudo_pdf({'vu': vu, 'total': total}, fig, eq_str, info, graus, inputs, min_v, max_v)
-                st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
+        if st.sidebar.button("Calcular e Gerar Laudo"):
+            modelo = LinearRegression().fit(df[features], df[target])
+            vu = modelo.predict(np.array([list(inputs.values())]))[0]
+            preds = modelo.predict(df[features])
+            residuos = df[target] - preds
+            std = np.std(residuos)
+            
+            res = {
+                "vu": vu, "min_v": vu - 1.96*std, "max_v": vu + 1.96*std,
+                "total": vu * inputs[features[0]], "n": len(df),
+                "fund": "Grau III" if len(df) >= 3*len(features) else "Grau I",
+                "prec": "Grau III" if ((vu+1.96*std)-(vu-1.96*std))/(2*vu) <= 0.2 else "Grau I",
+                "eq": f"{target} = {modelo.intercept_:.2f} " + " ".join([f"+ ({c:.2f}*{n})" for n, c in zip(features, modelo.coef_)])
+            }
+            
+            st.latex(res["eq"])
+            st.metric("Valor Total Estimado", f"R$ {res['total']:,.2f}")
+            fig, ax = plt.subplots(1, 2, figsize=(10, 4))
+            ax[0].scatter(df[target], preds); ax[0].set_title("Aderencia")
+            ax[1].scatter(preds, residuos); ax[1].axhline(0, color='red'); ax[1].set_title("Residuos")
+            st.pyplot(fig)
+            
+            pdf = gerar_laudo_final(res, info, features, inputs, fig)
+            st.download_button("📥 Baixar Laudo Completo", pdf, "laudo_tecnico.pdf")
+            plt.close(fig)
