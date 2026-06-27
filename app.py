@@ -9,9 +9,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
-def normalizar_texto(texto):
-    nfkd = unicodedata.normalize('NFKD', str(texto))
-    return "".join([c for c in nfkd if not unicodedata.combining(c)])
+def limpar(texto):
+    if not isinstance(texto, str): texto = str(texto)
+    return "".join([c for c in unicodedata.normalize('NFKD', texto) if not unicodedata.combining(c)])
 
 def gerar_laudo_final(data, info, features, inputs, fig):
     buf = io.BytesIO()
