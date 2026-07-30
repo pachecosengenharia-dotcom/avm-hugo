@@ -12,7 +12,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sklearn.ensemble import RandomForestRegressor
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Definitivo", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Final", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO
@@ -102,7 +102,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     # 1. Área Privativa Coberta
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if match_privativa:
-        val = match_privativa.group(1).replace('.', '').replace(',', '.')
+        val = match_privativa.group(1).replace('.', '').replace(',', '.').replace('!', '1')
         try:
             variaveis_encontradas['area_privativa'] = float(val)
         except ValueError:
@@ -114,7 +114,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         match_terreno_fracao = re.search(r'área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados', trecho_limpo, re.IGNORECASE)
     
     if match_terreno_fracao:
-        val = match_terreno_fracao.group(1).replace('.', '').replace(',', '.')
+        val = match_terreno_fracao.group(1).replace('.', '').replace(',', '.').replace('!', '1')
         try:
             variaveis_encontradas['area_terreno'] = float(val)
         except ValueError:
@@ -133,31 +133,32 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 4. Suítes
+    # 4. Suítes (Garante mapeamento unificado 'suites' e 'suite')
     match_suites = re.search(r'sendo\s*(\d+)', trecho_divisao, re.IGNORECASE)
     if not match_suites:
         match_suites = re.search(r'(\d+)\s*sui?te', trecho_divisao, re.IGNORECASE)
         
+    val_suites = 0
     if match_suites:
         try:
-            variaveis_encontradas['suites'] = int(match_suites.group(1))
+            val_suites = int(match_suites.group(1))
         except ValueError:
             pass
-    else:
-        variaveis_encontradas['suites'] = 0
+    variaveis_encontradas['suites'] = val_suites
+    variaveis_encontradas['suite'] = val_suites
 
     # 5. Banheiros
     match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*banho', trecho_divisao, re.IGNORECASE)
     if not match_banheiros:
         match_banheiros = re.search(r'(\d+)\s*banho', trecho_divisao, re.IGNORECASE)
         
+    val_banheiros = 1
     if match_banheiros:
         try:
-            variaveis_encontradas['banheiros'] = int(match_banheiros.group(1))
+            val_banheiros = int(match_banheiros.group(1))
         except ValueError:
             pass
-    else:
-        variaveis_encontradas['banheiros'] = 1
+    variaveis_encontradas['banheiros'] = val_banheiros
 
     # 6. Vagas
     match_vagas = re.search(r'(\d+)\s*\([^)]+\)\s*garagem', trecho_limpo, re.IGNORECASE)
@@ -174,7 +175,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Híbrido Definitivo")
+st.title("🏢 Painel de Crédito e Controle AVM - Híbrido Final")
 st.markdown("Plataforma integrada para carga de mercado, leitura documental por IA e preenchimento paramétrico.")
 st.divider()
 
@@ -263,15 +264,15 @@ with aba_avm:
             st.markdown("##### 📝 3. Atributos do Imóvel Avaliendo (Auto-preenchidos pela Certidão ou Ajustados Manualmente)")
             
             dados_ia = st.session_state.get('dados_extraidos_ia', {})
-            campos_inteiros = ['quartos', 'suites', 'banheiros', 'vagas', 'vagas_garagem', 'garagem']
+            campos_inteiros = ['quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem']
             
             valores_usuario = {}
             cols_inputs = st.columns(len(features_selecionadas))
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
-                    # Identifica se a variável foi lida pela IA de forma flexível
                     sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
                     
+                    # Busca flexível no dicionário extraído da IA
                     for chave_ia, valor_ia in dados_ia.items():
                         if chave_ia == feat or chave_ia in feat or feat in chave_ia:
                             sugestao_padrao = valor_ia
@@ -284,7 +285,6 @@ with aba_avm:
                         sugestao_padrao = float(sugestao_padrao)
 
                     key_input = f"input_{feat}"
-                    # Força a atualização do session_state se houver dado novo da IA ou se o input não existir
                     if key_input not in st.session_state or feat in dados_ia:
                         st.session_state[key_input] = sugestao_padrao
 
