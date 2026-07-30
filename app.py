@@ -12,7 +12,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sklearn.ensemble import RandomForestRegressor
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Blindado", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Definitivo", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO
@@ -99,6 +99,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     variaveis_encontradas = {}
     trecho_limpo = texto_extraido.replace('\n', ' ')
 
+    # 1. Área Privativa Coberta
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if match_privativa:
         val = match_privativa.group(1).replace('.', '').replace(',', '.')
@@ -107,6 +108,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
+    # 2. Área do Terreno Relativa à Fração
     match_terreno_fracao = re.search(r'com\s*área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados.*?fração', trecho_limpo, re.IGNORECASE)
     if not match_terreno_fracao:
         match_terreno_fracao = re.search(r'área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados', trecho_limpo, re.IGNORECASE)
@@ -121,6 +123,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     match_divisao = re.search(r'divisão\s*interna[:\s]*(.*?)(?:edificada|lote|$)', trecho_limpo, re.IGNORECASE)
     trecho_divisao = match_divisao.group(1) if match_divisao else trecho_limpo
 
+    # 3. Quartos
     match_quartos = re.search(r'(\d+)\s*\([^)]+\)\s*quartos', trecho_divisao, re.IGNORECASE)
     if not match_quartos:
         match_quartos = re.search(r'(\d+)\s*quarto[s]?', trecho_divisao, re.IGNORECASE)
@@ -130,6 +133,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
+    # 4. Suítes
     match_suites = re.search(r'sendo\s*(\d+)', trecho_divisao, re.IGNORECASE)
     if not match_suites:
         match_suites = re.search(r'(\d+)\s*sui?te', trecho_divisao, re.IGNORECASE)
@@ -142,6 +146,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     else:
         variaveis_encontradas['suites'] = 0
 
+    # 5. Banheiros
     match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*banho', trecho_divisao, re.IGNORECASE)
     if not match_banheiros:
         match_banheiros = re.search(r'(\d+)\s*banho', trecho_divisao, re.IGNORECASE)
@@ -154,6 +159,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     else:
         variaveis_encontradas['banheiros'] = 1
 
+    # 6. Vagas
     match_vagas = re.search(r'(\d+)\s*\([^)]+\)\s*garagem', trecho_limpo, re.IGNORECASE)
     if not match_vagas:
         match_vagas = re.search(r'(\d+)\s*vaga[s]?', trecho_limpo, re.IGNORECASE)
@@ -168,7 +174,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Motor Híbrido Blindado")
+st.title("🏢 Painel de Crédito e Controle AVM - Híbrido Definitivo")
 st.markdown("Plataforma integrada para carga de mercado, leitura documental por IA e preenchimento paramétrico.")
 st.divider()
 
@@ -212,14 +218,12 @@ with aba_avm:
             else:
                 df_global = pd.read_excel(arquivo_planilha)
             
-            # NORMALIZAÇÃO ROBUSTA DAS COLUNAS DA PLANILHA (Remove acentos, espaços e padroniza para minúsculo)
             df_global.columns = [
                 c.lower().strip().replace(" ", "_")
                 .replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
                 .replace("ã", "a").replace("õ", "o").replace("ç", "c").replace("â", "a").replace("ê", "e")
                 for c in df_global.columns
             ]
-            
             st.success(f"✅ Base de mercado processada com sucesso! {len(df_global)} linhas carregadas.")
         except Exception as e:
             st.error(f"Erro ao ler arquivo: {e}")
@@ -250,13 +254,13 @@ with aba_avm:
         with c2:
             features_disponiveis = [c for c in colunas_numericas if c != variavel_alvo]
             features_selecionadas = st.multiselect(
-                "Escolha as Variáveis Independentes do Modelo:",
+                "Escolha as Variáveis Independentes do Modelo (Auto + Manuais):",
                 options=features_disponiveis,
                 default=features_disponiveis[:min(5, len(features_disponiveis))]
             )
 
         if features_selecionadas:
-            st.markdown("##### 📝 3. Atributos do Imóvel Avaliendo (Auto-preenchidos pela Certidão ou Ajustáveis Manualmente)")
+            st.markdown("##### 📝 3. Atributos do Imóvel Avaliendo (Auto-preenchidos pela Certidão ou Ajustados Manualmente)")
             
             dados_ia = st.session_state.get('dados_extraidos_ia', {})
             campos_inteiros = ['quartos', 'suites', 'banheiros', 'vagas', 'vagas_garagem', 'garagem']
@@ -265,11 +269,12 @@ with aba_avm:
             cols_inputs = st.columns(len(features_selecionadas))
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
-                    # Busca segura e robusta considerando variações de nome na planilha
+                    # Identifica se a variável foi lida pela IA de forma flexível
                     sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
-                    for chave_ia in dados_ia:
-                        if chave_ia in feat or feat in chave_ia:
-                            sugestao_padrao = dados_ia[chave_ia]
+                    
+                    for chave_ia, valor_ia in dados_ia.items():
+                        if chave_ia == feat or chave_ia in feat or feat in chave_ia:
+                            sugestao_padrao = valor_ia
                             break
 
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
@@ -279,7 +284,8 @@ with aba_avm:
                         sugestao_padrao = float(sugestao_padrao)
 
                     key_input = f"input_{feat}"
-                    if key_input not in st.session_state:
+                    # Força a atualização do session_state se houver dado novo da IA ou se o input não existir
+                    if key_input not in st.session_state or feat in dados_ia:
                         st.session_state[key_input] = sugestao_padrao
 
                     if eh_inteiro:
