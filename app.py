@@ -255,23 +255,35 @@ with aba_avm:
             cols_inputs = st.columns(len(features_selecionadas))
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
-                    # Define o valor: Prioriza o que veio da certidão, depois média da base
-                    sugestao_padrao = dados_ia.get(feat, float(df_global[feat].mean()))
-                    eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
+                    key_input = f"input_{feat}"
                     
+                    # Define a sugestão: Se a IA achou o valor para esta feature, usa ele; senão usa a média da base
+                    if feat in dados_ia:
+                        sugestao_padrao = dados_ia[feat]
+                    else:
+                        sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
+
+                    eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
+                    if eh_inteiro:
+                        sugestao_padrao = int(round(float(sugestao_padrao)))
+                    else:
+                        sugestao_padrao = float(sugestao_padrao)
+
+                    # FORÇAGEM DE ESTADO: Se a chave ainda não existe ou se veio dado novo da IA, atualiza o session_state do input
+                    if key_input not in st.session_state or feat in dados_ia:
+                        st.session_state[key_input] = sugestao_padrao
+
                     if eh_inteiro:
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
-                            value=int(round(float(sugestao_padrao))), 
                             step=1, 
                             format="%d",
-                            key=f"input_{feat}"
+                            key=key_input
                         )
                     else:
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
-                            value=float(sugestao_padrao),
-                            key=f"input_{feat}"
+                            key=key_input
                         )
 
             if st.button("🚀 Executar Modelo de Precificação Híbrido"):
