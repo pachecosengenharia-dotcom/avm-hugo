@@ -6,3 +6,4 @@ reportlab
 seaborn
 matplotlib
 openpyxl
+pdfplumber
