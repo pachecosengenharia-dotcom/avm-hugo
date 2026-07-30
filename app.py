@@ -72,6 +72,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     texto_extraido = ""
     bytes_arquivo = arquivo_pdf.read()
     
+    # 1. Tenta extração via texto nativo do PDF
     try:
         with pdfplumber.open(io.BytesIO(bytes_arquivo)) as pdf:
             for pagina in pdf.pages:
@@ -81,6 +82,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     except Exception:
         pass
 
+    # 2. Se o texto nativo estiver vazio, usa OCR (Pytesseract)
     if not texto_extraido.strip():
         try:
             imagens = convert_from_bytes(bytes_arquivo)
@@ -95,21 +97,26 @@ def extrair_variaveis_de_documento(arquivo_pdf):
 
     variaveis_encontradas = {}
     
-    # 1. Busca ampla por Área Privativa ou Construída (aceita variações de termos)
-    match_area = re.search(r'(?:area|superficie)\s*(?:privativa|construida|util|total)?[:\s]*([\d.,]+)\s*m²', texto_extraido, re.IGNORECASE)
-    if not match_area:
-        # Tenta buscar números seguidos de m² perto da palavra area
-        match_area = re.search(r'([\d.,]+)\s*m²\s*(?:de\s*(?:area|construcao))?', texto_extraido, re.IGNORECASE)
+    # Padroniza substituições comuns de OCR (ex: vírgulas e pontos trocados)
+    texto_limpo = texto_extraido.replace('\n', ' ' )
+
+    # 1. Captura Área Privativa Coberta (ex: "82,33 metros quadrados de área privativa")
+    match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', texto_limpo, re.IGNORECASE)
+    if not match_privativa:
+        match_privativa = re.search(r'área\s*privativa.*?([\d.,]+)\s*m²', texto_limpo, re.IGNORECASE)
     
-    if match_area:
-        val = match_area.group(1).replace('.', '').replace(',', '.')
+    if match_privativa:
+        val = match_privativa.group(1).replace('.', '').replace(',', '.')
         try:
             variaveis_encontradas['area_privativa'] = float(val)
         except ValueError:
             pass
 
-    # 2. Busca ampla por Terreno
-    match_terreno = re.search(r'terreno[:\s]*([\d.,]+)\s*m²', texto_extraido, re.IGNORECASE)
+    # 2. Captura Área do Terreno (ex: "com a área de 394,50 metros quadrados" ou "área total de 197,25")
+    match_terreno = re.search(r'loteamento.*?área\s*de\s*([\d.,]+)\s*metros\s*quadrados', texto_limpo, re.IGNORECASE)
+    if not match_terreno:
+        match_terreno = re.search(r'terreno.*?([\d.,]+)\s*m²', texto_limpo, re.IGNORECASE)
+    
     if match_terreno:
         val = match_terreno.group(1).replace('.', '').replace(',', '.')
         try:
@@ -117,16 +124,18 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 3. Busca ampla por Vagas
-    match_vagas = re.search(r'(\d+)\s*(?:vaga|vagas|garagem)', texto_extraido, re.IGNORECASE)
+    # 3. Captura Vagas de Garagem (ex: "01 (uma) garagem coberta" ou "vagas de garagem")
+    match_vagas = re.search(r'(\d+)\s*\([^)]+\)\s*garagem', texto_limpo, re.IGNORECASE)
+    if not match_vagas:
+        match_vagas = re.search(r'(\d+)\s*vaga[s]?', texto_limpo, re.IGNORECASE)
+        
     if match_vagas:
         try:
             variaveis_encontradas['vagas_garagem'] = int(match_vagas.group(1))
         except ValueError:
             pass
 
-    # Retorna também uma prévia do texto extraído para fins de diagnóstico na tela
-    return variaveis_encontradas, texto_extraido[:500]
+    return variaveis_encontradas, texto_limpo[:600]
 
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
