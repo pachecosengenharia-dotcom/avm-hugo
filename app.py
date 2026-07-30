@@ -1,8 +1,10 @@
 import io
+import re
 import numpy as np
 import pandas as pd
 import pdfplumber
-import re
+from pdf2image import convert_from_bytes
+import pytesseract
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -64,21 +66,34 @@ def gerar_laudo_pdf_ia(tenant, variavel_alvo, valores, r2, n_amostras, status_ju
     return buffer.getvalue()
 
 # =====================================================================
-# FUNÇÃO DE EXTRAÇÃO DE DADOS DE DOCUMENTOS (PDF)
+# FUNÇÃO DE EXTRAÇÃO DE DADOS DE DOCUMENTOS (PDF + OCR)
 # =====================================================================
 def extrair_variaveis_de_documento(arquivo_pdf):
     texto_extraido = ""
+    bytes_arquivo = arquivo_pdf.read()
+    
+    # 1. Tenta extração via texto nativo do PDF
     try:
-        with pdfplumber.open(arquivo_pdf) as pdf:
+        with pdfplumber.open(io.BytesIO(bytes_arquivo)) as pdf:
             for pagina in pdf.pages:
                 texto = pagina.extract_text()
                 if texto:
                     texto_extraido += texto + "\n"
-    except Exception as e:
-        return None, f"Erro ao ler o PDF: {e}"
+    except Exception:
+        pass
+
+    # 2. Se o texto nativo estiver vazio, usa OCR (Pytesseract) para ler imagens/PDFs escaneados
+    if not texto_extraido.strip():
+        try:
+            imagens = convert_from_bytes(bytes_arquivo)
+            for img in imagens:
+                texto_ocr = pytesseract.image_to_string(img, language='por')
+                texto_extraido += texto_ocr + "\n"
+        except Exception as e:
+            return None, f"Erro ao processar OCR no documento: {e}."
 
     if not texto_extraido.strip():
-        return None, "O documento parece estar em formato de imagem (escaneado). Necessário OCR."
+        return None, "Não foi possível extrair texto legível deste documento."
 
     variaveis_encontradas = {}
     
@@ -141,7 +156,6 @@ with aba_avm:
         except Exception as e:
             st.error(f"Erro ao ler arquivo: {e}")
     else:
-        # Cria uma base padrão caso o usuário não envie nada
         data_padrao = {
             'valor_total': [450000, 480000, 510000, 750000, 820000, 350000],
             'area_privativa': [75, 78, 80, 85, 92, 60],
@@ -172,7 +186,6 @@ with aba_avm:
         if features_selecionadas:
             st.markdown("##### 📝 Inserir Atributos do Imóvel Avaliendo")
             
-            # Puxa valores extraídos por IA se houverem, senão usa a média
             dados_ia = st.session_state.get('dados_extraidos_ia', {})
             
             valores_usuario = {}
