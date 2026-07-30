@@ -120,21 +120,24 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 3. Quartos (Busca estrita na divisão interna)
-    match_quartos = re.search(r'divisão\s*interna[:\s]*(\d+)', texto_limpo, re.IGNORECASE)
+    # Isola o trecho específico da divisão interna do imóvel na certidão
+    match_divisao = re.search(r'divisão\s*interna[:\s]*(.*?)(?:edificada|lote|$)', texto_limpo, re.IGNORECASE)
+    trecho_divisao = match_divisao.group(1) if match_divisao else texto_limpo
+
+    # 3. Quartos (Ex: "02 (dois) quartos") dentro do trecho isolado
+    match_quartos = re.search(r'(\d+)\s*\([^)]+\)\s*quartos', trecho_divisao, re.IGNORECASE)
     if not match_quartos:
-        match_quartos = re.search(r'(\d+)\s*\([^)]+\)\s*quartos', texto_limpo, re.IGNORECASE)
-    
+        match_quartos = re.search(r'(\d+)\s*quarto[s]?', trecho_divisao, re.IGNORECASE)
     if match_quartos:
         try:
             variaveis_encontradas['quartos'] = int(match_quartos.group(1))
         except ValueError:
             pass
 
-    # 4. Suítes (Busca estrita após a palavra "sendo")
-    match_suites = re.search(r'sendo\s*(\d+)', texto_limpo, re.IGNORECASE)
+    # 4. Suítes (Ex: "sendo 01 (um) suite") dentro do trecho isolado
+    match_suites = re.search(r'sendo\s*(\d+)', trecho_divisao, re.IGNORECASE)
     if not match_suites:
-        match_suites = re.search(r'(\d+)\s*sui?te', texto_limpo, re.IGNORECASE)
+        match_suites = re.search(r'(\d+)\s*sui?te', trecho_divisao, re.IGNORECASE)
         
     if match_suites:
         try:
@@ -144,10 +147,10 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     else:
         variaveis_encontradas['suites'] = 0
 
-    # 5. Banheiros / Banho (Busca estrita pelo termo banho)
-    match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*banho', texto_limpo, re.IGNORECASE)
+    # 5. Banheiros / Banho (Ex: "01 (um) banho") dentro do trecho isolado
+    match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*banho', trecho_divisao, re.IGNORECASE)
     if not match_banheiros:
-        match_banheiros = re.search(r'(\d+)\s*banho', texto_limpo, re.IGNORECASE)
+        match_banheiros = re.search(r'(\d+)\s*banho', trecho_divisao, re.IGNORECASE)
         
     if match_banheiros:
         try:
@@ -158,9 +161,9 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         variaveis_encontradas['banheiros'] = 1
 
     # 6. Vagas
-    match_vagas = re.search(r'(\d+)\s*\([^)]+\)\s*garagem', texto_limpo, re.IGNORECASE)
+    match_vagas = re.search(r'(\d+)\s*\([^)]+\)\s*garagem', trecho_limpo, re.IGNORECASE)
     if not match_vagas:
-        match_vagas = re.search(r'(\d+)\s*vaga[s]?', texto_limpo, re.IGNORECASE)
+        match_vagas = re.search(r'(\d+)\s*vaga[s]?', trecho_limpo, re.IGNORECASE)
     if match_vagas:
         try:
             variaveis_encontradas['vagas_garagem'] = int(match_vagas.group(1))
@@ -168,7 +171,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
             pass
 
     return variaveis_encontradas, texto_limpo[:600]
-
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
