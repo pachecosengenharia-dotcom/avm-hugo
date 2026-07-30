@@ -270,36 +270,28 @@ with aba_avm:
             cols_inputs = st.columns(len(features_selecionadas))
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
-                    key_input = f"input_{feat}"
+                    # Define o valor padrão de forma segura sem travar o session_state
+                    sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
+                    
+                    for chave_ia, valor_ia in dados_ia.items():
+                        if chave_ia == feat or chave_ia in feat or feat in chave_ia:
+                            sugestao_padrao = valor_ia
+                            break
+
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     
-                    # Inicializa o session_state apenas se ainda não existir
-                    if key_input not in st.session_state:
-                        sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
-                        
-                        for chave_ia, valor_ia in dados_ia.items():
-                            if chave_ia == feat or chave_ia in feat or feat in chave_ia:
-                                sugestao_padrao = valor_ia
-                                break
-                        
-                        if eh_inteiro:
-                            st.session_state[key_input] = int(round(float(sugestao_padrao)))
-                        else:
-                            st.session_state[key_input] = float(sugestao_padrao)
-
-                    # Renderiza o input com formatação segura para decimais e inteiros
                     if eh_inteiro:
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
+                            value=int(round(float(sugestao_padrao))),
                             step=1, 
-                            format="%d",
-                            key=key_input
+                            format="%d"
                         )
                     else:
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
-                            format="%.2f",
-                            key=key_input
+                            value=float(sugestao_padrao),
+                            format="%.2f"
                         )
 
             if st.button("🚀 Executar Modelo de Precificação Híbrido"):
