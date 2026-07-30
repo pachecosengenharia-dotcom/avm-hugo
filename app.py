@@ -70,7 +70,10 @@ def gerar_laudo_pdf_ia(tenant, variavel_alvo, valores, r2, n_amostras, status_ju
 # =====================================================================
 def extrair_variaveis_de_documento(arquivo_pdf):
     texto_extraido = ""
-    bytes_arquivo = arquivo_pdf.read()
+    try:
+        bytes_arquivo = arquivo_pdf.read()
+    except Exception:
+        return {}, ""
     
     try:
         with pdfplumber.open(io.BytesIO(bytes_arquivo)) as pdf:
@@ -87,15 +90,16 @@ def extrair_variaveis_de_documento(arquivo_pdf):
             for img in imagens:
                 texto_ocr = pytesseract.image_to_string(img, lang='por')
                 texto_extraido += texto_ocr + "\n"
-        except Exception as e:
-            return None, f"Erro ao processar OCR no documento: {e}."
+        except Exception:
+            pass
 
     if not texto_extraido.strip():
-        return None, "Não foi possível extrair texto legível deste documento."
+        return {}, ""
 
     variaveis_encontradas = {}
     texto_limpo = texto_extraido.replace('\n', ' ')
 
+    # 1. Área Privativa Coberta
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', texto_limpo, re.IGNORECASE)
     if match_privativa:
         val = match_privativa.group(1).replace('.', '').replace(',', '.')
@@ -104,6 +108,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
+    # 2. Área do Terreno Relativa à Fração
     match_terreno_fracao = re.search(r'com\s*área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados.*?fração', texto_limpo, re.IGNORECASE)
     if not match_terreno_fracao:
         match_terreno_fracao = re.search(r'área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados', texto_limpo, re.IGNORECASE)
@@ -115,20 +120,21 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    match_quartos = re.search(r'(\d+)\s*\([^)]+\)\s*quartos', texto_limpo, re.IGNORECASE)
+    # 3. Quartos (Busca estrita na divisão interna)
+    match_quartos = re.search(r'divisão\s*interna[:\s]*(\d+)', texto_limpo, re.IGNORECASE)
     if not match_quartos:
-        match_quartos = re.search(r'(\d+)\s*quarto[s]?', texto_limpo, re.IGNORECASE)
+        match_quartos = re.search(r'(\d+)\s*\([^)]+\)\s*quartos', texto_limpo, re.IGNORECASE)
+    
     if match_quartos:
         try:
             variaveis_encontradas['quartos'] = int(match_quartos.group(1))
         except ValueError:
             pass
 
-    match_suites = re.search(r'(\d+)\s*\([^)]+\)\s*sui?te', texto_limpo, re.IGNORECASE)
+    # 4. Suítes (Busca estrita após a palavra "sendo")
+    match_suites = re.search(r'sendo\s*(\d+)', texto_limpo, re.IGNORECASE)
     if not match_suites:
-        match_suites = re.search(r'sendo.*?(\d+)\s*sui?te', texto_limpo, re.IGNORECASE)
-    if not match_suites:
-        match_suites = re.search(r'(\d+)\s*sui?te[s]?', texto_limpo, re.IGNORECASE)
+        match_suites = re.search(r'(\d+)\s*sui?te', texto_limpo, re.IGNORECASE)
         
     if match_suites:
         try:
@@ -138,15 +144,20 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     else:
         variaveis_encontradas['suites'] = 0
 
-    match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*(?:banho|banheiro)', texto_limpo, re.IGNORECASE)
+    # 5. Banheiros / Banho (Busca estrita pelo termo banho)
+    match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*banho', texto_limpo, re.IGNORECASE)
     if not match_banheiros:
-        match_banheiros = re.search(r'(\d+)\s*(?:banho|banheiro)[s]?', texto_limpo, re.IGNORECASE)
+        match_banheiros = re.search(r'(\d+)\s*banho', texto_limpo, re.IGNORECASE)
+        
     if match_banheiros:
         try:
             variaveis_encontradas['banheiros'] = int(match_banheiros.group(1))
         except ValueError:
             pass
+    else:
+        variaveis_encontradas['banheiros'] = 1
 
+    # 6. Vagas
     match_vagas = re.search(r'(\d+)\s*\([^)]+\)\s*garagem', texto_limpo, re.IGNORECASE)
     if not match_vagas:
         match_vagas = re.search(r'(\d+)\s*vaga[s]?', texto_limpo, re.IGNORECASE)
