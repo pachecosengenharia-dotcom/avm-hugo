@@ -12,7 +12,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sklearn.ensemble import RandomForestRegressor
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Final", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Definitivo", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO
@@ -120,6 +120,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
+    # Isola o trecho específico da divisão interna para evitar conflitos com números de área
     match_divisao = re.search(r'divisão\s*interna[:\s]*(.*?)(?:edificada|lote|$)', trecho_limpo, re.IGNORECASE)
     trecho_divisao = match_divisao.group(1) if match_divisao else trecho_limpo
 
@@ -133,7 +134,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 4. Suítes (Garante mapeamento unificado 'suites' e 'suite')
+    # 4. Suítes
     match_suites = re.search(r'sendo\s*(\d+)', trecho_divisao, re.IGNORECASE)
     if not match_suites:
         match_suites = re.search(r'(\d+)\s*sui?te', trecho_divisao, re.IGNORECASE)
@@ -175,7 +176,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Híbrido Final")
+st.title("🏢 Painel de Crédito e Controle AVM - Híbrido Definitivo")
 st.markdown("Plataforma integrada para carga de mercado, leitura documental por IA e preenchimento paramétrico.")
 st.divider()
 
@@ -195,6 +196,8 @@ if 'score_juridico_global' not in st.session_state:
     st.session_state.score_juridico_global = "PENDENTE"
 if 'dados_extraidos_ia' not in st.session_state:
     st.session_state.dados_extraidos_ia = {}
+if 'valores_manuais' not in st.session_state:
+    st.session_state.valores_manuais = {}
 
 with aba_avm:
     st.subheader("📁 1. Entradas de Dados: Planilha de Mercado & Certidão do Imóvel")
@@ -209,6 +212,8 @@ with aba_avm:
         dados_extraidos, _ = extrair_variaveis_de_documento(documento_enviado)
         if dados_extraidos:
             st.session_state.dados_extraidos_ia = dados_extraidos
+            # Limpa o cache manual anterior para forçar a nova leitura da certidão
+            st.session_state.valores_manuais = {}
             st.success(f"✨ Certidão lida com sucesso! Variáveis extraídas automaticamente: {list(dados_extraidos.keys())}")
 
     df_global = None
@@ -268,31 +273,41 @@ with aba_avm:
             
             valores_usuario = {}
             cols_inputs = st.columns(len(features_selecionadas))
+            
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
-                    # Define o valor padrão de forma segura sem travar o session_state
-                    sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
-                    
-                    for chave_ia, valor_ia in dados_ia.items():
-                        if chave_ia == feat or chave_ia in feat or feat in chave_ia:
-                            sugestao_padrao = valor_ia
-                            break
-
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     
+                    # Define o valor inicial de forma segura usando o session_state de controle
+                    if feat in st.session_state.valores_manuais:
+                        val_inicial = st.session_state.valores_manuais[feat]
+                    else:
+                        val_inicial = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
+                        for chave_ia, valor_ia in dados_ia.items():
+                            if chave_ia == feat or chave_ia in feat or feat in chave_ia:
+                                val_inicial = valor_ia
+                                break
+                    
                     if eh_inteiro:
+                        val_inicial = int(round(float(val_inicial)))
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
-                            value=int(round(float(sugestao_padrao))),
+                            value=val_inicial,
                             step=1, 
-                            format="%d"
+                            format="%d",
+                            key=f"input_safe_{feat}"
                         )
                     else:
+                        val_inicial = float(val_inicial)
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
-                            value=float(sugestao_padrao),
-                            format="%.2f"
+                            value=val_inicial,
+                            format="%.2f",
+                            key=f"input_safe_{feat}"
                         )
+                    
+                    # Salva permanentemente no session_state para evitar perda de foco ou crash
+                    st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
             if st.button("🚀 Executar Modelo de Precificação Híbrido"):
                 df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
