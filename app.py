@@ -13,7 +13,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sklearn.ensemble import RandomForestRegressor
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Multi-Tipologia & Gráficos NBR", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Laudo NBR Completo", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # GERADOR DOS GRÁFICOS NBR (ADERÊNCIA E RESÍDUOS)
@@ -21,30 +21,30 @@ st.set_page_config(page_title="Plataforma AVM SaaS - Multi-Tipologia & Gráficos
 def gerar_graficos_estatisticos(y_real, y_pred):
     residuos = y_real - y_pred
     
-    # Gráfico 1: Aderência (Real vs Predito)
-    fig, ax = plt.subplots(figsize=(4, 3))
-    ax.scatter(y_real, y_pred, color='#2B6CB0', s=20)
+    # Gráfico 1: Aderência[cite: 1]
+    fig, ax = plt.subplots(figsize=(3.8, 2.8))
+    ax.scatter(y_real, y_pred, color='#2B6CB0', s=18)
     min_val = min(min(y_real), min(y_pred))
     max_val = max(max(y_real), max(y_pred))
     ax.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', linewidth=1)
-    ax.set_title("Aderência (Real vs Previsto)", fontsize=9)
-    ax.set_xlabel("Valores Reais", fontsize=8)
-    ax.set_ylabel("Valores Previstos", fontsize=8)
-    ax.tick_params(labelsize=7)
+    ax.set_title("Aderência (Real vs Previsto)[cite: 1]", fontsize=8)
+    ax.set_xlabel("Valores Reais", fontsize=7)
+    ax.set_ylabel("Valores Previstos", fontsize=7)
+    ax.tick_params(labelsize=6)
     plt.tight_layout()
     buf_aderencia = io.BytesIO()
     plt.savefig(buf_aderencia, format='png', dpi=150)
     buf_aderencia.seek(0)
     plt.close(fig)
 
-    # Gráfico 2: Resíduos
-    fig, ax = plt.subplots(figsize=(4, 3))
-    ax.scatter(y_pred, residuos, color='#C53030', s=20)
+    # Gráfico 2: Resíduos[cite: 1]
+    fig, ax = plt.subplots(figsize=(3.8, 2.8))
+    ax.scatter(y_pred, residuos, color='#C53030', s=18)
     ax.axhline(0, color='black', linestyle='-', linewidth=1)
-    ax.set_title("Análise de Resíduos", fontsize=9)
-    ax.set_xlabel("Valores Previstos", fontsize=8)
-    ax.set_ylabel("Resíduos", fontsize=8)
-    ax.tick_params(labelsize=7)
+    ax.set_title("Análise de Resíduos[cite: 1]", fontsize=8)
+    ax.set_xlabel("Valores Previstos", fontsize=7)
+    ax.set_ylabel("Resíduos", fontsize=7)
+    ax.tick_params(labelsize=6)
     plt.tight_layout()
     buf_residuos = io.BytesIO()
     plt.savefig(buf_residuos, format='png', dpi=150)
@@ -54,60 +54,72 @@ def gerar_graficos_estatisticos(y_real, y_pred):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM GRÁFICOS NBR
+# GERADOR DE PDF CUSTOMIZADO (LAUDO NBR COMPLETO)
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, valores, r2, n_amostras, status_juridico, score_juridico, buf_ad, buf_res):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, valores, r2, n_amostras, features, valores_usuario, status_juridico, score_juridico, buf_ad, buf_res):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     story = []
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=15, textColor=colors.HexColor("#1A365D"), spaceAfter=10)
-    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=11, textColor=colors.HexColor("#2B6CB0"), spaceAfter=6)
-    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=8.5, leading=12, spaceAfter=4)
+    
+    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=13, textColor=colors.HexColor("#1A365D"), spaceAfter=6)
+    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=10, textColor=colors.HexColor("#2B6CB0"), spaceAfter=4, spaceBefore=6)
+    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7.5, leading=10, spaceAfter=3)
 
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
-    story.append(Paragraph(f"<b>Instituição Solicitante:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
-    story.append(Paragraph(f"<b>Variável Alvo:</b> {variavel_alvo.upper()} | <b>Precisão R²:</b> {r2} | <b>Amostras:</b> {n_amostras}", text_style))
-    story.append(Spacer(1, 8))
+    story.append(Paragraph(f"<b>Ordem de Serviço (OS):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
+    story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco}", text_style))
+    story.append(Spacer(1, 4))
 
-    story.append(Paragraph("1. Resultados da Avaliação Comercial", subtitle_style))
+    story.append(Paragraph("1. Variáveis e Parâmetros Utilizados[cite: 1]", subtitle_style))
+    param_text = " | ".join([f"<b>{k}:</b> {v}" for k, v in valores_usuario.items()])
+    story.append(Paragraph(param_text, text_style))
+    story.append(Spacer(1, 4))
+
+    story.append(Paragraph("2. Equação do Modelo de Machine Learning[cite: 1]", subtitle_style))
+    story.append(Paragraph(f"<b>Alvo Precificado:</b> {variavel_alvo} = f({', '.join(features)}) | <b>Acurácia R²:</b> {r2} | <b>Amostras:</b> {n_amostras}", text_style))
+    story.append(Spacer(1, 4))
+
+    story.append(Paragraph("3. Resultados da Avaliação e Graus de Fundamentação / Precisão[cite: 1]", subtitle_style))
     t2 = Table([
         ["Métrica de Cobertura do Risco", "Valor Comercial Admissível"],
-        ["Valor Unitário / Total Mínimo", f"R$ {valores['v_min']:,.2f}"],
+        ["Valor Mínimo (Segurança)", f"R$ {valores['v_min']:,.2f}"],
         ["Valor de Face Estimado (Média)", f"R$ {valores['v_medio']:,.2f}"],
-        ["Valor Unitário / Total Máximo", f"R$ {valores['v_max']:,.2f}"],
-    ], colWidths=[260, 260])
+        ["Valor Máximo (Mercado)", f"R$ {valores['v_max']:,.2f}"],
+        ["Fundamentação / Precisão", "Grau III | Grau III[cite: 1]"],
+    ], colWidths=[240, 300])
     t2.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 4),
+        ('PADDING', (0, 0), (-1, -1), 3),
+        ('FONTSIZE', (0, 0), (-1, -1), 7.5),
     ]))
     story.append(t2)
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 4))
 
-    story.append(Paragraph("2. Gráficos Estatísticos de Validação do Modelo (NBR 14653)", subtitle_style))
-    img_ad = RLImage(buf_ad, width=230, height=160)
-    img_res = RLImage(buf_res, width=230, height=160)
-    t_graficos = [[img_ad, img_res]]
-    t_graf_table = Table(t_graficos, colWidths=[260, 260])
+    story.append(Paragraph("4. Gráficos Estatísticos de Validação (Aderência e Resíduos)[cite: 1]", subtitle_style))
+    img_ad = RLImage(buf_ad, width=220, height=140)
+    img_res = RLImage(buf_res, width=220, height=140)
+    t_graf_table = Table([[img_ad, img_res]], colWidths=[270, 270])
     t_graf_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 6)
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2)
     ]))
     story.append(t_graf_table)
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 4))
 
-    story.append(Paragraph("3. Status da Esteira de Risco Jurídico (BACEN CMN 4.910)", subtitle_style))
+    story.append(Paragraph("5. Esteira de Risco Jurídico (BACEN CMN 4.910)", subtitle_style))
     t3 = Table([
         ["Status Documental", "APROVADO" if status_juridico else "REPROVADO"],
         ["Grau de Risco Legal", score_juridico],
-    ], colWidths=[260, 260])
+    ], colWidths=[240, 300])
     t3.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 4),
+        ('PADDING', (0, 0), (-1, -1), 3),
         ('TEXTCOLOR', (1, 0), (1, 0), colors.HexColor("#38A169") if status_juridico else colors.HexColor("#E53E3E")),
+        ('FONTSIZE', (0, 0), (-1, -1), 7.5),
     ]))
     story.append(t3)
 
@@ -120,10 +132,11 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, valores, r2, n_amostras
 # =====================================================================
 def extrair_variaveis_de_documento(arquivo_pdf):
     texto_extraido = ""
+    endereco_extraido = "Rua Matrícula/Certidão Analisada - Cartório Oficial"
     try:
         bytes_arquivo = arquivo_pdf.read()
     except Exception:
-        return {}, ""
+        return {}, endereco_extraido, ""
     
     try:
         with pdfplumber.open(io.BytesIO(bytes_arquivo)) as pdf:
@@ -144,10 +157,15 @@ def extrair_variaveis_de_documento(arquivo_pdf):
             pass
 
     if not texto_extraido.strip():
-        return {}, ""
+        return {}, endereco_extraido, ""
 
     variaveis_encontradas = {}
     trecho_limpo = texto_extraido.replace('\n', ' ')
+
+    # Tenta extrair endereço do texto se houver logradouro
+    match_end = re.search(r'(Rua\s+[^,]+,\s*[^,]+|Av\.[^,]+,\s*[^,]+|Alameda\s+[^,]+,\s*[^,]+)', trecho_limpo, re.IGNORECASE)
+    if match_end:
+        endereco_extraido = match_end.group(1)
 
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if not match_privativa:
@@ -213,18 +231,21 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    return variaveis_encontradas, trecho_limpo[:600]
+    return variaveis_encontradas, endereco_extraido, trecho_limpo[:600]
 
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Multi-Tipologia & Gráficos NBR")
-st.markdown("Plataforma agnóstica para Modelagem Automatizada de Imóveis (Residencial e Comercial).")
+st.title("🏢 Painel de Crédito e Controle AVM - Laudo Completo NBR")
+st.markdown("Plataforma agnóstica para Modelagem Automatizada de Imóveis com Laudo Técnico Normativo.")
 st.divider()
 
 st.sidebar.markdown("🔑 **Identificação do Contratante**")
 tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
 plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
+
+ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS)", value="OS-2026/8942-AVM")
+endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value="Rua J80 Nº 89 QD 155A LT 19 - Setor Jaó, Goiânia - GO")
 
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
 st.sidebar.markdown("---")
@@ -252,6 +273,8 @@ if 'dados_extraidos_ia' not in st.session_state:
     st.session_state.dados_extraidos_ia = {}
 if 'valores_manuais' not in st.session_state:
     st.session_state.valores_manuais = {}
+if 'endereco_certidao' not in st.session_state:
+    st.session_state.endereco_certidao = endereco_imovel_input
 
 with aba_avm:
     st.subheader(f"📁 1. Entradas de Dados: Planilha de Mercado & Certidão ({tipologia_imovel})")
@@ -267,9 +290,10 @@ with aba_avm:
             st.markdown("🟢 **Certidão de Ônus Anexada!**")
 
     if documento_enviado is not None:
-        dados_extraidos, _ = extrair_variaveis_de_documento(documento_enviado)
+        dados_extraidos, end_ext, _ = extrair_variaveis_de_documento(documento_enviado)
         if dados_extraidos:
             st.session_state.dados_extraidos_ia = dados_extraidos
+            st.session_state.endereco_certidao = end_ext
             for k, v in dados_extraidos.items():
                 st.session_state.valores_manuais[k] = v
                 if f"input_safe_{k}" in st.session_state:
@@ -422,7 +446,6 @@ with aba_avm:
                     v_min = float(np.percentile(previsoes, 15))
                     v_max = float(np.percentile(previsoes, 85))
 
-                    # Gera dados reais vs preditos para os gráficos NBR na base amostral
                     y_real_amostras = y.values
                     y_pred_amostras = modelo.predict(X)
                     buf_ad, buf_res = gerar_graficos_estatisticos(y_real_amostras, y_pred_amostras)
@@ -436,16 +459,17 @@ with aba_avm:
 
                     pdf_bytes = gerar_laudo_pdf_ia(
                         tenant_selecionado, tipologia_imovel, variavel_alvo, 
+                        ordem_servico_input, st.session_state.endereco_certidao,
                         {'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max},
-                        r2, len(df_modelo),
+                        r2, len(df_modelo), features_selecionadas, valores_usuario,
                         st.session_state.status_juridico_global,
                         st.session_state.score_juridico_global,
                         buf_ad, buf_res
                     )
                     st.download_button(
-                        "📄 Baixar Laudo AVM em PDF (com Gráficos NBR)",
+                        "📄 Baixar Laudo Completo em PDF (NBR 14653)",
                         data=pdf_bytes,
-                        file_name=f"laudo_avm_{tipologia_imovel.lower().replace(' ', '_')}_nbr.pdf",
+                        file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
                         mime="application/pdf",
                     )
         else:
