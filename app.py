@@ -127,10 +127,13 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 4. Suítes (ex: "sendo 01 (uma) suite" ou "01 suite")
-    match_suites = re.search(r'sendo\s*(\d+)\s*\([^)]+\)\s*suíte', texto_limpo, re.IGNORECASE)
+    # 4. Suítes (busca ampla com ou sem acento)
+    match_suites = re.search(r'(\d+)\s*\([^)]+\)\s*sui?te', texto_limpo, re.IGNORECASE)
     if not match_suites:
-        match_suites = re.search(r'(\d+)\s*suíte[s]?', texto_limpo, re.IGNORECASE)
+        match_suites = re.search(r'sendo.*?(\d+)\s*sui?te', texto_limpo, re.IGNORECASE)
+    if not match_suites:
+        match_suites = re.search(r'(\d+)\s*sui?te[s]?', texto_limpo, re.IGNORECASE)
+        
     if match_suites:
         try:
             variaveis_encontradas['suites'] = int(match_suites.group(1))
