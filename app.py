@@ -270,24 +270,23 @@ with aba_avm:
             cols_inputs = st.columns(len(features_selecionadas))
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
-                    sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
-                    
-                    # Busca flexível no dicionário extraído da IA
-                    for chave_ia, valor_ia in dados_ia.items():
-                        if chave_ia == feat or chave_ia in feat or feat in chave_ia:
-                            sugestao_padrao = valor_ia
-                            break
-
-                    eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
-                    if eh_inteiro:
-                        sugestao_padrao = int(round(float(sugestao_padrao)))
-                    else:
-                        sugestao_padrao = float(sugestao_padrao)
-
                     key_input = f"input_{feat}"
-                    if key_input not in st.session_state or feat in dados_ia:
-                        st.session_state[key_input] = sugestao_padrao
+                    
+                    # Se o input ainda não existe na sessão, define o valor inicial
+                    if key_input not in st.session_state:
+                        sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
+                        
+                        # Se veio da certidão, prioriza o valor extraído
+                        for chave_ia, valor_ia in dados_ia.items():
+                            if chave_ia == feat or chave_ia in feat or feat in chave_ia:
+                                sugestao_padrao = valor_ia
+                                break
+                        
+                        eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
+                        st.session_state[key_input] = int(round(float(sugestao_padrao))) if eh_inteiro else float(sugestao_padrao)
 
+                    # Renderiza o input utilizando o session_state gerenciado pelo Streamlit
+                    eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     if eh_inteiro:
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
