@@ -72,7 +72,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     texto_extraido = ""
     bytes_arquivo = arquivo_pdf.read()
     
-    # 1. Tenta extração via texto nativo do PDF
     try:
         with pdfplumber.open(io.BytesIO(bytes_arquivo)) as pdf:
             for pagina in pdf.pages:
@@ -82,12 +81,10 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     except Exception:
         pass
 
-    # 2. Se o texto nativo estiver vazio, usa OCR (Pytesseract) com o parâmetro 'lang' correto
     if not texto_extraido.strip():
         try:
             imagens = convert_from_bytes(bytes_arquivo)
             for img in imagens:
-                # CORREÇÃO: Utilizando 'lang=' em vez de 'language='
                 texto_ocr = pytesseract.image_to_string(img, lang='por')
                 texto_extraido += texto_ocr + "\n"
         except Exception as e:
@@ -98,21 +95,38 @@ def extrair_variaveis_de_documento(arquivo_pdf):
 
     variaveis_encontradas = {}
     
-    match_area = re.search(r'area\s+(?:privativa|construida)[:\s]*([\d.,]+)\s*m²', texto_extraido, re.IGNORECASE)
+    # 1. Busca ampla por Área Privativa ou Construída (aceita variações de termos)
+    match_area = re.search(r'(?:area|superficie)\s*(?:privativa|construida|util|total)?[:\s]*([\d.,]+)\s*m²', texto_extraido, re.IGNORECASE)
+    if not match_area:
+        # Tenta buscar números seguidos de m² perto da palavra area
+        match_area = re.search(r'([\d.,]+)\s*m²\s*(?:de\s*(?:area|construcao))?', texto_extraido, re.IGNORECASE)
+    
     if match_area:
         val = match_area.group(1).replace('.', '').replace(',', '.')
-        variaveis_encontradas['area_privativa'] = float(val)
+        try:
+            variaveis_encontradas['area_privativa'] = float(val)
+        except ValueError:
+            pass
 
+    # 2. Busca ampla por Terreno
     match_terreno = re.search(r'terreno[:\s]*([\d.,]+)\s*m²', texto_extraido, re.IGNORECASE)
     if match_terreno:
         val = match_terreno.group(1).replace('.', '').replace(',', '.')
-        variaveis_encontradas['area_terreno'] = float(val)
+        try:
+            variaveis_encontradas['area_terreno'] = float(val)
+        except ValueError:
+            pass
 
-    match_vagas = re.search(r'(\d+)\s*vaga[s]?(?:\s+de\s+garagem)?', texto_extraido, re.IGNORECASE)
+    # 3. Busca ampla por Vagas
+    match_vagas = re.search(r'(\d+)\s*(?:vaga|vagas|garagem)', texto_extraido, re.IGNORECASE)
     if match_vagas:
-        variaveis_encontradas['vagas_garagem'] = int(match_vagas.group(1))
+        try:
+            variaveis_encontradas['vagas_garagem'] = int(match_vagas.group(1))
+        except ValueError:
+            pass
 
-    return variaveis_encontradas, None
+    # Retorna também uma prévia do texto extraído para fins de diagnóstico na tela
+    return variaveis_encontradas, texto_extraido[:500]
 
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
@@ -250,16 +264,21 @@ with aba_doc:
 
     if documento_enviado is not None:
         if st.button("🔍 Extrair Dados e Preencher Variáveis"):
-            with st.spinner("Lendo documento..."):
-                dados_extraidos, erro = extrair_variaveis_de_documento(documento_enviado)
+            with st.spinner("Lendo documento e aplicando OCR..."):
+                dados_extraidos, preview_texto = extrair_variaveis_de_documento(documento_enviado)
                 
-                if erro:
-                    st.error(erro)
+                if isinstance(preview_texto, str) and not dados_extraidos and "Erro" in preview_texto:
+                    st.error(preview_texto)
                 else:
-                    st.success("✨ Variáveis extraídas com sucesso do documento!")
+                    st.success("✨ Processamento concluído!")
                     st.json(dados_extraidos)
-                    st.session_state.dados_extraidos_ia = dados_extraidos
-                    st.info("💡 Vá para a Aba 1 ('Avaliação Dinâmica') para rodar a precificação com os dados preenchidos.")
+                    
+                    if not dados_extraidos:
+                        st.warning("⚠️ O documento foi lido, mas nenhuma variável numérica padrão foi encontrada pelas regras automáticas. Veja abaixo um trecho do texto bruto lido pelo OCR para conferir o formato:")
+                        st.text(preview_texto)
+                    else:
+                        st.session_state.dados_extraidos_ia = dados_extraidos
+                        st.info("💡 Variáveis capturadas com sucesso! Vá para a Aba 1 ('Avaliação Dinâmica') para rodar a precificação.")
 
 # ---------------------------------------------------------------------
 # ABA 3: ESTEIRA JURÍDICA
