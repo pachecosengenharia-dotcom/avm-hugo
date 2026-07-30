@@ -271,22 +271,23 @@ with aba_avm:
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
                     key_input = f"input_{feat}"
+                    eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     
-                    # Se o input ainda não existe na sessão, define o valor inicial
+                    # Inicializa o session_state apenas se ainda não existir
                     if key_input not in st.session_state:
                         sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
                         
-                        # Se veio da certidão, prioriza o valor extraído
                         for chave_ia, valor_ia in dados_ia.items():
                             if chave_ia == feat or chave_ia in feat or feat in chave_ia:
                                 sugestao_padrao = valor_ia
                                 break
                         
-                        eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
-                        st.session_state[key_input] = int(round(float(sugestao_padrao))) if eh_inteiro else float(sugestao_padrao)
+                        if eh_inteiro:
+                            st.session_state[key_input] = int(round(float(sugestao_padrao)))
+                        else:
+                            st.session_state[key_input] = float(sugestao_padrao)
 
-                    # Renderiza o input utilizando o session_state gerenciado pelo Streamlit
-                    eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
+                    # Renderiza o input com formatação segura para decimais e inteiros
                     if eh_inteiro:
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
@@ -297,6 +298,7 @@ with aba_avm:
                     else:
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
+                            format="%.2f",
                             key=key_input
                         )
 
