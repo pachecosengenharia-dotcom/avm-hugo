@@ -109,7 +109,28 @@ def executar_motor_ia(df_global, tipologia, area, indice_fiscal, atributos):
         for c in df_global.columns
     ]
     
-    df_tipo = df_global[df_global['tipologia'] == tipologia].copy()
+    # Padroniza a coluna tipologia para maiúsculas e sem acentos para evitar conflitos
+    if 'tipologia' in df_global.columns:
+        df_global['tipologia'] = df_global['tipologia'].astype(str).str.upper().str.strip()
+        df_global['tipologia'] = (
+            df_global['tipologia']
+            .str.replace("Á", "A").str.replace("É", "E").str.replace("Í", "I")
+            .str.replace("Ó", "O").str.replace("Ã", "A").str.replace("Ç", "C")
+        )
+    
+    # Mapeia termos comuns caso o usuário envie no plural ou sinônimos
+    filtro_tipologia = tipologia.upper()
+    if filtro_tipologia == "CASA":
+        df_tipo = df_global[df_global['tipologia'].str.contains("CASA|RESIDENCIAL", na=False)].copy()
+    elif filtro_tipologia == "APARTAMENTO":
+        df_tipo = df_global[df_global['tipologia'].str.contains("APARTAMENTO|APTO", na=False)].copy()
+    elif filtro_tipologia == "LOTE":
+        df_tipo = df_global[df_global['tipologia'].str.contains("LOTE|TERRENO", na=False)].copy()
+    elif filtro_tipologia == "GALPAO":
+        df_tipo = df_global[df_global['tipologia'].str.contains("GALPAO|INDUSTRIAL|COMERCIAL", na=False)].copy()
+    else:
+        df_tipo = df_global[df_global['tipologia'] == filtro_tipologia].copy()
+    
     features = ['area_privativa', 'indice_fiscal', 'area_terreno', 'vagas_garagem', 'andar', 'pe_direito']
     
     faltantes = [f for f in (features + ['valor_total_declarado']) if f not in df_tipo.columns]
@@ -117,7 +138,7 @@ def executar_motor_ia(df_global, tipologia, area, indice_fiscal, atributos):
         return None, f"Colunas ausentes no arquivo: {', '.join(faltantes)}. Verifique seu cabeçalho."
 
     if len(df_tipo) < 3:
-        return None, "Amostras insuficientes (mínimo 3) para esta tipologia."
+        return None, f"Amostras insuficientes (encontradas {len(df_tipo)}, mínimo 3) para a tipologia '{tipologia}'. Verifique se a coluna de tipologia no CSV está preenchida corretamente."
 
     df_tipo = df_tipo.dropna(subset=features + ['valor_total_declarado'])
     
