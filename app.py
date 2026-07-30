@@ -96,7 +96,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     variaveis_encontradas = {}
     texto_limpo = texto_extraido.replace('\n', ' ')
 
-    # 1. Área Privativa Coberta (ex: "82,33 metros quadrados de área privativa")
+    # 1. Área Privativa Coberta
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', texto_limpo, re.IGNORECASE)
     if match_privativa:
         val = match_privativa.group(1).replace('.', '').replace(',', '.')
@@ -105,7 +105,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 2. Área do Terreno Relativa à Fração (ex: "com área total de 197,25 metros quadrados" do imóvel geminado)
+    # 2. Área do Terreno Relativa à Fração
     match_terreno_fracao = re.search(r'com\s*área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados.*?fração', texto_limpo, re.IGNORECASE)
     if not match_terreno_fracao:
         match_terreno_fracao = re.search(r'área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados', texto_limpo, re.IGNORECASE)
@@ -117,7 +117,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 3. Quartos (ex: "02 (dois) quartos")
+    # 3. Quartos (Inteiro)
     match_quartos = re.search(r'(\d+)\s*\([^)]+\)\s*quartos', texto_limpo, re.IGNORECASE)
     if not match_quartos:
         match_quartos = re.search(r'(\d+)\s*quarto[s]?', texto_limpo, re.IGNORECASE)
@@ -127,7 +127,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 4. Suítes (busca ampla com ou sem acento)
+    # 4. Suítes (Inteiro)
     match_suites = re.search(r'(\d+)\s*\([^)]+\)\s*sui?te', texto_limpo, re.IGNORECASE)
     if not match_suites:
         match_suites = re.search(r'sendo.*?(\d+)\s*sui?te', texto_limpo, re.IGNORECASE)
@@ -142,7 +142,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     else:
         variaveis_encontradas['suites'] = 0
 
-    # 5. Banheiros / Banho (ex: "01 (um) banho")
+    # 5. Banheiros (Inteiro)
     match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*(?:banho|banheiro)', texto_limpo, re.IGNORECASE)
     if not match_banheiros:
         match_banheiros = re.search(r'(\d+)\s*(?:banho|banheiro)[s]?', texto_limpo, re.IGNORECASE)
@@ -152,7 +152,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 6. Vagas (ex: "01 (uma) garagem coberta")
+    # 6. Vagas (Inteiro)
     match_vagas = re.search(r'(\d+)\s*\([^)]+\)\s*garagem', texto_limpo, re.IGNORECASE)
     if not match_vagas:
         match_vagas = re.search(r'(\d+)\s*vaga[s]?', texto_limpo, re.IGNORECASE)
@@ -190,6 +190,33 @@ if 'dados_extraidos_ia' not in st.session_state:
     st.session_state.dados_extraidos_ia = {}
 
 # ---------------------------------------------------------------------
+# ABA 2: LEITURA AUTOMÁTICA DE DOCUMENTOS (Processada primeiro no fluxo)
+# ---------------------------------------------------------------------
+with aba_doc:
+    st.subheader("📄 Upload de Matrícula ou Certidão (Extração Automática)")
+    st.markdown("Envie o documento do imóvel em PDF para que o sistema extraia as variáveis físicas de forma automatizada.")
+    
+    documento_enviado = st.file_uploader("Arquivo PDF da Matrícula", type=["pdf"])
+
+    if documento_enviado is not None:
+        if st.button("🔍 Extrair Dados e Preencher Variáveis"):
+            with st.spinner("Lendo documento e aplicando OCR..."):
+                dados_extraidos, preview_texto = extrair_variaveis_de_documento(documento_enviado)
+                
+                if isinstance(preview_texto, str) and not dados_extraidos and "Erro" in preview_texto:
+                    st.error(preview_texto)
+                else:
+                    st.success("✨ Processamento concluído!")
+                    st.json(dados_extraidos)
+                    
+                    if not dados_extraidos:
+                        st.warning("⚠️ O documento foi lido, mas nenhuma variável numérica padrão foi encontrada.")
+                        st.text(preview_texto)
+                    else:
+                        st.session_state.dados_extraidos_ia = dados_extraidos
+                        st.info("💡 Variáveis capturadas com sucesso! Vá para a Aba 1 ('Avaliação Dinâmica') para rodar a precificação.")
+
+# ---------------------------------------------------------------------
 # ABA 1: AVALIAÇÃO DINÂMICA (PLANILHA UNIVERSAL)
 # ---------------------------------------------------------------------
 with aba_avm:
@@ -208,11 +235,13 @@ with aba_avm:
             st.error(f"Erro ao ler arquivo: {e}")
     else:
         data_padrao = {
-            'valor_total': [450000, 480000, 510000, 750000, 820000, 350000],
-            'area_privativa': [75, 78, 80, 85, 92, 60],
-            'area_terreno': [200, 220, 250, 360, 400, 0],
-            'vagas_garagem': [2, 2, 2, 3, 3, 1],
-            'indice_fiscal': [1200, 1250, 1300, 3200, 3300, 1500]
+            'valor_total_declarado': [450000, 480000, 510000, 750000, 820000, 350000],
+            'area_privativa': [75.0, 78.0, 80.0, 85.0, 92.0, 60.0],
+            'area_terreno': [200.0, 220.0, 250.0, 360.0, 400.0, 0.0],
+            'quartos': [2, 2, 3, 3, 3, 1],
+            'suites': [1, 1, 1, 2, 2, 0],
+            'banheiros': [1, 1, 2, 2, 2, 1],
+            'vagas_garagem': [1, 2, 2, 2, 3, 1]
         }
         df_global = pd.DataFrame(data_padrao)
         st.info("ℹ️ Utilizando base de dados padrão demonstrativa.")
@@ -231,37 +260,36 @@ with aba_avm:
             features_selecionadas = st.multiselect(
                 "Escolha as Variáveis Independentes (Features):",
                 options=features_disponiveis,
-                default=features_disponiveis[:min(3, len(features_disponiveis))]
+                default=features_disponiveis[:min(4, len(features_disponiveis))]
             )
 
         if features_selecionadas:
             st.markdown("##### 📝 Inserir Atributos do Imóvel Avaliendo")
             
             dados_ia = st.session_state.get('dados_extraidos_ia', {})
-            
-            # Lista de termos que devem obrigatoriamente ser inteiros
             campos_inteiros = ['quartos', 'suites', 'banheiros', 'vagas', 'vagas_garagem', 'garagem']
             
             valores_usuario = {}
             cols_inputs = st.columns(len(features_selecionadas))
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
+                    # Puxa o valor extraído da IA se existir, senão usa a média da coluna
                     sugestao = dados_ia.get(feat, float(df_global[feat].mean()))
-                    
-                    # Verifica se o nome da feature indica contagem inteira
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     
                     if eh_inteiro:
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
-                            value=int(round(sugestao)), 
+                            value=int(round(float(sugestao))), 
                             step=1, 
-                            format="%d"
+                            format="%d",
+                            key=f"input_{feat}"
                         )
                     else:
                         valores_usuario[feat] = st.number_input(
                             f"{feat.replace('_', ' ').title()}", 
-                            value=float(sugestao)
+                            value=float(sugestao),
+                            key=f"input_{feat}"
                         )
 
             if st.button("🚀 Executar Modelo de Precificação por IA"):
@@ -306,33 +334,6 @@ with aba_avm:
                     )
         else:
             st.warning("⚠️ Selecione ao menos uma variável independente.")
-
-# ---------------------------------------------------------------------
-# ABA 2: LEITURA AUTOMÁTICA DE DOCUMENTOS (PDF / MATRÍCULA)
-# ---------------------------------------------------------------------
-with aba_doc:
-    st.subheader("📄 Upload de Matrícula ou Certidão (Extração Automática)")
-    st.markdown("Envie o documento do imóvel em PDF para que o sistema extraia as variáveis físicas de forma automatizada.")
-    
-    documento_enviado = st.file_uploader("Arquivo PDF da Matrícula", type=["pdf"])
-
-    if documento_enviado is not None:
-        if st.button("🔍 Extrair Dados e Preencher Variáveis"):
-            with st.spinner("Lendo documento e aplicando OCR..."):
-                dados_extraidos, preview_texto = extrair_variaveis_de_documento(documento_enviado)
-                
-                if isinstance(preview_texto, str) and not dados_extraidos and "Erro" in preview_texto:
-                    st.error(preview_texto)
-                else:
-                    st.success("✨ Processamento concluído!")
-                    st.json(dados_extraidos)
-                    
-                    if not dados_extraidos:
-                        st.warning("⚠️ O documento foi lido, mas nenhuma variável numérica padrão foi encontrada pelas regras automáticas. Veja abaixo um trecho do texto bruto lido pelo OCR para conferir o formato:")
-                        st.text(preview_texto)
-                    else:
-                        st.session_state.dados_extraidos_ia = dados_extraidos
-                        st.info("💡 Variáveis capturadas com sucesso! Vá para a Aba 1 ('Avaliação Dinâmica') para rodar a precificação.")
 
 # ---------------------------------------------------------------------
 # ABA 3: ESTEIRA JURÍDICA
