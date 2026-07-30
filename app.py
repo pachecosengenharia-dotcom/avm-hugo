@@ -12,7 +12,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sklearn.ensemble import RandomForestRegressor
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Unificado", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Blindado", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO
@@ -99,7 +99,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     variaveis_encontradas = {}
     trecho_limpo = texto_extraido.replace('\n', ' ')
 
-    # 1. Área Privativa Coberta
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if match_privativa:
         val = match_privativa.group(1).replace('.', '').replace(',', '.')
@@ -108,7 +107,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 2. Área do Terreno Relativa à Fração
     match_terreno_fracao = re.search(r'com\s*área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados.*?fração', trecho_limpo, re.IGNORECASE)
     if not match_terreno_fracao:
         match_terreno_fracao = re.search(r'área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados', trecho_limpo, re.IGNORECASE)
@@ -120,11 +118,9 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # Isola o trecho específico da divisão interna do imóvel na certidão
     match_divisao = re.search(r'divisão\s*interna[:\s]*(.*?)(?:edificada|lote|$)', trecho_limpo, re.IGNORECASE)
     trecho_divisao = match_divisao.group(1) if match_divisao else trecho_limpo
 
-    # 3. Quartos
     match_quartos = re.search(r'(\d+)\s*\([^)]+\)\s*quartos', trecho_divisao, re.IGNORECASE)
     if not match_quartos:
         match_quartos = re.search(r'(\d+)\s*quarto[s]?', trecho_divisao, re.IGNORECASE)
@@ -134,7 +130,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 4. Suítes
     match_suites = re.search(r'sendo\s*(\d+)', trecho_divisao, re.IGNORECASE)
     if not match_suites:
         match_suites = re.search(r'(\d+)\s*sui?te', trecho_divisao, re.IGNORECASE)
@@ -147,7 +142,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     else:
         variaveis_encontradas['suites'] = 0
 
-    # 5. Banheiros
     match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*banho', trecho_divisao, re.IGNORECASE)
     if not match_banheiros:
         match_banheiros = re.search(r'(\d+)\s*banho', trecho_divisao, re.IGNORECASE)
@@ -160,7 +154,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     else:
         variaveis_encontradas['banheiros'] = 1
 
-    # 6. Vagas
     match_vagas = re.search(r'(\d+)\s*\([^)]+\)\s*garagem', trecho_limpo, re.IGNORECASE)
     if not match_vagas:
         match_vagas = re.search(r'(\d+)\s*vaga[s]?', trecho_limpo, re.IGNORECASE)
@@ -171,10 +164,11 @@ def extrair_variaveis_de_documento(arquivo_pdf):
             pass
 
     return variaveis_encontradas, trecho_limpo[:600]
+
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Motor Híbrido Unificado")
+st.title("🏢 Painel de Crédito e Controle AVM - Motor Híbrido Blindado")
 st.markdown("Plataforma integrada para carga de mercado, leitura documental por IA e preenchimento paramétrico.")
 st.divider()
 
@@ -199,23 +193,17 @@ with aba_avm:
     st.subheader("📁 1. Entradas de Dados: Planilha de Mercado & Certidão do Imóvel")
     
     col_up1, col_up2 = st.columns(2)
-    
     with col_up1:
         arquivo_planilha = st.file_uploader("Envie a Base Comparativa (.xlsx ou .csv)", type=["xlsx", "csv"])
-        
     with col_up2:
         documento_enviado = st.file_uploader("Envie a Certidão / Matrícula em PDF", type=["pdf"])
 
-    # Processamento da Certidão em segundo plano automático se houver upload
     if documento_enviado is not None:
         dados_extraidos, _ = extrair_variaveis_de_documento(documento_enviado)
         if dados_extraidos:
             st.session_state.dados_extraidos_ia = dados_extraidos
             st.success(f"✨ Certidão lida com sucesso! Variáveis extraídas automaticamente: {list(dados_extraidos.keys())}")
-        else:
-            st.warning("⚠️ O documento foi enviado, mas nenhuma variável física padrão foi encontrada de forma automática. Preencha manualmente abaixo.")
 
-    # Processamento da Planilha
     df_global = None
     if arquivo_planilha is not None:
         try:
@@ -223,6 +211,15 @@ with aba_avm:
                 df_global = pd.read_csv(arquivo_planilha, encoding='latin1', sep=None, engine='python', on_bad_lines='skip')
             else:
                 df_global = pd.read_excel(arquivo_planilha)
+            
+            # NORMALIZAÇÃO ROBUSTA DAS COLUNAS DA PLANILHA (Remove acentos, espaços e padroniza para minúsculo)
+            df_global.columns = [
+                c.lower().strip().replace(" ", "_")
+                .replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+                .replace("ã", "a").replace("õ", "o").replace("ç", "c").replace("â", "a").replace("ê", "e")
+                for c in df_global.columns
+            ]
+            
             st.success(f"✅ Base de mercado processada com sucesso! {len(df_global)} linhas carregadas.")
         except Exception as e:
             st.error(f"Erro ao ler arquivo: {e}")
@@ -268,13 +265,12 @@ with aba_avm:
             cols_inputs = st.columns(len(features_selecionadas))
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
-                    key_input = f"input_{feat}"
-                    
-                    # Define a sugestão: Se a IA achou o valor para esta feature, usa ele; senão usa a média da base
-                    if feat in dados_ia:
-                        sugestao_padrao = dados_ia[feat]
-                    else:
-                        sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
+                    # Busca segura e robusta considerando variações de nome na planilha
+                    sugestao_padrao = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
+                    for chave_ia in dados_ia:
+                        if chave_ia in feat or feat in chave_ia:
+                            sugestao_padrao = dados_ia[chave_ia]
+                            break
 
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     if eh_inteiro:
@@ -282,8 +278,8 @@ with aba_avm:
                     else:
                         sugestao_padrao = float(sugestao_padrao)
 
-                    # FORÇAGEM DE ESTADO: Se a chave ainda não existe ou se veio dado novo da IA, atualiza o session_state do input
-                    if key_input not in st.session_state or feat in dados_ia:
+                    key_input = f"input_{feat}"
+                    if key_input not in st.session_state:
                         st.session_state[key_input] = sugestao_padrao
 
                     if eh_inteiro:
@@ -342,9 +338,6 @@ with aba_avm:
         else:
             st.warning("⚠️ Selecione ao menos uma variável independente.")
 
-# ---------------------------------------------------------------------
-# ABA 2: ESTEIRA JURÍDICA
-# ---------------------------------------------------------------------
 with aba_juridico:
     st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
     j1, j2 = st.columns(2)
