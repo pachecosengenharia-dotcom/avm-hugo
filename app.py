@@ -239,12 +239,30 @@ with aba_avm:
             
             dados_ia = st.session_state.get('dados_extraidos_ia', {})
             
+            # Lista de termos que devem obrigatoriamente ser inteiros
+            campos_inteiros = ['quartos', 'suites', 'banheiros', 'vagas', 'vagas_garagem', 'garagem']
+            
             valores_usuario = {}
             cols_inputs = st.columns(len(features_selecionadas))
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
                     sugestao = dados_ia.get(feat, float(df_global[feat].mean()))
-                    valores_usuario[feat] = st.number_input(f"{feat.replace('_', ' ').title()}", value=float(sugestao))
+                    
+                    # Verifica se o nome da feature indica contagem inteira
+                    eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
+                    
+                    if eh_inteiro:
+                        valores_usuario[feat] = st.number_input(
+                            f"{feat.replace('_', ' ').title()}", 
+                            value=int(round(sugestao)), 
+                            step=1, 
+                            format="%d"
+                        )
+                    else:
+                        valores_usuario[feat] = st.number_input(
+                            f"{feat.replace('_', ' ').title()}", 
+                            value=float(sugestao)
+                        )
 
             if st.button("🚀 Executar Modelo de Precificação por IA"):
                 df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
