@@ -97,10 +97,10 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         return {}, ""
 
     variaveis_encontradas = {}
-    texto_limpo = texto_extraido.replace('\n', ' ')
+    trecho_limpo = texto_extraido.replace('\n', ' ')
 
     # 1. Área Privativa Coberta
-    match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', texto_limpo, re.IGNORECASE)
+    match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if match_privativa:
         val = match_privativa.group(1).replace('.', '').replace(',', '.')
         try:
@@ -109,9 +109,9 @@ def extrair_variaveis_de_documento(arquivo_pdf):
             pass
 
     # 2. Área do Terreno Relativa à Fração
-    match_terreno_fracao = re.search(r'com\s*área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados.*?fração', texto_limpo, re.IGNORECASE)
+    match_terreno_fracao = re.search(r'com\s*área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados.*?fração', trecho_limpo, re.IGNORECASE)
     if not match_terreno_fracao:
-        match_terreno_fracao = re.search(r'área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados', texto_limpo, re.IGNORECASE)
+        match_terreno_fracao = re.search(r'área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados', trecho_limpo, re.IGNORECASE)
     
     if match_terreno_fracao:
         val = match_terreno_fracao.group(1).replace('.', '').replace(',', '.')
@@ -121,10 +121,10 @@ def extrair_variaveis_de_documento(arquivo_pdf):
             pass
 
     # Isola o trecho específico da divisão interna do imóvel na certidão
-    match_divisao = re.search(r'divisão\s*interna[:\s]*(.*?)(?:edificada|lote|$)', texto_limpo, re.IGNORECASE)
-    trecho_divisao = match_divisao.group(1) if match_divisao else texto_limpo
+    match_divisao = re.search(r'divisão\s*interna[:\s]*(.*?)(?:edificada|lote|$)', trecho_limpo, re.IGNORECASE)
+    trecho_divisao = match_divisao.group(1) if match_divisao else trecho_limpo
 
-    # 3. Quartos (Ex: "02 (dois) quartos") dentro do trecho isolado
+    # 3. Quartos
     match_quartos = re.search(r'(\d+)\s*\([^)]+\)\s*quartos', trecho_divisao, re.IGNORECASE)
     if not match_quartos:
         match_quartos = re.search(r'(\d+)\s*quarto[s]?', trecho_divisao, re.IGNORECASE)
@@ -134,7 +134,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 4. Suítes (Ex: "sendo 01 (um) suite") dentro do trecho isolado
+    # 4. Suítes
     match_suites = re.search(r'sendo\s*(\d+)', trecho_divisao, re.IGNORECASE)
     if not match_suites:
         match_suites = re.search(r'(\d+)\s*sui?te', trecho_divisao, re.IGNORECASE)
@@ -147,7 +147,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     else:
         variaveis_encontradas['suites'] = 0
 
-    # 5. Banheiros / Banho (Ex: "01 (um) banho") dentro do trecho isolado
+    # 5. Banheiros
     match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*banho', trecho_divisao, re.IGNORECASE)
     if not match_banheiros:
         match_banheiros = re.search(r'(\d+)\s*banho', trecho_divisao, re.IGNORECASE)
@@ -170,7 +170,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    return variaveis_encontradas, texto_limpo[:600]
+    return variaveis_encontradas, trecho_limpo[:600]
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
