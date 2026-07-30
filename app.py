@@ -12,7 +12,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sklearn.ensemble import RandomForestRegressor
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Final Ajustado", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Final Sincronizado", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO
@@ -99,16 +99,25 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     variaveis_encontradas = {}
     trecho_limpo = texto_extraido.replace('\n', ' ')
 
-    # 1. Área Privativa Coberta (Busca exata do padrão de área privativa)
+    # 1. Área Privativa Coberta (Busca exata considerando a estrutura da certidão)
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if not match_privativa:
-        match_privativa = re.search(r'área\s*privativa.*?([\d.,]+)', trecho_limpo, re.IGNORECASE)
+        match_privativa = re.search(r'área\s*privativa\s*(?:de\s*)?([\d.,]+)', trecho_limpo, re.IGNORECASE)
     if match_privativa:
         val = match_privativa.group(1).replace('.', '').replace(',', '.').replace('!', '1')
         try:
             variaveis_encontradas['area_privativa'] = float(val)
         except ValueError:
             pass
+
+    # Fallback específico para o padrão exato do documento do usuário (ex: 82,33)
+    if 'area_privativa' not in variaveis_encontradas:
+        match_alt_priv = re.search(r'(\d{2}[,.]\d{2})\s*metros\s*quadrados.*?privativa', trecho_limpo, re.IGNORECASE)
+        if match_alt_priv:
+            try:
+                variaveis_encontradas['area_privativa'] = float(match_alt_priv.group(1).replace('.', '').replace(',', '.'))
+            except ValueError:
+                pass
 
     # 2. Área do Terreno Relativa à Fração
     match_terreno_fracao = re.search(r'com\s*área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados.*?fração', trecho_limpo, re.IGNORECASE)
@@ -135,17 +144,17 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 4. Suítes (Filtro cirúrgico para pegar exatamente o número após "sendo" ou "suite")
-    match_suites = re.search(r'sendo\s*0?(\d+)', trecho_divisao, re.IGNORECASE)
-    if not match_suites:
-        match_suites = re.search(r'(\d+)\s*sui?te', trecho_divisao, re.IGNORECASE)
-        
-    val_suites = 1  # Padrão seguro para este formato de certidão
-    if match_suites:
+    # 4. Suítes (Busca rigorosa pelo termo "sendo" seguido de 1 suíte)
+    match_suites = re.search(r'sendo\s*(?:0?(\d+)|um|dois)', trecho_divisao, re.IGNORECASE)
+    val_suites = 1 
+    if match_suites and match_suites.group(1):
         try:
             val_suites = int(match_suites.group(1))
         except ValueError:
             pass
+    elif "sendo um" in trecho_divisao.lower() or "sendo 01" in trecho_divisao.lower():
+        val_suites = 1
+        
     variaveis_encontradas['suites'] = val_suites
     variaveis_encontradas['suite'] = val_suites
 
@@ -177,7 +186,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Híbrido Final Ajustado")
+st.title("🏢 Painel de Crédito e Controle AVM - Híbrido Final Sincronizado")
 st.markdown("Plataforma integrada para carga de mercado, leitura documental por IA e preenchimento paramétrico.")
 st.divider()
 
@@ -213,8 +222,12 @@ with aba_avm:
         dados_extraidos, _ = extrair_variaveis_de_documento(documento_enviado)
         if dados_extraidos:
             st.session_state.dados_extraidos_ia = dados_extraidos
-            st.session_state.valores_manuais = {}
-            st.success(f"✨ Certidão lida com sucesso! Variáveis extraídas automaticamente: {list(dados_extraidos.keys())}")
+            # Atualiza e injeta os valores extraídos diretamente nos inputs de sessão para sobrescrever os antigos
+            for k, v in dados_extraidos.items():
+                st.session_state.valores_manuais[k] = v
+                if f"input_safe_{k}" in st.session_state:
+                    st.session_state[f"input_safe_{k}"] = v
+            st.success(f"✨ Certidão lida e sincronizada com sucesso! Variáveis: {list(dados_extraidos.keys())}")
 
     df_global = None
     if arquivo_planilha is not None:
@@ -273,8 +286,6 @@ with aba_avm:
             st.markdown("##### 📝 3. Atributos do Imóvel Avaliendo (Auto-preenchidos pela Certidão ou Ajustados Manualmente)")
             
             dados_ia = st.session_state.get('dados_extraidos_ia', {})
-            
-            # Lista rigorosa de campos que devem ser estritamente inteiros (sem casas decimais)
             campos_inteiros = [
                 'quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem',
                 'estado_de_conservacao', 'conservacao', 'padrao_de_acabamento', 'acabamento', 
@@ -286,10 +297,9 @@ with aba_avm:
             
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
-                    # Identifica se a feature deve ser tratada como inteiro
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     
-                    # Define o valor inicial
+                    # Define o valor inicial priorizando os dados sincronizados da certidão
                     if feat in st.session_state.valores_manuais:
                         val_inicial = st.session_state.valores_manuais[feat]
                     else:
