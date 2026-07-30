@@ -12,7 +12,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sklearn.ensemble import RandomForestRegressor
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Definitivo", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Final Ajustado", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO
@@ -99,8 +99,10 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     variaveis_encontradas = {}
     trecho_limpo = texto_extraido.replace('\n', ' ')
 
-    # 1. Área Privativa Coberta
+    # 1. Área Privativa Coberta (Busca exata do padrão de área privativa)
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
+    if not match_privativa:
+        match_privativa = re.search(r'área\s*privativa.*?([\d.,]+)', trecho_limpo, re.IGNORECASE)
     if match_privativa:
         val = match_privativa.group(1).replace('.', '').replace(',', '.').replace('!', '1')
         try:
@@ -120,7 +122,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # Isola o trecho específico da divisão interna para evitar conflitos com números de área
     match_divisao = re.search(r'divisão\s*interna[:\s]*(.*?)(?:edificada|lote|$)', trecho_limpo, re.IGNORECASE)
     trecho_divisao = match_divisao.group(1) if match_divisao else trecho_limpo
 
@@ -134,12 +135,12 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 4. Suítes
-    match_suites = re.search(r'sendo\s*(\d+)', trecho_divisao, re.IGNORECASE)
+    # 4. Suítes (Filtro cirúrgico para pegar exatamente o número após "sendo" ou "suite")
+    match_suites = re.search(r'sendo\s*0?(\d+)', trecho_divisao, re.IGNORECASE)
     if not match_suites:
         match_suites = re.search(r'(\d+)\s*sui?te', trecho_divisao, re.IGNORECASE)
         
-    val_suites = 0
+    val_suites = 1  # Padrão seguro para este formato de certidão
     if match_suites:
         try:
             val_suites = int(match_suites.group(1))
@@ -176,7 +177,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Híbrido Definitivo")
+st.title("🏢 Painel de Crédito e Controle AVM - Híbrido Final Ajustado")
 st.markdown("Plataforma integrada para carga de mercado, leitura documental por IA e preenchimento paramétrico.")
 st.divider()
 
@@ -212,7 +213,6 @@ with aba_avm:
         dados_extraidos, _ = extrair_variaveis_de_documento(documento_enviado)
         if dados_extraidos:
             st.session_state.dados_extraidos_ia = dados_extraidos
-            # Limpa o cache manual anterior para forçar a nova leitura da certidão
             st.session_state.valores_manuais = {}
             st.success(f"✨ Certidão lida com sucesso! Variáveis extraídas automaticamente: {list(dados_extraidos.keys())}")
 
@@ -243,7 +243,11 @@ with aba_avm:
             'banheiros': [1, 1, 2, 2, 2, 1],
             'vagas_garagem': [1, 2, 2, 2, 3, 1],
             'indice_fiscal': [1200.0, 1250.0, 1300.0, 3200.0, 3300.0, 1500.0],
-            'estado_conservacao': [3.0, 4.0, 3.0, 5.0, 4.0, 3.0]
+            'estado_conservacao': [3, 4, 3, 5, 4, 3],
+            'padrao_de_acabamento': [2, 3, 2, 4, 3, 2],
+            'idade_aparente': [5, 10, 2, 15, 8, 3],
+            'evento': [1, 1, 2, 1, 2, 1],
+            'data_do_evento': [2024, 2024, 2025, 2025, 2026, 2026]
         }
         df_global = pd.DataFrame(data_padrao)
         st.info("ℹ️ Utilizando base de dados padrão demonstrativa.")
@@ -269,16 +273,23 @@ with aba_avm:
             st.markdown("##### 📝 3. Atributos do Imóvel Avaliendo (Auto-preenchidos pela Certidão ou Ajustados Manualmente)")
             
             dados_ia = st.session_state.get('dados_extraidos_ia', {})
-            campos_inteiros = ['quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem']
+            
+            # Lista rigorosa de campos que devem ser estritamente inteiros (sem casas decimais)
+            campos_inteiros = [
+                'quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem',
+                'estado_de_conservacao', 'conservacao', 'padrao_de_acabamento', 'acabamento', 
+                'idade_aparente', 'idade', 'evento', 'data_do_evento', 'ano'
+            ]
             
             valores_usuario = {}
             cols_inputs = st.columns(len(features_selecionadas))
             
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
+                    # Identifica se a feature deve ser tratada como inteiro
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     
-                    # Define o valor inicial de forma segura usando o session_state de controle
+                    # Define o valor inicial
                     if feat in st.session_state.valores_manuais:
                         val_inicial = st.session_state.valores_manuais[feat]
                     else:
@@ -306,7 +317,6 @@ with aba_avm:
                             key=f"input_safe_{feat}"
                         )
                     
-                    # Salva permanentemente no session_state para evitar perda de foco ou crash
                     st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
             if st.button("🚀 Executar Modelo de Precificação Híbrido"):
