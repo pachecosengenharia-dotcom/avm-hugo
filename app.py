@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Anti-Outliers & Parser Avançado", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Laudo NBR Definitivo", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # AVALIAÇÃO NORMATIVA DE FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
@@ -181,7 +181,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# PARSER AVANÇADO DE ENDEREÇO DA CERTIDÃO
+# PARSER ESTRITO DE ENDEREÇO DA CERTIDÃO
 # =====================================================================
 def extrair_variaveis_de_documento(arquivo_pdf):
     texto_extraido = ""
@@ -214,8 +214,8 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     variaveis_encontradas = {}
     trecho_limpo = texto_extraido.replace('\n', ' ')
 
-    # Extração detalhada de componentes do endereço
-    rua_match = re.search(r'(Rua\s+[^,\.]+?|Av\.[^,\.]+?|Alameda\s+[^,\.]+?|Logradouro[:\s]+[^,\.]+)', trecho_limpo, re.IGNORECASE)
+    # Extração estrita apenas dos elementos solicitados: Rua, Quadra, Lote, Número, Bairro, Condomínio e Município
+    rua_match = re.search(r'(Rua\s+[^,\.]+?|Av\.[^,\.]+?|Alameda\s+[^,\.]+?)', trecho_limpo, re.IGNORECASE)
     quadra_match = re.search(r'Q[uãa]d?r?a\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     lote_match = re.search(r'Lote\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     num_match = re.search(r'(?:N[ºúo]\.?|Número)[:\s]*([0-9]+)', trecho_limpo, re.IGNORECASE)
@@ -223,18 +223,18 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     condo_match = re.search(r'(?:Condom[íi]nio|Edif[íi]cio)[:\s]+"([^"]+)"', trecho_limpo, re.IGNORECASE)
     if not condo_match:
         condo_match = re.search(r'Condom[íi]nio[:\s]+([A-Za-z0-9\s]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
-    mun_match = re.search(r'(?:Munic[íi]pio|Cidade)[:\s]+([A-Za-z\u00C0-\u00FF\s]+?)(?=\s*[,./-]|$)', trecho_limpo, re.IGNORECASE)
+    municipio_match = re.search(r'(?:Munic[íi]pio|Cidade)[:\s]+([A-Za-z\u00C0-\u00FF\s]+?)(?=\s*[,./-]|$)', trecho_limpo, re.IGNORECASE)
 
-    rua = rua_match.group(1).strip() if rua_match else "Rua não identificada"
+    rua = rua_match.group(1).strip() if rua_match else ""
     qdr = f"QD {quadra_match.group(1).strip()}" if quadra_match else ""
     lt = f"LT {lote_match.group(1).strip()}" if lote_match else ""
     num = f"Nº {num_match.group(1).strip()}" if num_match else ""
     bairro = f"Bairro {bairro_match.group(1).strip()}" if bairro_match else ""
     condo = f"Condomínio {condo_match.group(1).strip()}" if condo_match else ""
-    municipio = municipio_match.group(1).strip() if mun_match else ""
+    municipio = municipio_match.group(1).strip() if municipio_match else ""
 
     partes_endereco = [p for p in [rua, num, qdr, lt, condo, bairro, municipio] if p]
-    endereco_completo = ", ".join(partes_endereco) if partes_endereco else "Endereço não parametrizado na certidão"
+    endereco_completo = ", ".join(partes_endereco) if partes_endereco else ""
 
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if not match_privativa:
@@ -305,7 +305,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Filtro Anti-Outliers & Auto-Endereço")
+st.title("🏢 Painel de Crédito e Controle AVM - Laudo NBR Definitivo")
 st.markdown("Plataforma agnóstica para Modelagem Automatizada de Imóveis com Laudo Técnico Normativo.")
 st.divider()
 
@@ -365,7 +365,7 @@ with aba_avm:
         dados_extraidos, end_ext, _ = extrair_variaveis_de_documento(documento_enviado)
         if dados_extraidos:
             st.session_state.dados_extraidos_ia = dados_extraidos
-            if end_ext and len(end_ext) > 10:
+            if end_ext and len(end_ext) > 5:
                 st.session_state.endereco_certidao = end_ext
             for k, v in dados_extraidos.items():
                 st.session_state.valores_manuais[k] = v
@@ -502,7 +502,6 @@ with aba_avm:
             if st.button("🚀 Executar Modelo de Precificação Híbrido"):
                 df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
                 
-                # APLICAÇÃO DO FILTRO ANTI-OUTLIERS (IQR)
                 df_modelo = filtrar_outliers(df_modelo, variavel_alvo)
                 
                 if len(df_modelo) < 3:
