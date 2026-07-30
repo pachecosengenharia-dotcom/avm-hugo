@@ -72,7 +72,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     texto_extraido = ""
     bytes_arquivo = arquivo_pdf.read()
     
-    # 1. Tenta extração via texto nativo do PDF
     try:
         with pdfplumber.open(io.BytesIO(bytes_arquivo)) as pdf:
             for pagina in pdf.pages:
@@ -82,7 +81,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     except Exception:
         pass
 
-    # 2. Se o texto nativo estiver vazio, usa OCR (Pytesseract)
     if not texto_extraido.strip():
         try:
             imagens = convert_from_bytes(bytes_arquivo)
@@ -96,15 +94,10 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         return None, "Não foi possível extrair texto legível deste documento."
 
     variaveis_encontradas = {}
-    
-    # Padroniza substituições comuns de OCR (ex: vírgulas e pontos trocados)
-    texto_limpo = texto_extraido.replace('\n', ' ' )
+    texto_limpo = texto_extraido.replace('\n', ' ')
 
-    # 1. Captura Área Privativa Coberta (ex: "82,33 metros quadrados de área privativa")
+    # 1. Área Privativa Coberta (ex: "82,33 metros quadrados de área privativa")
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', texto_limpo, re.IGNORECASE)
-    if not match_privativa:
-        match_privativa = re.search(r'área\s*privativa.*?([\d.,]+)\s*m²', texto_limpo, re.IGNORECASE)
-    
     if match_privativa:
         val = match_privativa.group(1).replace('.', '').replace(',', '.')
         try:
@@ -112,23 +105,54 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 2. Captura Área do Terreno (ex: "com a área de 394,50 metros quadrados" ou "área total de 197,25")
-    match_terreno = re.search(r'loteamento.*?área\s*de\s*([\d.,]+)\s*metros\s*quadrados', texto_limpo, re.IGNORECASE)
-    if not match_terreno:
-        match_terreno = re.search(r'terreno.*?([\d.,]+)\s*m²', texto_limpo, re.IGNORECASE)
+    # 2. Área do Terreno Relativa à Fração (ex: "com área total de 197,25 metros quadrados" do imóvel geminado)
+    match_terreno_fracao = re.search(r'com\s*área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados.*?fração', texto_limpo, re.IGNORECASE)
+    if not match_terreno_fracao:
+        match_terreno_fracao = re.search(r'área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados', texto_limpo, re.IGNORECASE)
     
-    if match_terreno:
-        val = match_terreno.group(1).replace('.', '').replace(',', '.')
+    if match_terreno_fracao:
+        val = match_terreno_fracao.group(1).replace('.', '').replace(',', '.')
         try:
             variaveis_encontradas['area_terreno'] = float(val)
         except ValueError:
             pass
 
-    # 3. Captura Vagas de Garagem (ex: "01 (uma) garagem coberta" ou "vagas de garagem")
+    # 3. Quartos (ex: "02 (dois) quartos")
+    match_quartos = re.search(r'(\d+)\s*\([^)]+\)\s*quartos', texto_limpo, re.IGNORECASE)
+    if not match_quartos:
+        match_quartos = re.search(r'(\d+)\s*quarto[s]?', texto_limpo, re.IGNORECASE)
+    if match_quartos:
+        try:
+            variaveis_encontradas['quartos'] = int(match_quartos.group(1))
+        except ValueError:
+            pass
+
+    # 4. Suítes (ex: "sendo 01 (uma) suite" ou "01 suite")
+    match_suites = re.search(r'sendo\s*(\d+)\s*\([^)]+\)\s*suíte', texto_limpo, re.IGNORECASE)
+    if not match_suites:
+        match_suites = re.search(r'(\d+)\s*suíte[s]?', texto_limpo, re.IGNORECASE)
+    if match_suites:
+        try:
+            variaveis_encontradas['suites'] = int(match_suites.group(1))
+        except ValueError:
+            pass
+    else:
+        variaveis_encontradas['suites'] = 0
+
+    # 5. Banheiros / Banho (ex: "01 (um) banho")
+    match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*(?:banho|banheiro)', texto_limpo, re.IGNORECASE)
+    if not match_banheiros:
+        match_banheiros = re.search(r'(\d+)\s*(?:banho|banheiro)[s]?', texto_limpo, re.IGNORECASE)
+    if match_banheiros:
+        try:
+            variaveis_encontradas['banheiros'] = int(match_banheiros.group(1))
+        except ValueError:
+            pass
+
+    # 6. Vagas (ex: "01 (uma) garagem coberta")
     match_vagas = re.search(r'(\d+)\s*\([^)]+\)\s*garagem', texto_limpo, re.IGNORECASE)
     if not match_vagas:
         match_vagas = re.search(r'(\d+)\s*vaga[s]?', texto_limpo, re.IGNORECASE)
-        
     if match_vagas:
         try:
             variaveis_encontradas['vagas_garagem'] = int(match_vagas.group(1))
