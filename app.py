@@ -12,12 +12,12 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sklearn.ensemble import RandomForestRegressor
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido Final Sincronizado", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Multi-Tipologia", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, variavel_alvo, valores, r2, n_amostras, status_juridico, score_juridico):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, valores, r2, n_amostras, status_juridico, score_juridico):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     story = []
@@ -28,8 +28,9 @@ def gerar_laudo_pdf_ia(tenant, variavel_alvo, valores, r2, n_amostras, status_ju
 
     story.append(Paragraph(f"LAUDO CORE AVM - INTELIGÊNCIA ARTIFICIAL", title_style))
     story.append(Paragraph(f"<b>Instituição Solicitante:</b> {tenant}", text_style))
+    story.append(Paragraph(f"<b>Tipologia do Imóvel:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Variável Alvo Precificada:</b> {variavel_alvo.upper()}", text_style))
-    story.append(Paragraph("<b>Metodologia Core:</b> Random Forest Regressor | NBR 14653", text_style))
+    story.append(Paragraph("<b>Metodologia Core:</b> Random Forest Regressor | NBR 14653-2", text_style))
     story.append(Spacer(1, 10))
 
     story.append(Paragraph("1. Resultados do Motor de Machine Learning", subtitle_style))
@@ -99,10 +100,10 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     variaveis_encontradas = {}
     trecho_limpo = texto_extraido.replace('\n', ' ')
 
-    # 1. Área Privativa Coberta (Busca exata considerando a estrutura da certidão)
+    # Área Privativa / Construída
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if not match_privativa:
-        match_privativa = re.search(r'área\s*privativa\s*(?:de\s*)?([\d.,]+)', trecho_limpo, re.IGNORECASE)
+        match_privativa = re.search(r'área\s*(?:privativa|construída)\s*(?:de\s*)?([\d.,]+)', trecho_limpo, re.IGNORECASE)
     if match_privativa:
         val = match_privativa.group(1).replace('.', '').replace(',', '.').replace('!', '1')
         try:
@@ -110,22 +111,12 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # Fallback específico para o padrão exato do documento do usuário (ex: 82,33)
-    if 'area_privativa' not in variaveis_encontradas:
-        match_alt_priv = re.search(r'(\d{2}[,.]\d{2})\s*metros\s*quadrados.*?privativa', trecho_limpo, re.IGNORECASE)
-        if match_alt_priv:
-            try:
-                variaveis_encontradas['area_privativa'] = float(match_alt_priv.group(1).replace('.', '').replace(',', '.'))
-            except ValueError:
-                pass
-
-    # 2. Área do Terreno Relativa à Fração
-    match_terreno_fracao = re.search(r'com\s*área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados.*?fração', trecho_limpo, re.IGNORECASE)
-    if not match_terreno_fracao:
-        match_terreno_fracao = re.search(r'área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados', trecho_limpo, re.IGNORECASE)
-    
-    if match_terreno_fracao:
-        val = match_terreno_fracao.group(1).replace('.', '').replace(',', '.').replace('!', '1')
+    # Área do Terreno
+    match_terreno = re.search(r'com\s*área\s*total\s*de\s*([\d.,]+)\s*metros\s*quadrados.*?fração', trecho_limpo, re.IGNORECASE)
+    if not match_terreno:
+        match_terreno = re.search(r'área\s*(?:total|do\s*terreno)\s*(?:de\s*)?([\d.,]+)', trecho_limpo, re.IGNORECASE)
+    if match_terreno:
+        val = match_terreno.group(1).replace('.', '').replace(',', '.').replace('!', '1')
         try:
             variaveis_encontradas['area_terreno'] = float(val)
         except ValueError:
@@ -134,7 +125,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     match_divisao = re.search(r'divisão\s*interna[:\s]*(.*?)(?:edificada|lote|$)', trecho_limpo, re.IGNORECASE)
     trecho_divisao = match_divisao.group(1) if match_divisao else trecho_limpo
 
-    # 3. Quartos
+    # Quartos
     match_quartos = re.search(r'(\d+)\s*\([^)]+\)\s*quartos', trecho_divisao, re.IGNORECASE)
     if not match_quartos:
         match_quartos = re.search(r'(\d+)\s*quarto[s]?', trecho_divisao, re.IGNORECASE)
@@ -144,7 +135,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    # 4. Suítes (Busca rigorosa pelo termo "sendo" seguido de 1 suíte)
+    # Suítes
     match_suites = re.search(r'sendo\s*(?:0?(\d+)|um|dois)', trecho_divisao, re.IGNORECASE)
     val_suites = 1 
     if match_suites and match_suites.group(1):
@@ -154,24 +145,22 @@ def extrair_variaveis_de_documento(arquivo_pdf):
             pass
     elif "sendo um" in trecho_divisao.lower() or "sendo 01" in trecho_divisao.lower():
         val_suites = 1
-        
     variaveis_encontradas['suites'] = val_suites
     variaveis_encontradas['suite'] = val_suites
 
-    # 5. Banheiros
+    # Banheiros
     match_banheiros = re.search(r'(\d+)\s*\([^)]+\)\s*banho', trecho_divisao, re.IGNORECASE)
     if not match_banheiros:
         match_banheiros = re.search(r'(\d+)\s*banho', trecho_divisao, re.IGNORECASE)
-        
-    val_banheiros = 1
     if match_banheiros:
         try:
-            val_banheiros = int(match_banheiros.group(1))
+            variaveis_encontradas['banheiros'] = int(match_banheiros.group(1))
         except ValueError:
             pass
-    variaveis_encontradas['banheiros'] = val_banheiros
+    else:
+        variaveis_encontradas['banheiros'] = 1
 
-    # 6. Vagas
+    # Vagas
     match_vagas = re.search(r'(\d+)\s*\([^)]+\)\s*garagem', trecho_limpo, re.IGNORECASE)
     if not match_vagas:
         match_vagas = re.search(r'(\d+)\s*vaga[s]?', trecho_limpo, re.IGNORECASE)
@@ -184,16 +173,29 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     return variaveis_encontradas, trecho_limpo[:600]
 
 # =====================================================================
-# INTERFACE PRINCIPAL DO PAINEL SAAS
+# INTERFACE PRINCIPAL DO PAINEL SAAS (SIDEBAR IDÊNTICA AO SOLICITADO)
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Híbrido Final Sincronizado")
-st.markdown("Plataforma integrada para carga de mercado, leitura documental por IA e preenchimento paramétrico.")
+st.title("🏢 Painel de Crédito e Controle AVM - Multi-Tipologia")
+st.markdown("Plataforma agnóstica para Modelagem Automatizada de Imóveis (Residencial e Comercial).")
 st.divider()
 
-st.sidebar.header("🔑 Assinatura e Faturamento")
+st.sidebar.markdown("🔑 **Identificação do Contratante**")
 tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
 plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
-st.sidebar.markdown(f"**Plano Contratado:** {'🟢 ENTERPRISE' if plano_assinatura == 'ENTERPRISE' else '🟡 STANDARD'}")
+
+st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Conformidade Regulatória:**")
+st.sidebar.markdown("- ✅ BACEN CMN 4.910")
+st.sidebar.markdown("- ✅ ABNT NBR 14653-2")
+
+# SELETOR DE TIPOLOGIA IMOBILIÁRIA (4 Tipologias)
+st.sidebar.markdown("---")
+st.sidebar.markdown("🏗️ **Tipologia do Imóvel**")
+tipologia_imovel = st.sidebar.selectbox(
+    "Selecione a Tipologia:", 
+    ["Apartamento", "Casa", "Lote", "Galpão Comercial"]
+)
 
 aba_avm, aba_juridico = st.tabs([
     "📊 1. Carga, Leitura de Certidão & AVM Híbrido", 
@@ -210,24 +212,27 @@ if 'valores_manuais' not in st.session_state:
     st.session_state.valores_manuais = {}
 
 with aba_avm:
-    st.subheader("📁 1. Entradas de Dados: Planilha de Mercado & Certidão do Imóvel")
+    st.subheader(f"📁 1. Entradas de Dados: Planilha de Mercado & Certidão ({tipologia_imovel})")
     
     col_up1, col_up2 = st.columns(2)
     with col_up1:
-        arquivo_planilha = st.file_uploader("Envie a Base Comparativa (.xlsx ou .csv)", type=["xlsx", "csv"])
+        arquivo_planilha = st.file_uploader(f"Base Comparativa para {tipologia_imovel} (.xlsx ou .csv)", type=["xlsx", "csv"])
+        if arquivo_planilha is not None:
+            st.markdown("🟢 **Planilha Vinculada com Sucesso!**")
     with col_up2:
-        documento_enviado = st.file_uploader("Envie a Certidão / Matrícula em PDF", type=["pdf"])
+        documento_enviado = st.file_uploader("Certidão de Ônus / Matrícula em PDF", type=["pdf"])
+        if documento_enviado is not None:
+            st.markdown("🟢 **Certidão de Ônus Anexada!**")
 
     if documento_enviado is not None:
         dados_extraidos, _ = extrair_variaveis_de_documento(documento_enviado)
         if dados_extraidos:
             st.session_state.dados_extraidos_ia = dados_extraidos
-            # Atualiza e injeta os valores extraídos diretamente nos inputs de sessão para sobrescrever os antigos
             for k, v in dados_extraidos.items():
                 st.session_state.valores_manuais[k] = v
                 if f"input_safe_{k}" in st.session_state:
                     st.session_state[f"input_safe_{k}"] = v
-            st.success(f"✨ Certidão lida e sincronizada com sucesso! Variáveis: {list(dados_extraidos.keys())}")
+            st.success(f"✨ Certidão lida e sincronizada com sucesso para {tipologia_imovel}!")
 
     df_global = None
     if arquivo_planilha is not None:
@@ -243,27 +248,55 @@ with aba_avm:
                 .replace("ã", "a").replace("õ", "o").replace("ç", "c").replace("â", "a").replace("ê", "e")
                 for c in df_global.columns
             ]
-            st.success(f"✅ Base de mercado processada com sucesso! {len(df_global)} linhas carregadas.")
+            st.success(f"✅ Base de mercado processada! {len(df_global)} amostras carregadas.")
         except Exception as e:
             st.error(f"Erro ao ler arquivo: {e}")
     else:
-        data_padrao = {
-            'valor_total_declarado': [450000, 480000, 510000, 750000, 820000, 350000],
-            'area_privativa': [75.0, 78.0, 80.0, 85.0, 92.0, 60.0],
-            'area_terreno': [200.0, 220.0, 250.0, 360.0, 400.0, 0.0],
-            'quartos': [2, 2, 3, 3, 3, 1],
-            'suites': [1, 1, 1, 2, 2, 0],
-            'banheiros': [1, 1, 2, 2, 2, 1],
-            'vagas_garagem': [1, 2, 2, 2, 3, 1],
-            'indice_fiscal': [1200.0, 1250.0, 1300.0, 3200.0, 3300.0, 1500.0],
-            'estado_conservacao': [3, 4, 3, 5, 4, 3],
-            'padrao_de_acabamento': [2, 3, 2, 4, 3, 2],
-            'idade_aparente': [5, 10, 2, 15, 8, 3],
-            'evento': [1, 1, 2, 1, 2, 1],
-            'data_do_evento': [2024, 2024, 2025, 2025, 2026, 2026]
-        }
+        # Base demonstrativa adaptada à tipologia selecionada
+        if tipologia_imovel == "Lote":
+            data_padrao = {
+                'valor_total_declarado': [200000, 220000, 250000, 300000, 350000, 180000],
+                'area_terreno': [300.0, 350.0, 400.0, 450.0, 500.0, 250.0],
+                'indice_fiscal': [1000.0, 1100.0, 1200.0, 1500.0, 1600.0, 900.0],
+                'estado_de_conservacao': [3, 4, 3, 5, 4, 3],
+                'padrao_de_acabamento': [2, 2, 3, 3, 3, 2],
+                'idade_aparente': [0, 0, 0, 0, 0, 0],
+                'evento': [1, 1, 2, 1, 2, 1],
+                'data_do_evento': [2024, 2024, 2025, 2025, 2026, 2026]
+            }
+        elif tipologia_imovel == "Galpão Comercial":
+            data_padrao = {
+                'valor_total_declarado': [1200000, 1500000, 1800000, 2200000, 2500000, 1000000],
+                'area_privativa': [600.0, 750.0, 900.0, 1100.0, 1300.0, 500.0],
+                'area_terreno': [1000.0, 1200.0, 1500.0, 1800.0, 2000.0, 800.0],
+                'pe_direito': [6.0, 7.0, 8.0, 8.5, 9.0, 6.0],
+                'vagas_garagem': [5, 8, 10, 12, 15, 4],
+                'indice_fiscal': [3500.0, 4000.0, 4500.0, 5000.0, 5500.0, 3000.0],
+                'estado_de_conservacao': [4, 4, 3, 5, 4, 3],
+                'padrao_de_acabamento': [3, 3, 4, 4, 5, 2],
+                'idade_aparente': [5, 8, 3, 12, 6, 10],
+                'evento': [1, 1, 2, 1, 2, 1],
+                'data_do_evento': [2024, 2024, 2025, 2025, 2026, 2026]
+            }
+        else: # Apartamento ou Casa
+            data_padrao = {
+                'valor_total_declarado': [450000, 480000, 510000, 750000, 820000, 350000],
+                'area_privativa': [75.0, 78.0, 80.0, 85.0, 92.0, 60.0],
+                'area_terreno': [200.0, 220.0, 250.0, 360.0, 400.0, 0.0],
+                'quartos': [2, 2, 3, 3, 3, 1],
+                'suites': [1, 1, 1, 2, 2, 0],
+                'banheiros': [1, 1, 2, 2, 2, 1],
+                'vagas_garagem': [1, 2, 2, 2, 3, 1],
+                'indice_fiscal': [1200.0, 1250.0, 1300.0, 3200.0, 3300.0, 1500.0],
+                'estado_de_conservacao': [3, 4, 3, 5, 4, 3],
+                'padrao_de_acabamento': [2, 3, 2, 4, 3, 2],
+                'idade_aparente': [5, 10, 2, 15, 8, 3],
+                'evento': [1, 1, 2, 1, 2, 1],
+                'data_do_evento': [2024, 2024, 2025, 2025, 2026, 2026]
+            }
+            
         df_global = pd.DataFrame(data_padrao)
-        st.info("ℹ️ Utilizando base de dados padrão demonstrativa.")
+        st.info(f"ℹ️ Utilizando base padrão demonstrativa para a tipologia: **{tipologia_imovel}**.")
 
     st.markdown("---")
     st.subheader("🤖 2. Configuração e Seleção de Variáveis Independentes")
@@ -283,13 +316,13 @@ with aba_avm:
             )
 
         if features_selecionadas:
-            st.markdown("##### 📝 3. Atributos do Imóvel Avaliendo (Auto-preenchidos pela Certidão ou Ajustados Manualmente)")
+            st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliendo ({tipologia_imovel})")
             
             dados_ia = st.session_state.get('dados_extraidos_ia', {})
             campos_inteiros = [
                 'quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem',
                 'estado_de_conservacao', 'conservacao', 'padrao_de_acabamento', 'acabamento', 
-                'idade_aparente', 'idade', 'evento', 'data_do_evento', 'ano'
+                'idade_aparente', 'idade', 'evento', 'data_do_evento', 'ano', 'pe_direito'
             ]
             
             valores_usuario = {}
@@ -299,7 +332,6 @@ with aba_avm:
                 with cols_inputs[i % len(cols_inputs)]:
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     
-                    # Define o valor inicial priorizando os dados sincronizados da certidão
                     if feat in st.session_state.valores_manuais:
                         val_inicial = st.session_state.valores_manuais[feat]
                     else:
@@ -316,7 +348,7 @@ with aba_avm:
                             value=val_inicial,
                             step=1, 
                             format="%d",
-                            key=f"input_safe_{feat}"
+                            key=f"input_safe_{tipologia_imovel}_{feat}"
                         )
                     else:
                         val_inicial = float(val_inicial)
@@ -324,7 +356,7 @@ with aba_avm:
                             f"{feat.replace('_', ' ').title()}", 
                             value=val_inicial,
                             format="%.2f",
-                            key=f"input_safe_{feat}"
+                            key=f"input_safe_{tipologia_imovel}_{feat}"
                         )
                     
                     st.session_state.valores_manuais[feat] = valores_usuario[feat]
@@ -357,7 +389,7 @@ with aba_avm:
                     st.caption(f"Acurácia (R²): {r2} | Amostras Saneadas: {len(df_modelo)}")
 
                     pdf_bytes = gerar_laudo_pdf_ia(
-                        tenant_selecionado, variavel_alvo, 
+                        tenant_selecionado, tipologia_imovel, variavel_alvo, 
                         {'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max},
                         r2, len(df_modelo),
                         st.session_state.status_juridico_global,
@@ -366,7 +398,7 @@ with aba_avm:
                     st.download_button(
                         "📄 Baixar Laudo AVM em PDF",
                         data=pdf_bytes,
-                        file_name="laudo_avm_hibrido.pdf",
+                        file_name=f"laudo_avm_{tipologia_imovel.lower().replace(' ', '_')}.pdf",
                         mime="application/pdf",
                     )
         else:
