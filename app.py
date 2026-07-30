@@ -176,7 +176,8 @@ with aba_avm:
     if arquivo_planilha is not None:
         try:
             if arquivo_planilha.name.endswith('.csv'):
-                df_global = pd.read_csv(arquivo_planilha)
+                # Adicionado encoding='latin1' para suportar acentos do Windows
+                df_global = pd.read_csv(arquivo_planilha, encoding='latin1')
             else:
                 df_global = pd.read_excel(arquivo_planilha)
             
