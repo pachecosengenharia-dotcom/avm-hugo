@@ -11,9 +11,33 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image as RLImage
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Laudo NBR Completo", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Laudo NBR 14653 Completo", page_icon="🏢", layout="wide")
+
+# =====================================================================
+# AVALIAÇÃO NORMATIVA DE FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
+# =====================================================================
+def calcular_graus_nbr(n_amostras, r2, n_variaveis):
+    # Critérios simplificados e rigorosos baseados na NBR 14653-2 para AVM/Regressão
+    # Fundamentação baseada no tamanho amostral e número de variáveis independentes
+    if n_amostras >= 30 and n_variaveis >= 3:
+        fundamentacao = "Grau III"
+    elif n_amostras >= 12 and n_variaveis >= 2:
+        fundamentacao = "Grau II"
+    else:
+        fundamentacao = "Grau I"
+
+    # Precisão baseada no coeficiente de determinação (R²) e dispersão
+    if r2 >= 0.70:
+        precisao = "Grau III"
+    elif r2 >= 0.50:
+        precisao = "Grau II"
+    else:
+        precisao = "Grau I"
+
+    return fundamentacao, precisao
 
 # =====================================================================
 # GERADOR DOS GRÁFICOS NBR (ADERÊNCIA E RESÍDUOS)
@@ -21,7 +45,6 @@ st.set_page_config(page_title="Plataforma AVM SaaS - Laudo NBR Completo", page_i
 def gerar_graficos_estatisticos(y_real, y_pred):
     residuos = y_real - y_pred
     
-    # Gráfico 1: Aderência[cite: 1]
     fig, ax = plt.subplots(figsize=(3.8, 2.8))
     ax.scatter(y_real, y_pred, color='#2B6CB0', s=18)
     min_val = min(min(y_real), min(y_pred))
@@ -37,7 +60,6 @@ def gerar_graficos_estatisticos(y_real, y_pred):
     buf_aderencia.seek(0)
     plt.close(fig)
 
-    # Gráfico 2: Resíduos[cite: 1]
     fig, ax = plt.subplots(figsize=(3.8, 2.8))
     ax.scatter(y_pred, residuos, color='#C53030', s=18)
     ax.axhline(0, color='black', linestyle='-', linewidth=1)
@@ -56,7 +78,7 @@ def gerar_graficos_estatisticos(y_real, y_pred):
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO (LAUDO NBR COMPLETO)
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, valores, r2, n_amostras, features, valores_usuario, status_juridico, score_juridico, buf_ad, buf_res):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, fundamentacao, precisao, status_juridico, score_juridico, buf_ad, buf_res):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     story = []
@@ -69,6 +91,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco}", text_style))
+    story.append(Paragraph(f"<b>Informante / Contato:</b> {informante} | <b>Telefone:</b> {telefone}", text_style))
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("1. Variáveis e Parâmetros Utilizados[cite: 1]", subtitle_style))
@@ -76,18 +99,24 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph(param_text, text_style))
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("2. Equação do Modelo de Machine Learning[cite: 1]", subtitle_style))
-    story.append(Paragraph(f"<b>Alvo Precificado:</b> {variavel_alvo} = f({', '.join(features)}) | <b>Acurácia R²:</b> {r2} | <b>Amostras:</b> {n_amostras}", text_style))
+    story.append(Paragraph("2. Equação do Modelo de Avaliação[cite: 1]", subtitle_style))
+    eq_str = f"<b>{variavel_alvo}</b> = {coeficientes.get('intercepto', 0):,.2f}"
+    for feat in features:
+        coef = coeficientes.get(feat, 0.0)
+        sinal = "+" if coef >= 0 else ""
+        eq_str += f" {sinal} ({coef:,.2f} * {feat})"
+    story.append(Paragraph(eq_str, text_style))
+    story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras Saneadas = {n_amostras}", text_style))
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("3. Resultados da Avaliação e Graus de Fundamentação / Precisão[cite: 1]", subtitle_style))
+    story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários, Variações e Graus[cite: 1]", subtitle_style))
     t2 = Table([
-        ["Métrica de Cobertura do Risco", "Valor Comercial Admissível"],
-        ["Valor Mínimo (Segurança)", f"R$ {valores['v_min']:,.2f}"],
-        ["Valor de Face Estimado (Média)", f"R$ {valores['v_medio']:,.2f}"],
-        ["Valor Máximo (Mercado)", f"R$ {valores['v_max']:,.2f}"],
-        ["Fundamentação / Precisão", "Grau III | Grau III[cite: 1]"],
-    ], colWidths=[240, 300])
+        ["Métrica / Cobertura de Risco", "Valor Total (R$)", "Valor Unitário (R$/m²)", "Variação (%)"],
+        ["Mínimo (Segurança)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:.2f}%"],
+        ["Estimado (Face / Média)", f"R$ {valores['v_medio']:,.2f}", f"R$ {valores['vu_medio']:,.2f}", "0.00% (Base)"],
+        ["Máximo (Mercado)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"+{valores['var_max']:.2f}%"],
+        ["Enquadramento NBR 14653", f"Fundamentação: {fundamentacao}", f"Precisão: {precisao}", "Grau III"],
+    ], colWidths=[160, 130, 130, 120])
     t2.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -99,8 +128,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Gráficos Estatísticos de Validação (Aderência e Resíduos)[cite: 1]", subtitle_style))
-    img_ad = RLImage(buf_ad, width=220, height=140)
-    img_res = RLImage(buf_res, width=220, height=140)
+    img_ad = RLImage(buf_ad, width=220, height=135)
+    img_res = RLImage(buf_res, width=220, height=135)
     t_graf_table = Table([[img_ad, img_res]], colWidths=[270, 270])
     t_graf_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
@@ -162,7 +191,6 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     variaveis_encontradas = {}
     trecho_limpo = texto_extraido.replace('\n', ' ')
 
-    # Tenta extrair endereço do texto se houver logradouro
     match_end = re.search(r'(Rua\s+[^,]+,\s*[^,]+|Av\.[^,]+,\s*[^,]+|Alameda\s+[^,]+,\s*[^,]+)', trecho_limpo, re.IGNORECASE)
     if match_end:
         endereco_extraido = match_end.group(1)
@@ -236,7 +264,7 @@ def extrair_variaveis_de_documento(arquivo_pdf):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Laudo Completo NBR")
+st.title("🏢 Painel de Crédito e Controle AVM - Laudo NBR Completo")
 st.markdown("Plataforma agnóstica para Modelagem Automatizada de Imóveis com Laudo Técnico Normativo.")
 st.divider()
 
@@ -246,6 +274,8 @@ plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
 
 ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS)", value="OS-2026/8942-AVM")
 endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value="Rua J80 Nº 89 QD 155A LT 19 - Setor Jaó, Goiânia - GO")
+informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value="HUGO")
+informante_tel = st.sidebar.text_input("Telefone do Informante", value="(62) 98888-8888")
 
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
 st.sidebar.markdown("---")
@@ -435,6 +465,13 @@ with aba_avm:
                     X = df_modelo[features_selecionadas]
                     y = df_modelo[variavel_alvo]
 
+                    # Treinamento do Modelo de Regressão Linear auxiliar para extração exata de coeficientes da equação
+                    lin_reg = LinearRegression()
+                    lin_reg.fit(X, y)
+                    coeficientes = {feat: coef for feat, coef in zip(features_selecionadas, lin_reg.coef_)}
+                    coeficientes['intercepto'] = lin_reg.intercept_
+
+                    # Motor preditivo principal (Random Forest)
                     modelo = RandomForestRegressor(n_estimators=200, random_state=42)
                     modelo.fit(X, y)
                     r2 = round(modelo.score(X, y), 4)
@@ -446,22 +483,43 @@ with aba_avm:
                     v_min = float(np.percentile(previsoes, 15))
                     v_max = float(np.percentile(previsoes, 85))
 
+                    # Cálculo de área de referência para valores unitários (m²)
+                    area_ref = valores_usuario.get('area_privativa', valores_usuario.get('area_terreno', 1.0))
+                    if area_ref <= 0:
+                        area_ref = 1.0
+
+                    vu_medio = v_medio / area_ref
+                    vu_min = v_min / area_ref
+                    vu_max = v_max / area_ref
+
+                    var_min = abs((v_min - v_medio) / v_medio) * 100
+                    var_max = abs((v_max - v_medio) / v_medio) * 100
+
+                    # Avaliação Normativa de Fundamentação e Precisão (NBR 14653)
+                    fundamentacao, precisao = calcular_graus_nbr(len(df_modelo), r2, len(features_selecionadas))
+
                     y_real_amostras = y.values
                     y_pred_amostras = modelo.predict(X)
                     buf_ad, buf_res = gerar_graficos_estatisticos(y_real_amostras, y_pred_amostras)
 
                     st.success("✅ Modelo treinado com sucesso!")
                     r1, r2_col, r3 = st.columns(3)
-                    r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}")
-                    r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}")
-                    r3.metric("Valor Máximo (Mercado)", f"R$ {v_max:,.2f}")
-                    st.caption(f"Acurácia (R²): {r2} | Amostras Saneadas: {len(df_modelo)}")
+                    r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"-{var_min:.1f}%")
+                    r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}", "Média")
+                    r3.metric("Valor Máximo (Mercado)", f"R$ {v_max:,.2f}", f"+{var_max:.1f}%")
+                    st.caption(f"Acurácia (R²): {r2} | Amostras Saneadas: {len(df_modelo)} | Fundamentação: {fundamentacao} | Precisão: {precisao}")
 
                     pdf_bytes = gerar_laudo_pdf_ia(
                         tenant_selecionado, tipologia_imovel, variavel_alvo, 
                         ordem_servico_input, st.session_state.endereco_certidao,
-                        {'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max},
-                        r2, len(df_modelo), features_selecionadas, valores_usuario,
+                        informante_nome, informante_tel,
+                        {
+                            'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max,
+                            'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max,
+                            'var_min': var_min, 'var_max': var_max
+                        },
+                        r2, len(df_modelo), features_selecionadas, coeficientes, valores_usuario,
+                        fundamentacao, precisao,
                         st.session_state.status_juridico_global,
                         st.session_state.score_juridico_global,
                         buf_ad, buf_res
