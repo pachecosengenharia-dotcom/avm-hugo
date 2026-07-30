@@ -82,12 +82,13 @@ def extrair_variaveis_de_documento(arquivo_pdf):
     except Exception:
         pass
 
-    # 2. Se o texto nativo estiver vazio, usa OCR (Pytesseract) para ler imagens/PDFs escaneados
+    # 2. Se o texto nativo estiver vazio, usa OCR (Pytesseract) com o parâmetro 'lang' correto
     if not texto_extraido.strip():
         try:
             imagens = convert_from_bytes(bytes_arquivo)
             for img in imagens:
-                texto_ocr = pytesseract.image_to_string(img, language='por')
+                # CORREÇÃO: Utilizando 'lang=' em vez de 'language='
+                texto_ocr = pytesseract.image_to_string(img, lang='por')
                 texto_extraido += texto_ocr + "\n"
         except Exception as e:
             return None, f"Erro ao processar OCR no documento: {e}."
