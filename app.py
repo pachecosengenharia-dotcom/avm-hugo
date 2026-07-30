@@ -12,7 +12,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sklearn.ensemble import RandomForestRegressor
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Dinâmica & IA", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Híbrido (Auto + Manual)", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO
@@ -167,8 +167,8 @@ def extrair_variaveis_de_documento(arquivo_pdf):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Motor Dinâmico & IA")
-st.markdown("Plataforma agnóstica para precificação inteligente e extração documental.")
+st.title("🏢 Painel de Crédito e Controle AVM - Motor Híbrido (Auto + Manual)")
+st.markdown("Plataforma agnóstica para extração documental e inserção customizada de variáveis.")
 st.divider()
 
 st.sidebar.header("🔑 Assinatura e Faturamento")
@@ -177,7 +177,7 @@ plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
 st.sidebar.markdown(f"**Plano Contratado:** {'🟢 ENTERPRISE' if plano_assinatura == 'ENTERPRISE' else '🟡 STANDARD'}")
 
 aba_avm, aba_doc, aba_juridico = st.tabs([
-    "📊 1. Avaliação Dinâmica por IA", 
+    "📊 1. Avaliação e Variáveis Híbridas", 
     "📄 2. Leitura Automática de Documentos", 
     "📜 3. Análise Jurídica"
 ])
@@ -190,38 +190,37 @@ if 'dados_extraidos_ia' not in st.session_state:
     st.session_state.dados_extraidos_ia = {}
 
 # ---------------------------------------------------------------------
-# ABA 2: LEITURA AUTOMÁTICA DE DOCUMENTOS (Processada primeiro no fluxo)
+# ABA 2: LEITURA AUTOMÁTICA DE DOCUMENTOS
 # ---------------------------------------------------------------------
 with aba_doc:
     st.subheader("📄 Upload de Matrícula ou Certidão (Extração Automática)")
-    st.markdown("Envie o documento do imóvel em PDF para que o sistema extraia as variáveis físicas de forma automatizada.")
+    st.markdown("Envie o PDF da certidão. O sistema preencherá as variáveis físicas automaticamente e você poderá complementar as demais manualmente na Aba 1.")
     
     documento_enviado = st.file_uploader("Arquivo PDF da Matrícula", type=["pdf"])
 
     if documento_enviado is not None:
-        if st.button("🔍 Extrair Dados e Preencher Variáveis"):
+        if st.button("🔍 Extrair Dados e Sincronizar Variáveis"):
             with st.spinner("Lendo documento e aplicando OCR..."):
                 dados_extraidos, preview_texto = extrair_variaveis_de_documento(documento_enviado)
                 
                 if isinstance(preview_texto, str) and not dados_extraidos and "Erro" in preview_texto:
                     st.error(preview_texto)
                 else:
-                    st.success("✨ Processamento concluído!")
+                    st.success("✨ Processamento concluído com sucesso!")
                     st.json(dados_extraidos)
                     
                     if not dados_extraidos:
-                        st.warning("⚠️ O documento foi lido, mas nenhuma variável numérica padrão foi encontrada.")
-                        st.text(preview_texto)
+                        st.warning("⚠️ Nenhuma variável física padrão foi extraída automaticamente. Você poderá preencher tudo manualmente na Aba 1.")
                     else:
                         st.session_state.dados_extraidos_ia = dados_extraidos
-                        st.info("💡 Variáveis capturadas com sucesso! Vá para a Aba 1 ('Avaliação Dinâmica') para rodar a precificação.")
+                        st.info("💡 Variáveis sincronizadas! Vá para a Aba 1 ('Avaliação e Variáveis Híbridas') para conferir, preencher os campos manuais (como índice fiscal, estado de conservação, etc.) e rodar o modelo.")
 
 # ---------------------------------------------------------------------
-# ABA 1: AVALIAÇÃO DINÂMICA (PLANILHA UNIVERSAL)
+# ABA 1: AVALIAÇÃO E VARIÁVEIS HÍBRIDAS (AUTO + MANUAL)
 # ---------------------------------------------------------------------
 with aba_avm:
-    st.subheader("📁 Upload de Planilha de Mercado (CSV ou Excel)")
-    arquivo_planilha = st.file_uploader("Envie sua base de dados comparativa", type=["xlsx", "csv"])
+    st.subheader("📁 Upload de Planilha de Mercado (Base Comparativa)")
+    arquivo_planilha = st.file_uploader("Envie sua base de dados do mercado (.xlsx ou .csv)", type=["xlsx", "csv"])
 
     df_global = None
     if arquivo_planilha is not None:
@@ -241,10 +240,12 @@ with aba_avm:
             'quartos': [2, 2, 3, 3, 3, 1],
             'suites': [1, 1, 1, 2, 2, 0],
             'banheiros': [1, 1, 2, 2, 2, 1],
-            'vagas_garagem': [1, 2, 2, 2, 3, 1]
+            'vagas_garagem': [1, 2, 2, 2, 3, 1],
+            'indice_fiscal': [1200.0, 1250.0, 1300.0, 3200.0, 3300.0, 1500.0],
+            'estado_conservacao': [3.0, 4.0, 3.0, 5.0, 4.0, 3.0]
         }
         df_global = pd.DataFrame(data_padrao)
-        st.info("ℹ️ Utilizando base de dados padrão demonstrativa.")
+        st.info("ℹ️ Utilizando base de dados padrão demonstrativa contendo variáveis automáticas e manuais.")
 
     st.markdown("---")
     st.subheader("🤖 Configuração e Seleção Dinâmica de Variáveis")
@@ -258,13 +259,13 @@ with aba_avm:
         with c2:
             features_disponiveis = [c for c in colunas_numericas if c != variavel_alvo]
             features_selecionadas = st.multiselect(
-                "Escolha as Variáveis Independentes (Features):",
+                "Escolha as Variáveis Independentes do Modelo (Auto + Manuais):",
                 options=features_disponiveis,
-                default=features_disponiveis[:min(4, len(features_disponiveis))]
+                default=features_disponiveis[:min(5, len(features_disponiveis))]
             )
 
         if features_selecionadas:
-            st.markdown("##### 📝 Inserir Atributos do Imóvel Avaliendo")
+            st.markdown("##### 📝 Atributos do Imóvel Avaliendo (Preenchimento Automático via Certidão + Ajuste Manual)")
             
             dados_ia = st.session_state.get('dados_extraidos_ia', {})
             campos_inteiros = ['quartos', 'suites', 'banheiros', 'vagas', 'vagas_garagem', 'garagem']
@@ -273,7 +274,7 @@ with aba_avm:
             cols_inputs = st.columns(len(features_selecionadas))
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
-                    # Puxa o valor extraído da IA se existir, senão usa a média da coluna
+                    # Prioriza o dado extraído da certidão (se houver), senão usa a média da base
                     sugestao = dados_ia.get(feat, float(df_global[feat].mean()))
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     
@@ -292,7 +293,7 @@ with aba_avm:
                             key=f"input_{feat}"
                         )
 
-            if st.button("🚀 Executar Modelo de Precificação por IA"):
+            if st.button("🚀 Executar Modelo de Precificação Híbrido"):
                 df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
                 
                 if len(df_modelo) < 3:
@@ -329,7 +330,7 @@ with aba_avm:
                     st.download_button(
                         "📄 Baixar Laudo AVM em PDF",
                         data=pdf_bytes,
-                        file_name="laudo_avm_dinamico.pdf",
+                        file_name="laudo_avm_hibrido.pdf",
                         mime="application/pdf",
                     )
         else:
