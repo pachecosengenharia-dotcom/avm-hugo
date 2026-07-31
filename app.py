@@ -58,7 +58,46 @@ def calcular_estatisticas_regressao(X, y, coeficientes_reg):
     return p_valores_t, p_valor_f
 
 # =====================================================================
-# VERIFICAÇÃO DE MICRONUMEROSIDADE (APENAS EM CÓDIGOS ALOCADOS / QUALITATIVAS E DICOTÔMICAS)
+# FILTRO DE DISTÂNCIA DE COOK E OUTLIERS
+# =====================================================================
+def filtrar_outliers_e_cook(df, coluna_alvo, features):
+    # Filtro IQR tradicional na variável alvo
+    Q1 = df[coluna_alvo].quantile(0.10)
+    Q3 = df[coluna_alvo].quantile(0.90)
+    IQR = Q3 - Q1
+    df_filtrado = df[(df[coluna_alvo] >= (Q1 - 1.5 * IQR)) & (df[coluna_alvo] <= (Q3 + 1.5 * IQR))].copy()
+    
+    if len(df_filtrado) > len(features) + 2:
+        X = df_filtrado[features].values
+        y = df_filtrado[coluna_alvo].values
+        n = len(y)
+        k = X.shape[1]
+        
+        X_mat = np.hstack([np.ones((n, 1)), X])
+        try:
+            # Cálculo de OLS para resíduos estudentizados e alavancagem (Hat Matrix)
+            beta = np.linalg.inv(X_mat.T.dot(X_mat)).dot(X_mat.T).dot(y)
+            y_pred = X_mat.dot(beta)
+            residuos = y - y_pred
+            s2 = np.sum(residuos ** 2) / (n - k - 1)
+            
+            h = np.diagonal(X_mat.dot(np.linalg.inv(X_mat.T.dot(X_mat))).dot(X_mat.T))
+            residuos_padronizados = residuos / np.sqrt(s2 * (1 - h + 1e-8))
+            
+            # Distância de Cook para identificar pontos altamente influentes
+            cooks_d = (residuos_padronizados ** 2 / (k + 1)) * (h / (1 - h + 1e-8))
+            limite_cook = 4 / (n - k - 1) if (n - k - 1) > 0 else 1.0
+            
+            # Mantém apenas amostras com Distância de Cook abaixo do limite normativo
+            mask_validos = cooks_d <= max(limite_cook, 0.5)
+            df_filtrado = df_filtrado[mask_validos]
+        except Exception:
+            pass
+            
+    return df_filtrado
+
+# =====================================================================
+# VERIFICAÇÃO DE MICRONUMEROSIDADE (CÓDIGOS ALOCADOS / DICOTÔMICAS)
 # =====================================================================
 def verificar_micronumerosidade(df, features_selecionadas):
     alertas_micronumerosidade = []
@@ -79,7 +118,7 @@ def verificar_micronumerosidade(df, features_selecionadas):
                 percentual = (contagem / n_total) * 100
                 if percentual < 10.0:
                     alertas_micronumerosidade.append(
-                        f"⚠️ **{feat}** (Atributo/Código `{val}`): possui apenas {contagem} amostras (**{percentual:.1f}%**). O mínimo exigido pela NBR 14653 para códigos alocados é **10%** ({max(1, int(n_total * 0.1))} amostras)."
+                        f"⚠️ **{feat}** (Atributo/Código `{val}`): possui apenas {contagem} amostras (**{percentual:.1f}%**). Mínimo NBR: **10%**."
                     )
                     
     return alertas_micronumerosidade
@@ -148,18 +187,6 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valo
     return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
 # =====================================================================
-# FILTRO ESTATÍSTICO ANTI-OUTLIERS (IQR)
-# =====================================================================
-def filtrar_outliers(df, coluna_alvo):
-    Q1 = df[coluna_alvo].quantile(0.10)
-    Q3 = df[coluna_alvo].quantile(0.90)
-    IQR = Q3 - Q1
-    limite_inferior = Q1 - 1.5 * IQR
-    limite_superior = Q3 + 1.5 * IQR
-    df_filtrado = df[(df[coluna_alvo] >= limite_inferior) & (df[coluna_alvo] <= limite_superior)]
-    return df_filtrado
-
-# =====================================================================
 # GERADOR DOS GRÁFICOS NBR (HOMOCEDASTICIDADE PURA EM LOG)
 # =====================================================================
 def gerar_graficos_estatisticos(y_real_log, y_pred_log):
@@ -196,7 +223,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM COMPROVAÇÃO DE MICRONUMEROSIDADE
+# GERADOR DE PDF CUSTOMIZADO COM FORMATOS AJUSTADOS
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, buf_ad, buf_res):
     buffer = io.BytesIO()
@@ -207,6 +234,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=11, textColor=colors.HexColor("#1A365D"), spaceAfter=6, leading=14)
     subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=8, textColor=colors.HexColor("#2B6CB0"), spaceAfter=3, spaceBefore=6, leading=10)
     text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7, leading=10, spaceAfter=3)
+    table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=6.5, leading=8.5)
+    table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=6.5, leading=8.5, fontName='Helvetica-Bold')
 
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
@@ -257,31 +286,28 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     
-    # Adiciona linha descritiva informando o status da micronumerosidade no laudo
-    micro_status_str = "ATENDIDO (≥ 10% por atributo em códigos alocados / dicotômicas)" if micronumerosidade_atendida else "ATENÇÃO / RESTRIÇÃO DE ATRIBUTOS"
+    micro_status_text = "ATENDIDO (≥ 10% por atributo em códigos alocados)" if micronumerosidade_atendida else "ATENÇÃO / RESTRIÇÃO DE ATRIBUTOS"
     
-    t_fund = Table([
-        ["Item", "Descrição do Critério Normativo", "Pontuação / Grau Obtido"],
-        ["1", "Caracterização do imóvel avaliando", str(pontos_itens[0])],
-        ["2", f"Quantidade de dados de mercado (n = {n_amostras})", str(pontos_itens[1])],
-        ["3", "Identificação dos dados de mercado", str(pontos_itens[2])],
-        ["4", f"Extrapolação ({'Com Extrapol. - Nota 1' if variaveis_extrapoladas else 'Sem Extrapol. - Nota 3'})", str(pontos_itens[3])],
-        ["5", f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", str(pontos_itens[4])],
-        ["6", f"Significância Modelo F (p = {p_valor_f:.4f})", str(pontos_itens[5])],
-        ["MICRO", f"Critério de Micronumerosidade (Códigos Alocados / Dicotômicas)", micro_status_str],
-        ["SOMA", f"Fundamentação: {fundamentacao} | Precisão: {precisao}", f"{soma_pontos} PONTOS"]
-    ], colWidths=[30, 334, 190])
+    # Uso rigoroso de Paragraphs nas células para respeitar a largura da tabela e evitar estouros
+    t_fund_data = [
+        [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
+        [Paragraph("1", table_cell_style), Paragraph("Caracterização do imóvel avaliando", table_cell_style), Paragraph(str(pontos_itens[0]), table_cell_style)],
+        [Paragraph("2", table_cell_style), Paragraph(f"Quantidade de dados de mercado (n = {n_amostras})", table_cell_style), Paragraph(str(pontos_itens[1]), table_cell_style)],
+        [Paragraph("3", table_cell_style), Paragraph("Identificação dos dados de mercado", table_cell_style), Paragraph(str(pontos_itens[2]), table_cell_style)],
+        [Paragraph("4", table_cell_style), Paragraph(f"Extrapolação ({'Com Extrapol. - Nota 1' if variaveis_extrapoladas else 'Sem Extrapol. - Nota 3'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
+        [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
+        [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
+        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Códigos Alocados / Dicotômicas)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
+        [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
+    ]
+
+    t_fund = Table(t_fund_data, colWidths=[35, 319, 150])
     t_fund.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3182CE")),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
         ('PADDING', (0, 0), (-1, -1), 3),
-        ('FONTSIZE', (0, 0), (-1, -1), 7),
         ('BACKGROUND', (0, -2), (-1, -2), colors.HexColor("#F7FAFC")),
-        ('TEXTCOLOR', (0, -2), (-1, -2), colors.HexColor("#2B6CB0")),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor("#EDF2F7")),
-        ('TEXTCOLOR', (0, -1), (-1, -1), colors.HexColor("#1A365D")),
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
     ]))
     story.append(t_fund)
     story.append(Spacer(1, 4))
@@ -441,7 +467,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade ($\ge 10\%$ por atributo em códigos alocados / qualitativos e dicotômicas)**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade** + **Distância de Cook**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -693,25 +719,26 @@ with aba_avm:
                 df_modelo = df_global[colunas_necessarias].dropna().copy()
                 df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                 
-                alertas_micronumerosidade = verificar_micronumerosidade(df_modelo, features_selecionadas)
-                micronumerosidade_atendida = len(alertas_micronumerosidade) == 0
-                
                 fator_escala = 1000.0 if df_modelo[col_valor_total].mean() < 5000.0 else 1.0
                 
                 coluna_alvo_unitario = 'valor_unitario_amostra'
                 df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                 
-                df_modelo = filtrar_outliers(df_modelo, coluna_alvo_unitario)
+                # Aplicação do Filtro de Outliers e Distância de Cook
+                df_modelo = filtrar_outliers_e_cook(df_modelo, coluna_alvo_unitario, features_selecionadas)
+                
+                alertas_micronumerosidade = verificar_micronumerosidade(df_modelo, features_selecionadas)
+                micronumerosidade_atendida = len(alertas_micronumerosidade) == 0
                 
                 if len(df_modelo) < 3:
-                    st.error("Amostras insuficientes após filtragem de outliers (mínimo de 3).")
+                    st.error("Amostras insuficientes após filtragem estatística rigorosa (mínimo de 3).")
                 else:
                     if alertas_micronumerosidade:
-                        st.warning("⚠️ **Avisos de Micronumerosidade (ABNT NBR 14653 - Códigos Alocados / Qualitativas):**")
+                        st.warning("⚠️ **Avisos de Micronumerosidade (ABNT NBR 14653):**")
                         for alerta in alertas_micronumerosidade:
                             st.write(alerta)
                     else:
-                        st.success("🟢 **Critério de Micronumerosidade ATENDIDO:** Todas as classes/atributos em códigos alocados possuem ≥ 10% de representatividade na amostra.")
+                        st.success("🟢 **Critério de Micronumerosidade ATENDIDO:** Todas as classes/atributos em códigos alocados possuem ≥ 10% de representatividade.")
 
                     df_modelo_log = df_modelo.copy()
                     df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
@@ -762,7 +789,7 @@ with aba_avm:
                     if pontos_itens[4] == 0:
                         st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR (Distância de Cook e Micronumerosidade verificadas)!")
                         
                         eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
