@@ -73,7 +73,6 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valo
     p_item3 = notas_manuais.get('item3', 2) if notas_manuais else 2
     p_item4 = 1 if tem_extrapolacao else 3
     
-    # Item 5: Regra exata de significância dos regressores (teste bicaudal)
     max_p_regressor = max(p_valores_t[1:]) if len(p_valores_t) > 1 else 0.05
     
     if max_p_regressor <= 0.10:
@@ -582,7 +581,7 @@ with aba_avm:
         with c2:
             features_disponiveis = [c for c in colunas_numericas if c != variavel_alvo]
             features_selecionadas = st.multiselect(
-                "Escolha as Variáveis Independentes do Modelo (Dica: selecione menos variáveis para garantir significância):",
+                "Escolha as Variáveis Independentes do Modelo:",
                 options=features_disponiveis,
                 default=features_disponiveis[:min(2, len(features_disponiveis))]
             )
@@ -698,7 +697,10 @@ with aba_avm:
                         len(df_modelo), r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
                     )
 
-                    # Bloco de Diagnóstico e Rejeição
+                    y_real_log_amostras = y_log.values
+                    y_pred_log_amostras = modelo.predict(X)
+                    buf_ad, buf_res = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras)
+
                     if pontos_itens[4] == 0:
                         st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
                         st.info("💡 **Diagnóstico dos Regressores (Teste t bicaudal):**")
