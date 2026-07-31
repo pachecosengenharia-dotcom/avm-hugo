@@ -169,7 +169,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO (COM 6 CASAS DECIMAIS NA EQUAÇÃO)
+# GERADOR DE PDF CUSTOMIZADO (VALOR TOTAL CALCULADO A PARTIR DO UNITÁRIO)
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, buf_ad, buf_res):
     buffer = io.BytesIO()
@@ -407,7 +407,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): equações com regressores inválidos são bloqueadas automaticamente.")
+st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): a variável alvo é o **valor unitário**, apresentando o **valor total** calculado pela área base.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -578,16 +578,19 @@ with aba_avm:
     if len(colunas_numericas) >= 2:
         c1, c2 = st.columns(2)
         with c1:
-            variavel_alvo = st.selectbox("Selecione a Variável Alvo (Preço/Valor):", colunas_numericas)
+            # Identificação automática ou seleção da coluna de valor total e área base
+            col_valor_total = st.selectbox("Coluna de Valor Total na Base:", [c for c in colunas_numericas if 'valor' in c or 'preco' in c] + colunas_numericas)
         with c2:
-            features_disponiveis = [c for c in colunas_numericas if c != variavel_alvo]
-            features_selecionadas = st.multiselect(
-                "Escolha as Variáveis Independentes do Modelo:",
-                options=features_disponiveis,
-                default=features_disponiveis[:min(2, len(features_disponiveis))]
-            )
+            col_area_base = st.selectbox("Coluna de Área Base (ex: area_privativa ou area_terreno):", [c for c in colunas_numericas if 'area' in c] + colunas_numericas)
 
-        if features_selecionadas:
+        features_disponiveis = [c for c in colunas_numericas if c != col_valor_total]
+        features_selecionadas = st.multiselect(
+            "Escolha as Variáveis Independentes do Modelo:",
+            options=features_disponiveis,
+            default=[c for c in features_disponiveis if c != col_area_base][:min(2, len(features_disponiveis))]
+        )
+
+        if features_selecionadas and col_valor_total and col_area_base:
             st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliendo & Limites da Amostra (Extrapolação)")
             
             dados_ia = st.session_state.get('dados_extraidos_ia', {})
@@ -650,17 +653,23 @@ with aba_avm:
             tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
 
             if st.button("🚀 Executar e Validar Equação pelo Motor NBR"):
-                df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
-                df_modelo = filtrar_outliers(df_modelo, variavel_alvo)
+                df_modelo = df_global[features_selecionadas + [col_valor_total, col_area_base]].dropna()
+                df_modelo = df_modelo[df_modelo[col_area_base] > 0]
+                
+                # Variável Alvo passa a ser o VALOR UNITÁRIO (Valor Total / Área Base)
+                coluna_alvo_unitario = 'valor_unitario_amostra'
+                df_modelo[coluna_alvo_unitario] = df_modelo[col_valor_total] / df_modelo[col_area_base]
+                
+                df_modelo = filtrar_outliers(df_modelo, coluna_alvo_unitario)
                 
                 if len(df_modelo) < 3:
                     st.error("Amostras insuficientes após filtragem de outliers (mínimo de 3).")
                 else:
                     df_modelo_log = df_modelo.copy()
-                    df_modelo_log[variavel_alvo] = np.log1p(df_modelo_log[variavel_alvo])
+                    df_modelo_log[coluna_alvo_unitario] = np.log1p(df_modelo_log[coluna_alvo_unitario])
                     
                     X = df_modelo_log[features_selecionadas]
-                    y_log = df_modelo_log[variavel_alvo]
+                    y_log = df_modelo_log[coluna_alvo_unitario]
 
                     lin_reg = LinearRegression()
                     lin_reg.fit(X, y_log)
@@ -675,21 +684,23 @@ with aba_avm:
                     r2 = round(modelo.score(X, y_log), 4)
 
                     df_alvo = pd.DataFrame([valores_usuario])
-                    previsoes_log = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
+                    previsoes_log_unitario = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
                     
-                    previsoes_reais = np.expm1(previsoes_log)
+                    previsoes_unitarios_reais = np.expm1(previsoes_log_unitario)
                     
-                    v_medio = float(np.mean(previsoes_reais))
-                    v_min = float(np.percentile(previsoes_reais, 15))
-                    v_max = float(np.percentile(previsoes_reais, 85))
+                    vu_medio = float(np.mean(previsoes_unitarios_reais))
+                    vu_min = float(np.percentile(previsoes_unitarios_reais, 15))
+                    vu_max = float(np.percentile(previsoes_unitarios_reais, 85))
 
-                    area_ref = valores_usuario.get('area_privativa', valores_usuario.get('area_terreno', 1.0))
-                    if area_ref <= 0:
-                        area_ref = 1.0
+                    # Área base do imóvel avaliando para calcular o VALOR TOTAL
+                    area_avaliando = valores_usuario.get(col_area_base, 1.0)
+                    if area_avaliando <= 0:
+                        area_avaliando = 1.0
 
-                    vu_medio = v_medio / area_ref
-                    vu_min = v_min / area_ref
-                    vu_max = v_max / area_ref
+                    # O Valor Total é o Valor Unitário multiplicado pela Área Base do avaliando
+                    v_medio = vu_medio * area_avaliando
+                    v_min = vu_min * area_avaliando
+                    v_max = vu_max * area_avaliando
 
                     var_min = abs((v_min - v_medio) / v_medio) * 100
                     var_max = abs((v_max - v_medio) / v_medio) * 100
@@ -711,25 +722,24 @@ with aba_avm:
                             st.write(f"- **{feat_name}**: p-valor = {p_feat*100:.2f}% ({status_p})")
                         st.warning("Experimente desmarcar as variáveis com p-valor alto para que a equação seja aprovada.")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR (Atende aos critérios normativos)!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR (Variável Alvo: Valor Unitário)!")
                         
-                        # Exibição na tela com 6 casas decimais
-                        eq_display = f"**ln({variavel_alvo})** = {coeficientes['intercepto']:,.6f}"
+                        eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
                             coef_v = coeficientes[feat]
                             sinal_v = "+" if coef_v >= 0 else ""
                             eq_display += f" {sinal_v} ({coef_v:,.6f} * {feat})"
-                        st.markdown(f"##### Equação do Modelo (6 Casas Decimais):")
+                        st.markdown(f"##### Equação do Modelo Unitário (6 Casas Decimais):")
                         st.code(eq_display)
 
                         r1, r2_col, r3 = st.columns(3)
-                        r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"-{var_min:.1f}%")
-                        r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}", "Média")
-                        r3.metric("Valor Máximo (Mercado)", f"R$ {v_max:,.2f}", f"+{var_max:.1f}%")
+                        r1.metric("Valor Total Mínimo", f"R$ {v_min:,.2f}", f"Unitário: R$ {vu_min:,.2f}/m²")
+                        r2_col.metric("Valor Total Estimado", f"R$ {v_medio:,.2f}", f"Unitário: R$ {vu_medio:,.2f}/m²")
+                        r3.metric("Valor Total Máximo", f"R$ {v_max:,.2f}", f"Unitário: R$ {vu_max:,.2f}/m²")
                         st.caption(f"Acurácia (R²): {r2} | Máx p-valor Regressor: {max_p_regressor*100:.2f}% | Fundamentação: {fundamentacao} ({soma_pontos} pts) | **Precisão: {precisao}**")
 
                         pdf_bytes = gerar_laudo_pdf_ia(
-                            tenant_selecionado, tipologia_imovel, variavel_alvo, 
+                            tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
                             ordem_servico_input, endereco_imovel_input,
                             informante_nome, informante_tel,
                             {
@@ -753,7 +763,7 @@ with aba_avm:
                             mime="application/pdf",
                         )
         else:
-            st.warning("⚠️ Selecione ao menos uma variável independente.")
+            st.warning("⚠️ Selecione as colunas de Valor Total e Área Base, além de ao menos uma variável independente.")
 
 with aba_juridico:
     st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
