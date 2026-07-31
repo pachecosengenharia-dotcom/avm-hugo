@@ -305,7 +305,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     
-    # Sincronização rigorosa garantida com o estado atual da execução
     micro_status_text = "ATENDIDO (≥ 10% por atributo em códigos alocados)" if micronumerosidade_atendida else "ATENÇÃO / RESTRIÇÃO DE ATRIBUTOS"
     
     t_fund_data = [
@@ -362,7 +361,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER DE CERTIDÃO / MATRÍCULA NORMALIZADO
+# MOTOR DE PARSER DE CERTIDÃO / MATRÍCULA ULTRA-FLEXÍVEL
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -424,37 +423,50 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     elif "casa" in t_lower or "residência" in t_lower:
         tipologia_detectada = "Casa"
 
-    def extrair_valor_numerico(padrao_regex, texto):
-        m = re.search(padrao_regex, texto, re.IGNORECASE)
-        if m:
-            val_str = m.group(1).strip()
-            if '.' in val_str and ',' in val_str:
-                val_str = val_str.replace('.', '').replace(',', '.')
-            elif ',' in val_str:
-                val_str = val_str.replace(',', '.')
-            try:
-                return float(val_str)
-            except ValueError:
-                pass
+    def extrair_valor_numerico(padroes_regex, texto):
+        for padrao in padroes_regex:
+            m = re.search(padrao, texto, re.IGNORECASE)
+            if m:
+                val_str = m.group(1).strip()
+                if '.' in val_str and ',' in val_str:
+                    val_str = val_str.replace('.', '').replace(',', '.')
+                elif ',' in val_str:
+                    val_str = val_str.replace(',', '.')
+                try:
+                    return float(val_str)
+                except ValueError:
+                    pass
         return None
 
-    # Mapeamento estrito das variáveis para garantir compatibilidade com as colunas
-    area_priv = extrair_valor_numerico(r'(?:área\s*(?:privativa|construída|útil|edificada|principal))\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)', trecho_limpo)
+    # --- PARSER CORRIGIDO E ABRANGENTE PARA ÁREA PRIVATIVA / CONSTRUÍDA ---
+    padroes_privativa = [
+        r'(?:área\s*(?:privativa|construída|útil|edificada|principal|coberta))\D{1,30}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
+        r'(?:constr[uú]ida\s*(?:de|com|totalizando)?)\D{1,20}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
+        r'(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)\s*m²?\s*(?:de\s*)?(?:área\s*)?(?:privativa|construída|útil)'
+    ]
+    area_priv = extrair_valor_numerico(padroes_privativa, trecho_limpo)
     if area_priv is not None:
         variaveis_encontradas['area_privativa'] = area_priv
 
-    area_terr = extrair_valor_numerico(r'(?:área\s*(?:total|do\s*terreno|terreno|fração\s*ideal|global))\D{1,25}(\d{1,5}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)', trecho_limpo)
+    # --- PARSER CORRIGIDO PARA ÁREA DO TERRENO ---
+    padroes_terreno = [
+        r'(?:área\s*(?:total|do\s*terreno|terreno|fração\s*ideal|global))\D{1,30}(\d{1,5}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
+        r'(?:terreno\s*(?:com|de)?)\D{1,20}(\d{1,5}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)'
+    ]
+    area_terr = extrair_valor_numerico(padroes_terreno, trecho_limpo)
     if area_terr is not None:
         variaveis_encontradas['area_terreno'] = area_terr
 
-    match_q = re.search(r'(\d+)\s*(?:quartos?|dormitórios?)', trecho_limpo, re.IGNORECASE)
+    # --- PARSER ABRANGENTE PARA QUARTOS E SUÍTES ---
+    match_q = re.search(r'(\d+)\s*(?:quartos?|dormitórios?|su[íi]tes?\s*e\s*quartos?)', trecho_limpo, re.IGNORECASE)
     if match_q:
         try:
             variaveis_encontradas['quartos'] = int(match_q.group(1))
         except ValueError:
             pass
 
-    match_s = re.search(r'(\d+)\s*su[íi]tes?', trecho_limpo, re.IGNORECASE)
+    # Varredura inteligente de suítes (busca explícita ou contida em descrições)
+    match_s = re.search(r'(\d+)\s*(?:su[íi]tes?|suíte[s]?)', trecho_limpo, re.IGNORECASE)
     if match_s:
         try:
             val_suite = int(match_s.group(1))
@@ -823,7 +835,6 @@ with aba_avm:
                 
                 df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
                 
-                # Validação rigorosa e síncrona
                 alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
                 micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
                 
