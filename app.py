@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Endereço & Tipologias Corrigidas", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Laudo NBR Completo", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # AVALIAÇÃO NORMATIVA DE FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
@@ -181,14 +181,14 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# PARSER INTELIGENTE DE ENDEREÇO DA CERTIDÃO (RUA, QD, LT, CASA, BAIRRO, CONDOMINIO, MUNICIPIO)
+# FUNÇÃO DE EXTRAÇÃO DE DADOS DE DOCUMENTOS (PDF + OCR)
 # =====================================================================
 def extrair_variaveis_de_documento(arquivo_pdf):
     texto_extraido = ""
     try:
         bytes_arquivo = arquivo_pdf.read()
     except Exception:
-        return {}, "", ""
+        return {}
     
     try:
         with pdfplumber.open(io.BytesIO(bytes_arquivo)) as pdf:
@@ -209,36 +209,10 @@ def extrair_variaveis_de_documento(arquivo_pdf):
             pass
 
     if not texto_extraido.strip():
-        return {}, "", ""
+        return {}
 
     variaveis_encontradas = {}
     trecho_limpo = texto_extraido.replace('\n', ' ')
-
-    # Parser robusto para capturar os campos exatos solicitados
-    rua_match = re.search(r'(Rua\s+[^,\.]+?|Av\.[^,\.]+?|Alameda\s+[^,\.]+?)', trecho_limpo, re.IGNORECASE)
-    quadra_match = re.search(r'Q[uãa]d?r?a\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
-    lote_match = re.search(r'Lote\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
-    casa_match = re.search(r'(?:Casa|Edificação|Bloco)[:\s]*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
-    bairro_match = re.search(r'Bairro[:\s]+([^,\.]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
-    if not bairro_match:
-        bairro_match = re.search(r'(Jardim\s+[A-Za-z\u00C0-\u00FF]+)', trecho_limpo, re.IGNORECASE)
-    condo_match = re.search(r'Condom[íi]nio[:\s]+"([^"]+)"', trecho_limpo, re.IGNORECASE)
-    if not condo_match:
-        condo_match = re.search(r'Condom[íi]nio[:\s]+([A-Za-z0-9\s]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
-    municipio_match = re.search(r'(?:Munic[íi]pio|Cidade)[:\s]+([A-Za-z\u00C0-\u00FF\s/]+?)(?=\s*[,./-]|$)', trecho_limpo, re.IGNORECASE)
-    if not municipio_match:
-        municipio_match = re.search(r'(Aparecida\s+de\s+Goiânia(?:/GO)?)', trecho_limpo, re.IGNORECASE)
-
-    rua = rua_match.group(1).strip() if rua_match else "Rua São Clemente"
-    qdr = f"Quadra {quadra_match.group(1).strip()}" if quadra_match else "Quadra 334"
-    lt = f"Lote {lote_match.group(1).strip()}" if lote_match else "Lote 17"
-    cs = f"Casa {casa_match.group(1).strip()}" if casa_match else "Casa 2"
-    bairro = f"Bairro {bairro_match.group(1).strip()}" if bairro_match else "Bairro Jardim Buriti Sereno"
-    condo = f"Condomínio {condo_match.group(1).strip()}" if condo_match else ""
-    municipio = municipio_match.group(1).strip() if municipio_match else "Município de Aparecida de Goiânia/GO"
-
-    partes_endereco = [p for p in [rua, qdr, lt, cs, condo, bairro, municipio] if p]
-    endereco_completo = ", ".join(partes_endereco)
 
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if not match_privativa:
@@ -304,24 +278,24 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    return variaveis_encontradas, endereco_completo, trecho_limpo[:600]
+    return variaveis_encontradas
 
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Laudo NBR Definitivo")
+st.title("🏢 Painel de Crédito e Controle AVM - Multi-Tipologia & Laudo NBR")
 st.markdown("Plataforma agnóstica para Modelagem Automatizada de Imóveis com Laudo Técnico Normativo.")
 st.divider()
-
-if 'endereco_certidao' not in st.session_state:
-    st.session_state.endereco_certidao = "Rua São Clemente, Quadra 334, Lote 17, Casa 2, Bairro Jardim Buriti Sereno, Município de Aparecida de Goiânia/GO"
 
 st.sidebar.markdown("🔑 **Identificação do Contratante**")
 tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
 plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
 
 ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS)", value="OS-2026/8942-AVM")
-endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel (Auto-preenchido ou Manual)", value=st.session_state.endereco_certidao)
+endereco_imovel_input = st.sidebar.text_input(
+    "Endereço do Imóvel (Rua, Quadra, Lote, Número, Bairro, Condomínio, Município)", 
+    value="Rua São Clemente, Quadra 334, Lote 17, Casa 2, Bairro Jardim Buriti Sereno, Município de Aparecida de Goiânia/GO"
+)
 informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value="HUGO")
 informante_tel = st.sidebar.text_input("Telefone do Informante", value="(62) 98888-8888")
 
@@ -335,7 +309,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("🏗️ **Tipologia do Imóvel**")
 tipologia_imovel = st.sidebar.selectbox(
     "Selecione a Tipologia:", 
-    ["Apartamento", "Casa", "Lote", "Galpão Comercial"]
+    ["Casa", "Apartamento", "Lote", "Galpão Comercial"]
 )
 
 aba_avm, aba_juridico = st.tabs([
@@ -366,16 +340,14 @@ with aba_avm:
             st.markdown("🟢 **Certidão de Ônus Anexada!**")
 
     if documento_enviado is not None:
-        dados_extraidos, end_ext, _ = extrair_variaveis_de_documento(documento_enviado)
+        dados_extraidos = extrair_variaveis_de_documento(documento_enviado)
         if dados_extraidos:
             st.session_state.dados_extraidos_ia = dados_extraidos
-            if end_ext and len(end_ext) > 5:
-                st.session_state.endereco_certidao = end_ext
             for k, v in dados_extraidos.items():
                 st.session_state.valores_manuais[k] = v
                 if f"input_safe_{k}" in st.session_state:
                     st.session_state[f"input_safe_{k}"] = v
-            st.success(f"✨ Certidão lida, endereço estruturado e dados sincronizados com sucesso!")
+            st.success(f"✨ Atributos da certidão lidos e sincronizados com sucesso!")
 
     df_global = None
     if arquivo_planilha is not None:
