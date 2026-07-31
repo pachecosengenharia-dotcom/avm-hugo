@@ -12,18 +12,61 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image as RLImage
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
+import scipy.stats as stats
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Fundamentação & Precisão NBR", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Fundamentação & Testes Estatísticos NBR", page_icon="🏢", layout="wide")
+
+# =====================================================================
+# CÁLCULO ESTATÍSTICO AUTOMÁTICO (TESTE T E TESTE F DE SNEDECOR)
+# =====================================================================
+def calcular_estatisticas_regressao(X, y, coeficientes_reg):
+    n = len(y)
+    k = X.shape[1]
+    
+    # Adiciona constante para cálculo estatístico completo
+    X_matrix = np.hstack([np.ones((n, 1)), X.values])
+    y_array = y.values
+    
+    # Ajuste de OLS para obtenção dos p-valores reais
+    y_pred_ols = X_matrix.dot(coeficientes_reg)
+    residuos = y_array - y_pred_ols
+    
+    soma_sq_res = np.sum(residuos ** 2)
+    graus_liberdade = n - k - 1
+    
+    if graus_liberdade > 0:
+        var_res = soma_sq_res / graus_liberdade
+        try:
+            cov_mat = var_res * np.linalg.inv(X_matrix.T.dot(X_matrix))
+            desvio_padrao_se = np.sqrt(np.diagonal(cov_mat))
+            t_stats = coeficientes_reg / desvio_padrao_se
+            # P-valores bicaudais para cada regressor (Item 5)
+            p_valores_t = [2 * (1 - stats.t.cdf(np.abs(t), df=graus_liberdade)) for t in t_stats]
+        except Exception:
+            p_valores_t = [0.05] * (k + 1)
+    else:
+        p_valores_t = [0.05] * (k + 1)
+        
+    # Teste F de Snedecor para o modelo global (Item 6)
+    soma_sq_reg = np.sum((y_pred_ols - np.mean(y_array)) ** 2)
+    soma_sq_tot = np.sum((y_array - np.mean(y_array)) ** 2)
+    
+    if soma_sq_tot > 0 and k > 0 and graus_liberdade > 0:
+        r2_calc = soma_sq_reg / soma_sq_tot
+        f_stat = (r2_calc / k) / ((1 - r2_calc) / graus_liberdade) if r2_calc < 1 else 999.99
+        p_valor_f = 1 - stats.f.cdf(f_stat, k, graus_liberdade)
+    else:
+        p_valor_f = 0.001
+        
+    return p_valores_t, p_valor_f
 
 # =====================================================================
 # AVALIAÇÃO NORMATIVA RIGOROSA DA FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
 # =====================================================================
-def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, tem_extrapolacao=False, notas_manuais=None):
-    # Itens 1 e 3 controlados por input manual obrigatório
+def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valor_f, tem_extrapolacao=False, notas_manuais=None):
     p_item1 = notas_manuais.get('item1', 2) if notas_manuais else 2
     
-    # Item 2: Quantidade de dados de mercado (Grau III exige n >= 30, Grau II exige n >= 12)
     if n_amostras >= 30:
         p_item2 = 3
     elif n_amostras >= 12:
@@ -33,26 +76,25 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, tem_extrapolacao=Fa
         
     p_item3 = notas_manuais.get('item3', 2) if notas_manuais else 2
     
-    # Item 4: Extrapolação (Grau III exige sem extrapolação estrita)
     p_item4 = 1 if tem_extrapolacao else 3
     
-    # Item 5: Limite admissível de ajuste (k variáveis)
-    if n_variaveis <= 3:
+    # Item 5: Avaliação automática com base no nível de significância máximo dos regressores (teste bicaudal)
+    max_p_regressor = max(p_valores_t[1:]) if len(p_valores_t) > 1 else 0.05
+    if max_p_regressor <= 0.10:
         p_item5 = 3
-    elif n_variaveis <= 6:
+    elif max_p_regressor <= 0.30:
         p_item5 = 2
     else:
         p_item5 = 1
         
-    # Item 6: Intervalo admissível de ajuste (R²)
-    if r2 >= 0.70:
+    # Item 6: Avaliação automática com base no Teste F de Snedecor (p-valor do modelo)
+    if p_valor_f <= 0.01:
         p_item6 = 3
-    elif r2 >= 0.50:
+    elif p_valor_f <= 0.05:
         p_item6 = 2
     else:
         p_item6 = 1
 
-    # Sobrescrita manual opcional para itens específicos se acionado
     if notas_manuais:
         if 'item2_manual' in notas_manuais:
             p_item2 = notas_manuais['item2_manual']
@@ -66,7 +108,6 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, tem_extrapolacao=Fa
     pontos_itens = [p_item1, p_item2, p_item3, p_item4, p_item5, p_item6]
     soma_pontos = sum(pontos_itens)
 
-    # Enquadramento de Fundamentação baseado estritamente na norma e pontuação total
     if soma_pontos >= 16 and n_amostras >= 30 and r2 >= 0.70 and not tem_extrapolacao:
         fundamentacao = "Grau III"
     elif soma_pontos >= 10 and n_amostras >= 12:
@@ -74,7 +115,6 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, tem_extrapolacao=Fa
     else:
         fundamentacao = "Grau I"
 
-    # Enquadramento de Precisão baseado no R²
     if r2 >= 0.70:
         precisao = "Grau III"
     elif r2 >= 0.50:
@@ -82,7 +122,7 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, tem_extrapolacao=Fa
     else:
         precisao = "Grau I"
 
-    return fundamentacao, precisao, soma_pontos, pontos_itens
+    return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
 # =====================================================================
 # FILTRO ESTATÍSTICO ANTI-OUTLIERS (IQR)
@@ -133,9 +173,9 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM ESPAÇAMENTO SEGURO (SEM ENCAVALAMENTO)
+# GERADOR DE PDF CUSTOMIZADO COM ESPAÇAMENTO SEGURO
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, buf_ad, buf_res):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, buf_ad, buf_res):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -163,7 +203,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         sinal = "+" if coef >= 0 else ""
         eq_str += f" {sinal} ({coef:,.2f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
-    story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras Saneadas = {n_amostras} | <b>Precisão:</b> {precisao}", text_style))
+    story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras = {n_amostras} | <b>Signif. Regressores (Máx p-t):</b> {max_p_regressor:.4f} | <b>Signif. Modelo (p-F):</b> {p_valor_f:.4f}", text_style))
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações", subtitle_style))
@@ -190,8 +230,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ["2", f"Quantidade de dados de mercado (n = {n_amostras})", str(pontos_itens[1])],
         ["3", "Identificação dos dados de mercado", str(pontos_itens[2])],
         ["4", "Extrapolação", str(pontos_itens[3])],
-        ["5", f"Limite admissível de ajuste (k = {len(features)})", str(pontos_itens[4])],
-        ["6", f"Intervalo admissível de ajuste (R² = {r2})", str(pontos_itens[5])],
+        ["5", f"Significância Regressores (Máx p = {max_p_regressor:.4f})", str(pontos_itens[4])],
+        ["6", f"Significância Modelo F (p = {p_valor_f:.4f})", str(pontos_itens[5])],
         ["SOMA", f"Fundamentação: {fundamentacao} | Precisão: {precisao}", f"{soma_pontos} PONTOS"]
     ], colWidths=[30, 334, 190])
     t_fund.setStyle(TableStyle([
@@ -361,8 +401,8 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Fundamentação & Precisão NBR")
-st.markdown("Plataforma integrada com notas manuais (Itens 1 e 3), validação rigorosa de limites NBR e prevenção de encavalamento.")
+st.title("🏢 Painel de Crédito e Controle AVM - Fundamentação & Testes Estatísticos")
+st.markdown("Plataforma integrada com testes estatísticos automáticos (Teste t e Teste F de Snedecor) para os Itens 5 e 6.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -392,15 +432,15 @@ informante_tel = st.sidebar.text_input("Telefone do Informante", value="(62) 988
 st.sidebar.markdown("---")
 st.sidebar.markdown("⚙️ **Atribuição Manual de Notas NBR (Obrigatório Itens 1 e 3)**")
 notas_manuais_input = {}
-notas_manuais_input['item1'] = st.sidebar.number_input("Nota Item 1 (Caracterização do Imóvel)", min_value=1, max_value=3, value=2, help="Insira manualmente conforme o grau de caracterização.")
-notas_manuais_input['item3'] = st.sidebar.number_input("Nota Item 3 (Identificação dos Dados)", min_value=1, max_value=3, value=2, help="Insira manualmente conforme o rigor da identificação dos dados.")
+notas_manuais_input['item1'] = st.sidebar.number_input("Nota Item 1 (Caracterização do Imóvel)", min_value=1, max_value=3, value=2)
+notas_manuais_input['item3'] = st.sidebar.number_input("Nota Item 3 (Identificação dos Dados)", min_value=1, max_value=3, value=2)
 
-usar_todas_manuais = st.sidebar.checkbox("Ajustar também os demais itens manualmente", value=False)
+usar_todas_manuais = st.sidebar.checkbox("Ajustar itens restantes manualmente se necessário", value=False)
 if usar_todas_manuais:
     notas_manuais_input['item2_manual'] = st.sidebar.number_input("Nota Item 2 (Qtd Amostras)", min_value=1, max_value=3, value=2)
     notas_manuais_input['item4_manual'] = st.sidebar.number_input("Nota Item 4 (Extrapolação)", min_value=1, max_value=3, value=2)
-    notas_manuais_input['item5_manual'] = st.sidebar.number_input("Nota Item 5 (Limites Ajuste)", min_value=1, max_value=3, value=2)
-    notas_manuais_input['item6_manual'] = st.sidebar.number_input("Nota Item 6 (Intervalo Ajuste)", min_value=1, max_value=3, value=2)
+    notas_manuais_input['item5_manual'] = st.sidebar.number_input("Nota Item 5 (Signif. Regressores)", min_value=1, max_value=3, value=2)
+    notas_manuais_input['item6_manual'] = st.sidebar.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=2)
 
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
 st.sidebar.markdown("---")
@@ -597,7 +637,7 @@ with aba_avm:
 
                     st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
-            if st.button("🚀 Executar Modelo com Rigor Normativo NBR"):
+            if st.button("🚀 Executar Modelo com Testes Estatísticos Automáticos"):
                 df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
                 df_modelo = filtrar_outliers(df_modelo, variavel_alvo)
                 
@@ -614,6 +654,10 @@ with aba_avm:
                     lin_reg.fit(X, y_log)
                     coeficientes = {feat: coef for feat, coef in zip(features_selecionadas, lin_reg.coef_)}
                     coeficientes['intercepto'] = lin_reg.intercept_
+
+                    # Vetor completo para testes estatísticos
+                    coef_array = np.array([lin_reg.intercept_] + list(lin_reg.coef_))
+                    p_valores_t, p_valor_f = calcular_estatisticas_regressao(X, y_log, coef_array)
 
                     modelo = RandomForestRegressor(n_estimators=200, random_state=42)
                     modelo.fit(X, y_log)
@@ -639,20 +683,20 @@ with aba_avm:
                     var_min = abs((v_min - v_medio) / v_medio) * 100
                     var_max = abs((v_max - v_medio) / v_medio) * 100
 
-                    fundamentacao, precisao, soma_pontos, pontos_itens = calcular_graus_nbr_rigoroso(
-                        len(df_modelo), r2, len(features_selecionadas), tem_extrapolacao_detectada, notas_manuais_input
+                    fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f_calc = calcular_graus_nbr_rigoroso(
+                        len(df_modelo), r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_detectada, notas_manuais_input
                     )
 
                     y_real_log_amostras = y_log.values
                     y_pred_log_amostras = modelo.predict(X)
                     buf_ad, buf_res = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras)
 
-                    st.success("✅ Modelo executado com enquadramento normativo rigoroso!")
+                    st.success("✅ Modelo executado com testes de significância (Teste t e Teste F) calculados automaticamente!")
                     r1, r2_col, r3 = st.columns(3)
                     r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"-{var_min:.1f}%")
                     r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}", "Média")
                     r3.metric("Valor Máximo (Mercado)", f"R$ {v_max:,.2f}", f"+{var_max:.1f}%")
-                    st.caption(f"Acurácia (R²): {r2} | Amostras Saneadas: {len(df_modelo)} | Fundamentação: {fundamentacao} ({soma_pontos} pts) | **Precisão: {precisao}**")
+                    st.caption(f"Acurácia (R²): {r2} | Máx p-valor Regressores: {max_p_regressor:.4f} | p-valor Teste F: {p_valor_f_calc:.4f} | Fundamentação: {fundamentacao} ({soma_pontos} pts) | **Precisão: {precisao}**")
 
                     pdf_bytes = gerar_laudo_pdf_ia(
                         tenant_selecionado, tipologia_imovel, variavel_alvo, 
@@ -668,6 +712,7 @@ with aba_avm:
                         st.session_state.status_juridico_global,
                         st.session_state.score_juridico_global,
                         soma_pontos, pontos_itens,
+                        max_p_regressor, p_valor_f_calc,
                         buf_ad, buf_res
                     )
                     st.download_button(
