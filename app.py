@@ -346,10 +346,12 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
+    # 4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)
     if micronumerosidade_atendida:
         micro_status_text = "ATENDIDO (Todos os atributos possuem ≥ 10%)"
     else:
-        detalhes_str = "; ".join([d['mensagem'].replace('**', '') for d in alertas_micro_detalhes])
+        # Pega os detalhes dos alertas gerados pós-saneamento
+        detalhes_str = "; ".join([d['mensagem'].replace('**', '').replace('⚠️ ', '') for d in alertas_micro_detalhes])
         micro_status_text = f"ATENÇÃO/RESTRIÇÃO: {detalhes_str}"
     
     t_fund_data = [
@@ -363,7 +365,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Representatividade por Atributo ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
         [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
-
     t_fund = Table(t_fund_data, colWidths=[35, 319, 150])
     t_fund.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3182CE")),
