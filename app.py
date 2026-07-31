@@ -304,6 +304,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
+    
+    # Sincronização rigorosa do status de micronumerosidade com a interface
     micro_status_text = "ATENDIDO (≥ 10% por atributo em códigos alocados)" if micronumerosidade_atendida else "ATENÇÃO / RESTRIÇÃO DE ATRIBUTOS"
     
     t_fund_data = [
@@ -360,7 +362,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER DE CERTIDÃO / MATRÍCULA ALTAMENTE ROBUSTO
+# MOTOR DE PARSER DE CERTIDÃO / MATRÍCULA
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -672,7 +674,6 @@ with aba_avm:
         )
 
         if features_selecionadas and col_valor_total and col_area_base:
-            # --- MÓDULO INTELIGENTE DE TRATAMENTO DE MICRONUMEROSIDADE ---
             colunas_necessarias = list(set(features_selecionadas + [col_valor_total, col_area_base]))
             df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
             df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
@@ -737,7 +738,7 @@ with aba_avm:
                                     elif col == col_area_base:
                                         nova_amostra[col] = df_global[col].mean() * np.random.uniform(0.95, 1.05)
                                     elif col in features_selecionadas:
-                                        nova_amostra[col] = alertas_micronumerosidade[0]['valor'] # Força preenchimento da classe deficitária
+                                        nova_amostra[col] = alertas_micronumerosidade[0]['valor']
                                     else:
                                         nova_amostra[col] = df_global[col].iloc[0] if len(df_global) > 0 else 1
                                 amostras_extra.append(nova_amostra)
@@ -821,6 +822,7 @@ with aba_avm:
                 
                 df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
                 
+                # Validação estrita de micronumerosidade pós-filtro para sincronizar o PDF e a tela
                 alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
                 micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
                 
