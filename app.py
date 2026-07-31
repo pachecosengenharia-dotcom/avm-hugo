@@ -438,28 +438,15 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
                     pass
         return None
 
-    # --- ISOLAMENTO RIGOROSO DA ÁREA COBERTA (IGNORANDO DESCOBERTA) ---
+    # --- CORREÇÃO CIRÚRGICA: BUSCA EXCLUSIVA DA METRAGEM DA ÁREA COBERTA ---
     padroes_privativa_coberta = [
-        r'(?:privativa\s*(?:total)?\s*coberta)\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
-        r'(?:constru[íi]da\s*(?:total)?\s*coberta)\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
-        r'(?:área\s*(?:privativa|constru[íi]da|edificada|útil)\s*coberta)\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
-        r'(?:coberta\s*(?:de|com)?)\D{1,15}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)\s*m²'
+        r'(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)\s*metros\s*quadrados\s*de\s*área\s*privativa\s*coberta',
+        r'(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)\s*m²\s*de\s*área\s*privativa\s*coberta',
+        r'privativa\s*coberta[^\d]{1,20}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
+        r'coberta[^\d]{1,20}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)'
     ]
     
-    # Se houver parágrafo com "coberta", restringe a busca a ele para evitar pegar área descoberta
-    trecho_busca_area = trecho_limpo
-    match_bloco_coberto = re.search(r'[^;\.\n]*coberta[^;\.\n]*', trecho_limpo, re.IGNORECASE)
-    if match_bloco_coberto:
-        trecho_busca_area = match_bloco_coberto.group(0)
-
-    area_priv = extrair_valor_numerico(padroes_privativa_coberta, trecho_busca_area)
-    if area_priv is None:
-        # Fallback se não encontrar o termo coberta explícito
-        padroes_fallback = [
-            r'(?:área\s*(?:privativa|construída|útil|edificada|principal))\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)'
-        ]
-        area_priv = extrair_valor_numerico(padroes_fallback, trecho_limpo)
-        
+    area_priv = extrair_valor_numerico(padroes_privativa_coberta, trecho_limpo)
     if area_priv is not None:
         variaveis_encontradas['area_privativa'] = area_priv
 
@@ -471,8 +458,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     if area_terr is not None:
         variaveis_encontradas['area_terreno'] = area_terr
 
-    # --- LEITURA EXATA DE QUARTOS E SUÍTES ("2 quartos, sendo 1 suíte") ---
-    # Captura exata por contexto descritivo direto
+    # --- LEITURA EXATA DE QUARTOS E SUÍTES ("2 quartos sendo 1 suite") ---
     bloco_quartos_suites = re.search(r'([1-9])\s*(?:quartos?|dormitórios?)[^\.]{0,35}sendo\s*([1-9])\s*su[íi]te', trecho_limpo, re.IGNORECASE)
     if bloco_quartos_suites:
         try:
@@ -483,7 +469,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
     else:
-        # Se vier invertido ou em frases separadas, força os valores padrão da certidão informada pelo usuário (2 quartos, 1 suíte) se houver menção a quartos
         match_q = re.search(r'\b([1-9])\s*(?:quartos?|dormitórios?)\b', trecho_limpo, re.IGNORECASE)
         match_s = re.search(r'\b([1-9])\s*(?:su[íi]tes?|suíte[s]?)\b', trecho_limpo, re.IGNORECASE)
         
