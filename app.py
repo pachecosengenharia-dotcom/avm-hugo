@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Laudo NBR Completo", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Leitura Documental Completa", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # AVALIAÇÃO NORMATIVA DE FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
@@ -181,14 +181,14 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# FUNÇÃO DE EXTRAÇÃO DE DADOS DE DOCUMENTOS (PDF + OCR)
+# PARSER INTELIGENTE DE DOCUMENTOS (OS, ENDEREÇO, TIPOLOGIA E ATRIBUTOS)
 # =====================================================================
-def extrair_variaveis_de_documento(arquivo_pdf):
+def extrair_dados_documento(arquivo_pdf):
     texto_extraido = ""
     try:
         bytes_arquivo = arquivo_pdf.read()
     except Exception:
-        return {}
+        return {}, "", "", "Casa"
     
     try:
         with pdfplumber.open(io.BytesIO(bytes_arquivo)) as pdf:
@@ -209,11 +209,52 @@ def extrair_variaveis_de_documento(arquivo_pdf):
             pass
 
     if not texto_extraido.strip():
-        return {}
+        return {}, "", "", "Casa"
 
     variaveis_encontradas = {}
     trecho_limpo = texto_extraido.replace('\n', ' ')
 
+    # 1. Extração da OS (Ordem de Serviço)
+    os_match = re.search(r'(?:OS|Ordem de Serviço|Laudo|Processo)[:\s#]*([A-Z0-9\-/]+)', trecho_limpo, re.IGNORECASE)
+    os_extraida = os_match.group(1).strip() if os_match else "OS-2026/AVM"
+
+    # 2. Extração Estruturada do Endereço (Rua, Quadra, Lote, Casa, Bairro, Condomínio, Município)
+    rua_match = re.search(r'(Rua\s+[^,\.]+?|Av\.[^,\.]+?|Alameda\s+[^,\.]+?)', trecho_limpo, re.IGNORECASE)
+    quadra_match = re.search(r'Q[uãa]d?r?a\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
+    lote_match = re.search(r'Lote\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
+    casa_match = re.search(r'(?:Casa|Edificação|Bloco)[:\s]*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
+    bairro_match = re.search(r'Bairro[:\s]+([^,\.]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
+    if not bairro_match:
+        bairro_match = re.search(r'(Jardim\s+[A-Za-z\u00C0-\u00FF]+)', trecho_limpo, re.IGNORECASE)
+    condo_match = re.search(r'Condom[íi]nio[:\s]+"([^"]+)"', trecho_limpo, re.IGNORECASE)
+    if not condo_match:
+        condo_match = re.search(r'Condom[íi]nio[:\s]+([A-Za-z0-9\s]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
+    municipio_match = re.search(r'(?:Munic[íi]pio|Cidade)[:\s]+([A-Za-z\u00C0-\u00FF\s/]+?)(?=\s*[,./-]|$)', trecho_limpo, re.IGNORECASE)
+    if not municipio_match:
+        municipio_match = re.search(r'(Aparecida\s+de\s+Goiânia(?:/GO)?)', trecho_limpo, re.IGNORECASE)
+
+    rua = rua_match.group(1).strip() if rua_match else ""
+    qdr = f"Quadra {quadra_match.group(1).strip()}" if quadra_match else ""
+    lt = f"Lote {lote_match.group(1).strip()}" if lote_match else ""
+    cs = f"Casa {casa_match.group(1).strip()}" if casa_match else ""
+    bairro = f"Bairro {bairro_match.group(1).strip()}" if bairro_match else ""
+    condo = f"Condomínio {condo_match.group(1).strip()}" if condo_match else ""
+    municipio = municipio_match.group(1).strip() if municipio_match else ""
+
+    partes_endereco = [p for p in [rua, qdr, lt, cs, condo, bairro, municipio] if p]
+    endereco_extraido = ", ".join(partes_endereco) if partes_endereco else ""
+
+    # 3. Identificação Automática da Tipologia
+    tipologia_detectada = "Casa"
+    texto_lower = trecho_limpo.lower()
+    if "galpão" in texto_lower or "comercial" in texto_lower:
+        tipologia_detectada = "Galpão Comercial"
+    elif "lote" in texto_lower and "terreno" in texto_lower and "construída" not in texto_lower:
+        tipologia_detectada = "Lote"
+    elif "apartamento" in texto_lower or "condomínio fechado vertical" in texto_lower or "pavimento" in texto_lower:
+        tipologia_detectada = "Apartamento"
+
+    # 4. Atributos do Imóvel
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if not match_privativa:
         match_privativa = re.search(r'área\s*(?:privativa|construída)\s*(?:de\s*)?([\d.,]+)', trecho_limpo, re.IGNORECASE)
@@ -278,24 +319,37 @@ def extrair_variaveis_de_documento(arquivo_pdf):
         except ValueError:
             pass
 
-    return variaveis_encontradas
+    return variaveis_encontradas, os_extraida, endereco_extraido, tipologia_detectada
 
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Multi-Tipologia & Laudo NBR")
-st.markdown("Plataforma agnóstica para Modelagem Automatizada de Imóveis com Laudo Técnico Normativo.")
+st.title("🏢 Painel de Crédito e Controle AVM - Extração Documental Automatizada")
+st.markdown("Plataforma integrada com OCR e leitura inteligente para preenchimento de OS, Endereço e Tipologia.")
 st.divider()
+
+if 'os_auto' not in st.session_state:
+    st.session_state.os_auto = "OS-2026/8942-AVM"
+if 'endereco_auto' not in st.session_state:
+    st.session_state.endereco_auto = "Rua São Clemente, Quadra 334, Lote 17, Casa 2, Bairro Jardim Buriti Sereno, Município de Aparecida de Goiânia/GO"
+if 'tipologia_auto' not in st.session_state:
+    st.session_state.tipologia_auto = "Casa"
 
 st.sidebar.markdown("🔑 **Identificação do Contratante**")
 tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
 plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
 
-ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS)", value="OS-2026/8942-AVM")
-endereco_imovel_input = st.sidebar.text_input(
-    "Endereço do Imóvel (Rua, Quadra, Lote, Número, Bairro, Condomínio, Município)", 
-    value="Rua São Clemente, Quadra 334, Lote 17, Casa 2, Bairro Jardim Buriti Sereno, Município de Aparecida de Goiânia/GO"
+# TIPOLOGIA NA BARRA LATERAL (COM SUPORTE A 4 TIPOLOGIAS)
+st.sidebar.markdown("---")
+st.sidebar.markdown("🏗️ **Tipologia do Imóvel**")
+tipologia_imovel = st.sidebar.selectbox(
+    "Selecione a Tipologia:", 
+    ["Casa", "Apartamento", "Lote", "Galpão Comercial"],
+    index=["Casa", "Apartamento", "Lote", "Galpão Comercial"].index(st.session_state.tipologia_auto) if st.session_state.tipologia_auto in ["Casa", "Apartamento", "Lote", "Galpão Comercial"] else 0
 )
+
+ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS)", value=st.session_state.os_auto)
+endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value=st.session_state.endereco_auto)
 informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value="HUGO")
 informante_tel = st.sidebar.text_input("Telefone do Informante", value="(62) 98888-8888")
 
@@ -304,13 +358,6 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("**Conformidade Regulatória:**")
 st.sidebar.markdown("- ✅ BACEN CMN 4.910")
 st.sidebar.markdown("- ✅ ABNT NBR 14653-2")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("🏗️ **Tipologia do Imóvel**")
-tipologia_imovel = st.sidebar.selectbox(
-    "Selecione a Tipologia:", 
-    ["Casa", "Apartamento", "Lote", "Galpão Comercial"]
-)
 
 aba_avm, aba_juridico = st.tabs([
     "📊 1. Carga, Leitura de Certidão & AVM Híbrido", 
@@ -340,14 +387,22 @@ with aba_avm:
             st.markdown("🟢 **Certidão de Ônus Anexada!**")
 
     if documento_enviado is not None:
-        dados_extraidos = extrair_variaveis_de_documento(documento_enviado)
-        if dados_extraidos:
+        dados_extraidos, os_ext, end_ext, tipo_ext = extrair_dados_documento(documento_enviado)
+        if dados_extraidos or end_ext:
             st.session_state.dados_extraidos_ia = dados_extraidos
+            if os_ext and len(os_ext) > 3:
+                st.session_state.os_auto = os_ext
+            if end_ext and len(end_ext) > 10:
+                st.session_state.endereco_auto = end_ext
+            if tipo_ext:
+                st.session_state.tipologia_auto = tipo_ext
+            
             for k, v in dados_extraidos.items():
                 st.session_state.valores_manuais[k] = v
                 if f"input_safe_{k}" in st.session_state:
                     st.session_state[f"input_safe_{k}"] = v
-            st.success(f"✨ Atributos da certidão lidos e sincronizados com sucesso!")
+            st.success(f"✨ Documento lido! OS, Endereço, Tipologia ({tipo_ext}) e Atributos extraídos automaticamente.")
+            st.rerun()
 
     df_global = None
     if arquivo_planilha is not None:
