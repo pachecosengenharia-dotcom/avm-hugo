@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Leitura Documental Completa", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Multi-Documentos & Leitura Inteligente", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # AVALIAÇÃO NORMATIVA DE FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
@@ -181,44 +181,49 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# PARSER INTELIGENTE DE DOCUMENTOS (OS, ENDEREÇO, TIPOLOGIA E ATRIBUTOS)
+# PARSER AGREGADO DE MÚLTIPLOS DOCUMENTOS (OS, MATRÍCULA, PROJETOS)
 # =====================================================================
-def extrair_dados_documento(arquivo_pdf):
-    texto_extraido = ""
-    try:
-        bytes_arquivo = arquivo_pdf.read()
-    except Exception:
-        return {}, "", "", "Casa"
+def processar_multiplos_documentos(lista_arquivos):
+    texto_total = ""
     
-    try:
-        with pdfplumber.open(io.BytesIO(bytes_arquivo)) as pdf:
-            for pagina in pdf.pages:
-                texto = pagina.extract_text()
-                if texto:
-                    texto_extraido += texto + "\n"
-    except Exception:
-        pass
-
-    if not texto_extraido.strip():
+    for arquivo in lista_arquivos:
+        texto_arquivo = ""
         try:
-            imagens = convert_from_bytes(bytes_arquivo)
-            for img in imagens:
-                texto_ocr = pytesseract.image_to_string(img, lang='por')
-                texto_extraido += texto_ocr + "\n"
+            bytes_arq = arquivo.read()
+        except Exception:
+            continue
+            
+        try:
+            with pdfplumber.open(io.BytesIO(bytes_arq)) as pdf:
+                for pagina in pdf.pages:
+                    txt = pagina.extract_text()
+                    if txt:
+                        texto_arquivo += txt + "\n"
         except Exception:
             pass
 
-    if not texto_extraido.strip():
+        if not texto_arquivo.strip():
+            try:
+                imagens = convert_from_bytes(bytes_arq)
+                for img in imagens:
+                    txt_ocr = pytesseract.image_to_string(img, lang='por')
+                    texto_arquivo += txt_ocr + "\n"
+            except Exception:
+                pass
+                
+        texto_total += texto_arquivo + "\n"
+
+    if not texto_total.strip():
         return {}, "", "", "Casa"
 
     variaveis_encontradas = {}
-    trecho_limpo = texto_extraido.replace('\n', ' ')
+    trecho_limpo = texto_total.replace('\n', ' ')
 
-    # 1. Extração da OS (Ordem de Serviço)
+    # 1. Extração da OS
     os_match = re.search(r'(?:OS|Ordem de Serviço|Laudo|Processo)[:\s#]*([A-Z0-9\-/]+)', trecho_limpo, re.IGNORECASE)
-    os_extraida = os_match.group(1).strip() if os_match else "OS-2026/AVM"
+    os_extraida = os_match.group(1).strip() if os_match else ""
 
-    # 2. Extração Estruturada do Endereço (Rua, Quadra, Lote, Casa, Bairro, Condomínio, Município)
+    # 2. Extração do Endereço
     rua_match = re.search(r'(Rua\s+[^,\.]+?|Av\.[^,\.]+?|Alameda\s+[^,\.]+?)', trecho_limpo, re.IGNORECASE)
     quadra_match = re.search(r'Q[uãa]d?r?a\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     lote_match = re.search(r'Lote\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
@@ -244,8 +249,8 @@ def extrair_dados_documento(arquivo_pdf):
     partes_endereco = [p for p in [rua, qdr, lt, cs, condo, bairro, municipio] if p]
     endereco_extraido = ", ".join(partes_endereco) if partes_endereco else ""
 
-    # 3. Identificação Automática da Tipologia
-    tipologia_detectada = "Casa"
+    # 3. Tipologia
+    tipologia_detectada = ""
     texto_lower = trecho_limpo.lower()
     if "galpão" in texto_lower or "comercial" in texto_lower:
         tipologia_detectada = "Galpão Comercial"
@@ -253,8 +258,10 @@ def extrair_dados_documento(arquivo_pdf):
         tipologia_detectada = "Lote"
     elif "apartamento" in texto_lower or "condomínio fechado vertical" in texto_lower or "pavimento" in texto_lower:
         tipologia_detectada = "Apartamento"
+    elif "casa" in texto_lower or "residência" in texto_lower:
+        tipologia_detectada = "Casa"
 
-    # 4. Atributos do Imóvel
+    # 4. Atributos
     match_privativa = re.search(r'([\d.,]+)\s*metros\s*quadrados\s*de\s*área\s*privativa', trecho_limpo, re.IGNORECASE)
     if not match_privativa:
         match_privativa = re.search(r'área\s*(?:privativa|construída)\s*(?:de\s*)?([\d.,]+)', trecho_limpo, re.IGNORECASE)
@@ -324,8 +331,8 @@ def extrair_dados_documento(arquivo_pdf):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Extração Documental Automatizada")
-st.markdown("Plataforma integrada com OCR e leitura inteligente para preenchimento de OS, Endereço e Tipologia.")
+st.title("🏢 Painel de Crédito e Controle AVM - Multi-Documentos & Leitura IA")
+st.markdown("Plataforma integrada para upload de múltiplos documentos (OS, Matrícula, Projetos) com leitura unificada.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -339,7 +346,6 @@ st.sidebar.markdown("🔑 **Identificação do Contratante**")
 tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
 plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
 
-# TIPOLOGIA NA BARRA LATERAL (COM SUPORTE A 4 TIPOLOGIAS)
 st.sidebar.markdown("---")
 st.sidebar.markdown("🏗️ **Tipologia do Imóvel**")
 tipologia_imovel = st.sidebar.selectbox(
@@ -360,7 +366,7 @@ st.sidebar.markdown("- ✅ BACEN CMN 4.910")
 st.sidebar.markdown("- ✅ ABNT NBR 14653-2")
 
 aba_avm, aba_juridico = st.tabs([
-    "📊 1. Carga, Leitura de Certidão & AVM Híbrido", 
+    "📊 1. Carga, Multi-Documentos & AVM Híbrido", 
     "📜 2. Análise Jurídica"
 ])
 
@@ -374,7 +380,7 @@ if 'valores_manuais' not in st.session_state:
     st.session_state.valores_manuais = {}
 
 with aba_avm:
-    st.subheader(f"📁 1. Entradas de Dados: Planilha de Mercado & Certidão ({tipologia_imovel})")
+    st.subheader(f"📁 1. Entradas de Dados: Planilha de Mercado & Múltiplos Documentos ({tipologia_imovel})")
     
     col_up1, col_up2 = st.columns(2)
     with col_up1:
@@ -382,26 +388,26 @@ with aba_avm:
         if arquivo_planilha is not None:
             st.markdown("🟢 **Planilha Vinculada com Sucesso!**")
     with col_up2:
-        documento_enviado = st.file_uploader("Certidão de Ônus / Matrícula em PDF", type=["pdf"])
-        if documento_enviado is not None:
-            st.markdown("🟢 **Certidão de Ônus Anexada!**")
+        documentos_enviados = st.file_uploader("Documentação do Imóvel (OS, Matrícula, Projetos em PDF)", type=["pdf"], accept_multiple_files=True)
+        if documentos_enviados:
+            st.markdown(f"🟢 **{len(documentos_enviados)} documento(s) anexado(s)!**")
 
-    if documento_enviado is not None:
-        dados_extraidos, os_ext, end_ext, tipo_ext = extrair_dados_documento(documento_enviado)
-        if dados_extraidos or end_ext:
+    if documentos_enviados:
+        dados_extraidos, os_ext, end_ext, tipo_ext = processar_multiplos_documentos(documentos_enviados)
+        if dados_extraidos or end_ext or os_ext:
             st.session_state.dados_extraidos_ia = dados_extraidos
-            if os_ext and len(os_ext) > 3:
+            if os_ext and len(os_ext) > 2:
                 st.session_state.os_auto = os_ext
             if end_ext and len(end_ext) > 10:
                 st.session_state.endereco_auto = end_ext
-            if tipo_ext:
+            if tipo_ext and tipo_ext in ["Casa", "Apartamento", "Lote", "Galpão Comercial"]:
                 st.session_state.tipologia_auto = tipo_ext
             
             for k, v in dados_extraidos.items():
                 st.session_state.valores_manuais[k] = v
                 if f"input_safe_{k}" in st.session_state:
                     st.session_state[f"input_safe_{k}"] = v
-            st.success(f"✨ Documento lido! OS, Endereço, Tipologia ({tipo_ext}) e Atributos extraídos automaticamente.")
+            st.success(f"✨ Leitura multi-documentos concluída com sucesso! OS, Endereço, Tipologia e Atributos extraídos.")
             st.rerun()
 
     df_global = None
