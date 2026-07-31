@@ -202,7 +202,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("2. Equação do Modelo Válido (Log-Linear Homogeneizado - 6 Casas Decimais)", subtitle_style))
     intercepto_val = coeficientes.get('intercepto', 0)
-    eq_str = f"<b>ln(Valor Unitário)</b> = {intercepto_val:,.6f}"
+    eq_str = f"<b>ln(Valor Unitário * 100)</b> = {intercepto_val:,.6f}"
     for feat in features:
         coef = coeficientes.get(feat, 0.0)
         sinal = "+" if coef >= 0 else ""
@@ -407,7 +407,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): cálculo correto e proporcional do valor unitário e total.")
+st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): valor unitário multiplicado por 100.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -659,9 +659,9 @@ with aba_avm:
                 df_modelo = df_global[colunas_necessarias].dropna().copy()
                 df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                 
-                # Cálculo correto e direto do Valor Unitário real em R$/m² (sem fatores artificiais)
+                # Cálculo do Valor Unitário multiplicado por 100 conforme solicitado
                 coluna_alvo_unitario = 'valor_unitario_amostra'
-                df_modelo[coluna_alvo_unitario] = df_modelo[col_valor_total] / df_modelo[col_area_base]
+                df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] / df_modelo[col_area_base]) * 100.0
                 
                 df_modelo = filtrar_outliers(df_modelo, coluna_alvo_unitario)
                 
@@ -689,18 +689,17 @@ with aba_avm:
                     df_alvo = pd.DataFrame([valores_usuario])[features_selecionadas]
                     previsoes_log_unitario = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
                     
-                    previsoes_unitarios_reais = np.exp(previsoes_log_unitario)
+                    # Como o modelo previu o valor unitário multiplicado por 100, dividimos por 100 para retornar ao valor unitário real em R$/m²
+                    previsoes_unitarios_reais = np.exp(previsoes_log_unitario) / 100.0
                     
                     vu_medio = float(np.mean(previsoes_unitarios_reais))
                     vu_min = float(np.percentile(previsoes_unitarios_reais, 15))
                     vu_max = float(np.percentile(previsoes_unitarios_reais, 85))
 
-                    # Identifica a área principal do avaliando (privativa ou terreno) para calcular o valor global
                     area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
                     if area_avaliando <= 0:
                         area_avaliando = 1.0
 
-                    # Valor Total correto = Valor Unitário Real * Área Privativa (ou Área Base) do Imóvel Avaliando
                     v_medio = vu_medio * area_avaliando
                     v_min = vu_min * area_avaliando
                     v_max = vu_max * area_avaliando
@@ -725,9 +724,9 @@ with aba_avm:
                             st.write(f"- **{feat_name}**: p-valor = {p_feat*100:.2f}% ({status_p})")
                         st.warning("Experimente desmarcar as variáveis com p-valor alto para que a equação seja aprovada.")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR (Escala de Valores Corrigida)!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR (Valor Unitário multiplicado por 100)!")
                         
-                        eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
+                        eq_display = f"**ln(Valor Unitário * 100)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
                             coef_v = coeficientes[feat]
                             sinal_v = "+" if coef_v >= 0 else ""
