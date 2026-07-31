@@ -58,6 +58,32 @@ def calcular_estatisticas_regressao(X, y, coeficientes_reg):
     return p_valores_t, p_valor_f
 
 # =====================================================================
+# VERIFICAÇÃO DE MICRONUMEROSIDADE (NBR 14653: Mínimo 10% por atributo)
+# =====================================================================
+def verificar_micronumerosidade(df, features_selecionadas):
+    alertas_micronumerosidade = []
+    n_total = len(df)
+    
+    for feat in features_selecionadas:
+        serie = df[feat]
+        valores_unicos = serie.unique()
+        
+        # Identifica se é dicotômica (ex: 0 e 1, Sim e Não) ou código alocado (valores inteiros discretos com poucos grupos)
+        is_dicotomica = len(valores_unicos) == 2
+        is_codigo_alocado = pd.api.types.is_integer_dtype(serie) and len(valores_unicos) <= 6
+        
+        if is_dicotomica or is_codigo_alocado:
+            for val in valores_unicos:
+                contagem = (serie == val).sum()
+                percentual = (contagem / n_total) * 100
+                if percentual < 10.0:
+                    alertas_micronumerosidade.append(
+                        f"⚠️ **{feat}** (Atributo/Valor: `{val}`): possui apenas {contagem} amostras (**{percentual:.1f}%**). O mínimo exigido pela NBR 14653 é **10%** ({max(1, int(n_total * 0.1))} amostras)."
+                    )
+                    
+    return alertas_micronumerosidade
+
+# =====================================================================
 # AVALIAÇÃO NORMATIVA RIGOROSA DA FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
 # =====================================================================
 def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valor_f, tem_extrapolacao=False, notas_manuais=None):
@@ -407,7 +433,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): cálculo correto do valor unitário por metro quadrado e do valor total.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade ($\ge 10\%$ por atributo em variáveis dicotômicas/códigos alocados)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -659,7 +685,9 @@ with aba_avm:
                 df_modelo = df_global[colunas_necessarias].dropna().copy()
                 df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                 
-                # Fator multiplicador de correção direta (garantindo que se a base for menor ou maior, a escala converta para R$/m² padrão de mercado)
+                # Executa verificação de micronumerosidade (mínimo 10% por atributo em dicotômicas/códigos alocados)
+                alertas_micronumerosidade = verificar_micronumerosidade(df_modelo, features_selecionadas)
+                
                 fator_escala = 1000.0 if df_modelo[col_valor_total].mean() < 5000.0 else 1.0
                 
                 coluna_alvo_unitario = 'valor_unitario_amostra'
@@ -670,6 +698,12 @@ with aba_avm:
                 if len(df_modelo) < 3:
                     st.error("Amostras insuficientes após filtragem de outliers (mínimo de 3).")
                 else:
+                    if alertas_micronumerosidade:
+                        st.warning("⚠️ **Avisos de Micronumerosidade (ABNT NBR 14653):**")
+                        for alerta in alertas_micronumerosidade:
+                            st.write(alerta)
+                        st.info("ℹ️ Variáveis com menos de 10% de dados em um mesmo atributo podem comprometer a estabilidade estatística do modelo, embora o cálculo prossiga abaixo.")
+
                     df_modelo_log = df_modelo.copy()
                     df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
                     
@@ -718,14 +752,8 @@ with aba_avm:
 
                     if pontos_itens[4] == 0:
                         st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
-                        st.info("💡 **Diagnóstico dos Regressores (Teste t bicaudal):**")
-                        for idx, feat_name in enumerate(features_selecionadas):
-                            p_feat = p_valores_t[idx + 1]
-                            status_p = "🔴 Inválido (> 30%)" if p_feat > 0.30 else "🟢 Válido"
-                            st.write(f"- **{feat_name}**: p-valor = {p_feat*100:.2f}% ({status_p})")
-                        st.warning("Experimente desmarcar as variáveis com p-valor alto para que a equação seja aprovada.")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR (Valores Unitários e Totais Normalizados)!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR (Micronumerosidade verificada)!")
                         
                         eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
