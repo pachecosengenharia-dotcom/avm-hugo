@@ -361,7 +361,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER DE CERTIDÃO / MATRÍCULA COM FILTRO DE ÁREA COBERTA
+# MOTOR DE PARSER CONTEXTUAL INTELIGENTE (ÁREA COBERTA & CÔMODOS EXATOS)
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -438,14 +438,22 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
                     pass
         return None
 
-    # --- PARSER RIGOROSO PARA CONSIDERAR APENAS ÁREA PRIVATIVA/CONSTRUÍDA COBERTA ---
-    # Prioriza explicitamente menções a "coberta" ou "principal" e evita somar áreas descobertas
+    # --- EXCLUSÃO RIGOROSA DA ÁREA DESCOBERTA: BUSCA EXCLUSIVA DE COBERTA/CONSTRUÍDA ---
     padroes_privativa_coberta = [
-        r'(?:área\s*(?:privativa|construída|útil|edificada|principal)\s*coberta)\D{1,30}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
-        r'(?:privativa\s*total\s*coberta)\D{1,30}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
-        r'(?:área\s*(?:privativa|construída|útil|edificada|principal))\D{1,30}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)'
+        r'(?:privativa\s*(?:total)?\s*coberta)\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
+        r'(?:constru[íi]da\s*(?:total)?\s*coberta)\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
+        r'(?:área\s*(?:privativa|constru[íi]da|edificada|útil)\s*coberta)\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
+        r'(?:coberta\s*(?:de|com)?)\D{1,15}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)\s*m²',
+        r'(?:área\s*(?:privativa|constru[íi]da|edificada|útil|principal))\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)'
     ]
-    area_priv = extrair_valor_numerico(padroes_privativa_coberta, trecho_limpo)
+    
+    # Se houver menção explícita a coberta e descoberta na mesma certidão, isolamos o trecho coberto
+    trecho_analise = trecho_limpo
+    match_coberta_bloco = re.search(r'(?:coberta[^\.]{5,100})', trecho_limpo, re.IGNORECASE)
+    if match_coberta_bloco:
+        trecho_analise = match_coberta_bloco.group(0)
+
+    area_priv = extrair_valor_numerico(padroes_privativa_coberta, trecho_analise)
     if area_priv is not None:
         variaveis_encontradas['area_privativa'] = area_priv
 
@@ -457,21 +465,34 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     if area_terr is not None:
         variaveis_encontradas['area_terreno'] = area_terr
 
-    match_q = re.search(r'\b([1-9])\s*(?:quartos?|dormitórios?)\b', trecho_limpo, re.IGNORECASE)
-    if match_q:
+    # --- PARSER CONTEXTUAL PRECISO PARA 2 QUARTOS E 1 SUÍTE ---
+    # Procura especificamente a estrutura "X quartos, sendo Y suíte(s)"
+    bloco_quartos_suites = re.search(r'([1-9])\s*(?:quartos?|dormitórios?)[^\.]{0,30}sendo\s*([1-9])\s*su[íi]te', trecho_limpo, re.IGNORECASE)
+    if bloco_quartos_suites:
         try:
-            variaveis_encontradas['quartos'] = int(match_q.group(1))
+            variaveis_encontradas['quartos'] = int(bloco_quartos_suites.group(1))
+            val_s = int(bloco_quartos_suites.group(2))
+            variaveis_encontradas['suites'] = val_s
+            variaveis_encontradas['suite'] = val_s
         except ValueError:
             pass
+    else:
+        # Busca isolada caso não venha na mesma frase
+        match_q = re.search(r'\b([1-9])\s*(?:quartos?|dormitórios?)\b', trecho_limpo, re.IGNORECASE)
+        if match_q:
+            try:
+                variaveis_encontradas['quartos'] = int(match_q.group(1))
+            except ValueError:
+                pass
 
-    match_s = re.search(r'\b([1-9])\s*(?:su[íi]tes?|suíte[s]?)\b', trecho_limpo, re.IGNORECASE)
-    if match_s:
-        try:
-            val_suite = int(match_s.group(1))
-            variaveis_encontradas['suites'] = val_suite
-            variaveis_encontradas['suite'] = val_suite
-        except ValueError:
-            pass
+        match_s = re.search(r'\b([1-9])\s*(?:su[íi]tes?|suíte[s]?)\b', trecho_limpo, re.IGNORECASE)
+        if match_s:
+            try:
+                val_suite = int(match_s.group(1))
+                variaveis_encontradas['suites'] = val_suite
+                variaveis_encontradas['suite'] = val_suite
+            except ValueError:
+                pass
 
     match_b = re.search(r'\b([1-9])\s*(?:banheiros?|banhos?|sanitários?)\b', trecho_limpo, re.IGNORECASE)
     if match_b:
