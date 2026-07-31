@@ -407,7 +407,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): cálculo correto do valor unitário e total.")
+st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): cálculo correto do valor unitário real e do valor total.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -629,7 +629,7 @@ with aba_avm:
                         val_input = st.number_input(
                             f"{nome_formatado}", 
                             value=val_inicial,
-                        step=1, 
+                            step=1, 
                             format="%d",
                             key=f"input_safe_{tipologia_imovel}_{feat}"
                         )
@@ -659,9 +659,12 @@ with aba_avm:
                 df_modelo = df_global[colunas_necessarias].dropna().copy()
                 df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                 
-                # Cálculo do Valor Unitário real da amostra
+                # Fator multiplicador de correção caso a base esteja em milhares ou reais
+                fator_escala = 1.0 if df_modelo[col_valor_total].mean() > 10000 else 1000.0
+                
+                # Cálculo correto do Valor Unitário real em R$/m²
                 coluna_alvo_unitario = 'valor_unitario_amostra'
-                df_modelo[coluna_alvo_unitario] = df_modelo[col_valor_total] / df_modelo[col_area_base]
+                df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                 
                 df_modelo = filtrar_outliers(df_modelo, coluna_alvo_unitario)
                 
@@ -669,7 +672,6 @@ with aba_avm:
                     st.error("Amostras insuficientes após filtragem de outliers (mínimo de 3).")
                 else:
                     df_modelo_log = df_modelo.copy()
-                    # Uso de log natural direto (sem expm1 na regressão do unitário para garantir escala correta)
                     df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
                     
                     X = df_modelo_log[features_selecionadas].values
@@ -690,7 +692,6 @@ with aba_avm:
                     df_alvo = pd.DataFrame([valores_usuario])[features_selecionadas]
                     previsoes_log_unitario = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
                     
-                    # Retorno correto da exponencial do valor unitário
                     previsoes_unitarios_reais = np.exp(previsoes_log_unitario)
                     
                     vu_medio = float(np.mean(previsoes_unitarios_reais))
@@ -701,7 +702,7 @@ with aba_avm:
                     if area_avaliando <= 0:
                         area_avaliando = 1.0
 
-                    # Valor Total correto = Valor Unitário * Área Base do Imóvel Avaliando
+                    # Valor Total correto = Valor Unitário Real * Área Base do Imóvel Avaliando
                     v_medio = vu_medio * area_avaliando
                     v_min = vu_min * area_avaliando
                     v_max = vu_max * area_avaliando
@@ -726,7 +727,7 @@ with aba_avm:
                             st.write(f"- **{feat_name}**: p-valor = {p_feat*100:.2f}% ({status_p})")
                         st.warning("Experimente desmarcar as variáveis com p-valor alto para que a equação seja aprovada.")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR (Variável Alvo: Valor Unitário)!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR (Variável Alvo: Valor Unitário Real)!")
                         
                         eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
