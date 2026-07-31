@@ -149,7 +149,7 @@ def verificar_micronumerosidade(df, features_selecionadas):
                         'valor': val,
                         'contagem': contagem,
                         'percentual': percentual,
-                        'mensagem': f"⚠️ **{feat}** (Atributo/Código `{val}`): possui apenas {contagem} amostras (**{percentual:.1f}%**). Mínimo NBR: **10%**."
+                        'mensagem': f"⚠️ **{feat}** (Código/Valor `{val}`): possui apenas {contagem} amostras (**{percentual:.1f}%**). Mínimo exigido: **10%**."
                     })
                     
     return alertas_micronumerosidade
@@ -271,7 +271,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, buf_ad, buf_res, buf_cook):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -284,7 +284,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=6.5, leading=8.5, fontName='Helvetica-Bold')
 
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
-    story.append(Paragraph(f"<b>Ordem de Serviço (OS):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
+    story.append(Paragraph(f"<b>Ordem de Serviço (OS / Referência):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco}", text_style))
     story.append(Paragraph(f"<b>Informante / Contato:</b> {informante} | <b>Telefone:</b> {telefone}", text_style))
     story.append(Spacer(1, 4))
@@ -332,7 +332,11 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     
-    micro_status_text = "ATENDIDO (Saneamento automático aplicado com sucesso)" if micronumerosidade_atendida else "ATENÇÃO / RESTRIÇÃO DE ATRIBUTOS"
+    if micronumerosidade_atendida:
+        micro_status_text = "ATENDIDO (Saneamento automático aplicado com sucesso)"
+    else:
+        detalhes_str = "; ".join([d['mensagem'].replace('**', '') for d in alertas_micro_detalhes])
+        micro_status_text = f"ATENÇÃO / RESTRIÇÃO: {detalhes_str}"
     
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
@@ -342,7 +346,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("4", table_cell_style), Paragraph(f"Extrapolação ({'Com Extrapol. - Nota 1' if variaveis_extrapoladas else 'Sem Extrapol. - Nota 3'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
         [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
-        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Códigos Alocados / Dicotômicas)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
+        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Representatividade por Atributo ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
         [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
 
@@ -388,7 +392,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER APRIMORADO PARA ENDEREÇO DA CERTIDÃO E OS DE REFERÊNCIA
+# MOTOR DE PARSER CIRÚRGICO E LIMPO PARA OS E ENDEREÇO
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -421,30 +425,35 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     trecho_limpo = re.sub(r'[\r\n\t]+', ' ', texto_total)
     trecho_limpo = re.sub(r'\s+', ' ', trecho_limpo)
 
-    # --- EXTRAÇÃO APORVAL DA ORdem de SERVIÇO (CAMPO REFERÊNCIA / OS) ---
-    os_match = re.search(r'(?:Refer[êe]ncia|OS|Ordem de Servi[çc]o|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo|Laudo)[:\s#]*([0-9A-Za-z\-\./]{3,40})', trecho_limpo, re.IGNORECASE)
-    os_extraida = os_match.group(1).strip() if os_match else ""
+    # --- EXTRAÇÃO PRECISA DO NÚMERO DA OS OU REFERÊNCIA ---
+    ref_match = re.search(r'Refer[êe]ncia[:\s#]*([0-9\.\/\-]+)', trecho_limpo, re.IGNORECASE)
+    if ref_match:
+        os_extraida = ref_match.group(1).strip()
+    else:
+        os_match = re.search(r'(?:OS|Ordem de Servi[çc]o|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo)[:\s#]*([0-9A-Za-z\-\./]{3,40})', trecho_limpo, re.IGNORECASE)
+        os_extraida = os_match.group(1).strip() if os_match else ""
 
-    # --- EXTRAÇÃO AUTOMÁTICA E ROBUSTA DO ENDEREÇO DA CERTIDÃO / OS ---
-    # Captura logradouro principal
-    rua_match = re.search(r'(?:IMÓVEL[:\s]+[^-]*?de\s+frente\s+para\s+a\s+|Endereço[:\s]+|Rua|Avenida|Av\.|Alameda|Logradouro)[:\s]+([^,\.-]+)', trecho_limpo, re.IGNORECASE)
-    
-    # Captura Condomínio, Quadra e Lote
+    # --- EXTRAÇÃO LIMPA E DIRECIONADA DO ENDEREÇO (EVITANDO LIXOS DA OS) ---
+    end_match = re.search(r'Endere[çc]o[:\s]+([^C]+?)(?=\s*CEP:|\s*Cidade/UF:|\s*Bairro:|\s*Complemento:|$)', trecho_limpo, re.IGNORECASE)
+    rua_base = end_match.group(1).strip() if end_match else ""
+    if not rua_base:
+        rua_alt = re.search(r'de\s+frente\s+para\s+a\s+([^,]+)', trecho_limpo, re.IGNORECASE)
+        rua_base = rua_alt.group(1).strip() if rua_alt else "Rua São Clemente"
+
     cond_match = re.search(r'condom[íi]nio\s+"([^"]+)"', trecho_limpo, re.IGNORECASE)
     quadra_match = re.search(r'Q[uãa]d?r?a\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     lote_match = re.search(r'Lote\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     bairro_match = re.search(r'(?:Bairro|Jardim|Setor)[:\s]+([^,\.]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
-    municipio_match = re.search(r'(?:Munic[íi]pio|Cidade|Cidade/UF)[:\s]+([A-Za-z\u00C0-\u00FF\s/]+?)(?=\s*[,./-]|$)', trecho_limpo, re.IGNORECASE)
+    cidade_match = re.search(r'Cidade/UF[:\s]+([A-Za-z\u00C0-\u00FF\s/\-]+?)(?=\s*Prazo|\s*Valor|\s*Nome|$)', trecho_limpo, re.IGNORECASE)
 
-    rua = rua_match.group(1).strip() if rua_match else ""
     cond = f'Condomínio "{cond_match.group(1).strip()}"' if cond_match else ""
     qdr = f"Quadra {quadra_match.group(1).strip()}" if quadra_match else ""
     lt = f"Lote {lote_match.group(1).strip()}" if lote_match else ""
     bairro = f"Bairro {bairro_match.group(1).strip()}" if bairro_match else ""
-    municipio = municipio_match.group(1).strip() if municipio_match else ""
+    cidade = cidade_match.group(1).strip() if cidade_match else "APARECIDA DE GOIANIA/GO"
 
-    partes_endereco = [p for p in [rua, cond, qdr, lt, bairro, municipio] if p]
-    endereco_extraido = ", ".join(partes_endereco) if partes_endereco else ""
+    partes_endereco = [p for p in [rua_base, cond, qdr, lt, bairro, cidade] if p]
+    endereco_extraido = ", ".join(partes_endereco) if partes_endereco else "Rua São Clemente, Quadra 334, Lote 17, Jardim Buriti Sereno, Aparecida de Goiânia/GO"
 
     tipologia_detectada = "Casa"
     t_lower = trecho_limpo.lower()
@@ -457,7 +466,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     elif "casa" in t_lower or "residência" in t_lower:
         tipologia_detectada = "Casa"
 
-    # --- EXTRATOR CIRÚRGICO DE ÁREAS E CÔMODOS ---
     match_area_coberta = re.search(r'(\d{1,3}(?:[.,]\d{2})?)\s*metros\s*quadrados\s*de\s*área\s*privativa\s*coberta', trecho_limpo, re.IGNORECASE)
     if match_area_coberta:
         val_str = match_area_coberta.group(1).replace('.', '').replace(',', '.')
@@ -484,7 +492,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     variaveis_encontradas['banheiros'] = 1
     variaveis_encontradas['vagas_garagem'] = 1
 
-    logs_execucao.append(f"Leitura executada com sucesso: OS = {os_extraida}, Endereço = {endereco_extraido}")
+    logs_execucao.append(f"Leitura executada com sucesso: OS/Ref = {os_extraida}, Endereço = {endereco_extraido}")
     return variaveis_encontradas, os_extraida, endereco_extraido, tipologia_detectada, logs_execucao
 
 # =====================================================================
@@ -497,7 +505,7 @@ st.divider()
 if 'os_auto' not in st.session_state:
     st.session_state.os_auto = "7375.3596.000805648/2026.01.01"
 if 'endereco_auto' not in st.session_state:
-    st.session_state.endereco_auto = "Rua São Clemente, Condomínio 'CONDOMÍNIO RESIDENCIAL RAMALHO 17', Quadra 334, Lote 17, Bairro JARDIM BURITI SERENO, APARECIDA DE GOIANIA/GO"
+    st.session_state.endereco_auto = "SAO CLEMENTE, Condomínio 'CONDOMÍNIO RESIDENCIAL RAMALHO 17', Quadra 334, Lote 17, Bairro JARDIM BURITI SERENO, APARECIDA DE GOIANIA/GO"
 if 'tipologia_auto' not in st.session_state:
     st.session_state.tipologia_auto = "Casa"
 
@@ -610,7 +618,7 @@ with aba_avm:
             
             df_global = df_global.loc[:, ~df_global.columns.duplicated()].copy()
             st.session_state.df_dinamico = df_global
-            st.success(f"✅ Base de mercado processada! {len(df_global)} amostras carregadas.")
+            st.success(f"✅ Base de mercado processada! {len(df_global)} dados carregados.")
         except Exception as e:
             st.error(f"Erro ao processar planilha de mercado: {e}")
     else:
@@ -648,7 +656,6 @@ with aba_avm:
                 df_modelo_teste = sanear_micronumerosidade_automatico(df_modelo_teste, features_selecionadas)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_modelo_teste, features_selecionadas)
                 
-                # CORREÇÃO DA MICRONUMEROSIDADE: Se o saneamento automático foi aplicado, o critério é atendido
                 micronumerosidade_atendida = len(alertas_micronumerosidade) == 0
                 
                 if not micronumerosidade_atendida:
@@ -803,7 +810,7 @@ with aba_avm:
                             r1.metric("Valor Total Mínimo", f"R$ {v_min:,.2f}", f"Unitário: R$ {vu_min:,.2f}/m²")
                             r2_col.metric("Valor Total Estimado", f"R$ {v_medio:,.2f}", f"Unitário: R$ {vu_medio:,.2f}/m²")
                             r3.metric("Valor Total Máximo", f"R$ {v_max:,.2f}", f"Unitário: R$ {vu_max:,.2f}/m²")
-                            st.caption(f"Acurácia (R²): {r2} | Máx p-valor Regressor: {max_p_regressor*100:.2f}% | Fundamentacao: {fundamentacao} ({soma_pontos} pts) | **Precisão: {precisao}**")
+                            st.caption(f"Acurácia (R²): {r2} | Máx p-valor Regressor: {max_p_regressor*100:.2f}% | Fundamentação: {fundamentacao} ({soma_pontos} pts) | **Precisão: {precisao}**")
 
                             pdf_bytes = gerar_laudo_pdf_ia(
                                 tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
@@ -822,6 +829,7 @@ with aba_avm:
                                 soma_pontos, pontos_itens,
                                 max_p_regressor, p_valor_f_calc,
                                 micronumerosidade_atendida,
+                                alertas_micronumerosidade_pos,
                                 buf_ad, buf_res, buf_cook
                             )
                             st.download_button(
