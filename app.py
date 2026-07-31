@@ -97,14 +97,14 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO POR EXCLUSÃO AUTOMÁTICA (RIGOROSO ≥ 10%)
+# SANEAMENTO POR EXCLUSÃO AUTOMÁTICA (MOTOR ROBUSTO DE MICRONUMEROSIDADE)
 # =====================================================================
 def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
     df_saneado = df.copy()
     termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado']
     
     alteracao = True
-    max_iter = 10
+    max_iter = 20  # Aumentado para garantir varreduras completas em cascata
     iteracao = 0
     
     while alteracao and iteracao < max_iter:
@@ -129,7 +129,7 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
                 for val in valores_unicos:
                     contagem = (serie == val).sum()
                     percentual = (contagem / n_total) * 100 if n_total > 0 else 0
-                    # Exclui obrigatoriamente qualquer classe abaixo de 10% para cumprir a norma e limpar o alerta
+                    # Remove rigorosamente qualquer classe abaixo de 10%
                     if percentual < 10.0:
                         idx_minoria = df_saneado[df_saneado[feat] == val].index
                         indices_para_remover.extend(idx_minoria)
