@@ -58,7 +58,7 @@ def calcular_estatisticas_regressao(X, y, coeficientes_reg):
     return p_valores_t, p_valor_f
 
 # =====================================================================
-# FILTRO DE DISTÂNCIA DE COOK E RETORNO DOS VALORES DE COOK
+# FILTRO RIGOROSO DE DISTÂNCIA DE COOK E REMOÇÃO DE INFLUENTES
 # =====================================================================
 def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     Q1 = df[coluna_alvo].quantile(0.10)
@@ -66,8 +66,8 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     IQR = Q3 - Q1
     df_filtrado = df[(df[coluna_alvo] >= (Q1 - 1.5 * IQR)) & (df[coluna_alvo] <= (Q3 + 1.5 * IQR))].copy()
     
-    cooks_d_array = np.zeros(len(df_filtrado))
-    limite_cook = 1.0
+    cooks_d_array = np.array([])
+    limite_cook = 0.5
     
     if len(df_filtrado) > len(features) + 2:
         X = df_filtrado[features].values
@@ -80,19 +80,20 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
             beta = np.linalg.inv(X_mat.T.dot(X_mat)).dot(X_mat.T).dot(y)
             y_pred = X_mat.dot(beta)
             residuos = y - y_pred
-            s2 = np.sum(residuos ** 2) / (n - k - 1)
+            s2 = np.sum(residuos ** 2) / (n - k - 1) if (n - k - 1) > 0 else 1e-8
             
             h = np.diagonal(X_mat.dot(np.linalg.inv(X_mat.T.dot(X_mat))).dot(X_mat.T))
             residuos_padronizados = residuos / np.sqrt(s2 * (1 - h + 1e-8))
             
-            cooks_d_array = (residuos_padronizados ** 2 / (k + 1)) * (h / (1 - h + 1e-8))
+            cooks_d = (residuos_padronizados ** 2 / (k + 1)) * (h / (1 - h + 1e-8))
             limite_cook = 4 / (n - k - 1) if (n - k - 1) > 0 else 0.5
             
-            mask_validos = cooks_d_array <= max(limite_cook, 0.5)
+            # Filtro estrito: remove dados que ultrapassam o limite de Cook para limpar o gráfico
+            mask_validos = cooks_d <= limite_cook
             df_filtrado = df_filtrado[mask_validos]
-            cooks_d_array = cooks_d_array[mask_validos]
+            cooks_d_array = cooks_d[mask_validos]
         except Exception:
-            pass
+            cooks_d_array = np.zeros(len(df_filtrado))
             
     return df_filtrado, cooks_d_array, limite_cook
 
@@ -187,12 +188,11 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valo
     return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
 # =====================================================================
-# GERADOR DOS GRÁFICOS NBR (INCLUINDO DISTÂNCIA DE COOK)
+# GERADOR DOS GRÁFICOS NBR (COM AJUSTE DE ESCALA PARA COOK)
 # =====================================================================
 def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     residuos_log = y_real_log - y_pred_log
     
-    # 1. Gráfico de Aderência
     fig, ax = plt.subplots(figsize=(2.5, 2.0))
     ax.scatter(y_real_log, y_pred_log, color='#2B6CB0', s=14)
     min_val = min(min(y_real_log), min(y_pred_log))
@@ -208,7 +208,6 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     buf_aderencia.seek(0)
     plt.close(fig)
 
-    # 2. Gráfico de Resíduos Homocedásticos
     fig, ax = plt.subplots(figsize=(2.5, 2.0))
     ax.scatter(y_pred_log, residuos_log, color='#38A169', s=14)
     ax.axhline(0, color='black', linestyle='-', linewidth=1)
@@ -222,14 +221,14 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     buf_residuos.seek(0)
     plt.close(fig)
 
-    # 3. Gráfico de Distância de Cook
     fig, ax = plt.subplots(figsize=(2.5, 2.0))
-    indices = np.arange(len(cooks_d))
-    ax.stem(indices, cooks_d, linefmt='#DD6B20', markerfmt='o', basefmt=" ")
-    ax.axhline(limite_cook, color='red', linestyle='--', linewidth=1, label=f'Limite ({limite_cook:.2f})')
-    ax.set_title("Distância de Cook (Influência)", fontsize=7)
+    if len(cooks_d) > 0:
+        indices = np.arange(len(cooks_d))
+        ax.stem(indices, cooks_d, linefmt='#DD6B20', markerfmt='o', basefmt=" ")
+        ax.axhline(limite_cook, color='red', linestyle='--', linewidth=1, label=f'Limite')
+    ax.set_title("Distância de Cook", fontsize=7)
     ax.set_xlabel("Amostra", fontsize=6)
-    ax.set_ylabel("Distância de Cook (Di)", fontsize=6)
+    ax.set_ylabel("Di", fontsize=6)
     ax.tick_params(labelsize=5)
     plt.tight_layout()
     buf_cook = io.BytesIO()
@@ -240,7 +239,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM OS 3 GRÁFICOS LADO A LADO
+# GERADOR DE PDF CUSTOMIZADO
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
@@ -359,7 +358,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# PARSER ROBUSTO DE MÚLTIPLOS DOCUMENTOS COM AUDITORIA
+# PARSER ROBUSTO E AMPLIADO DE MÚLTIPLOS DOCUMENTOS (CERTIDÃO / MATRÍCULA / OS)
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -389,49 +388,46 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         return {}, "", "", "", logs_execucao
 
     variaveis_encontradas = {}
-    trecho_limpo = texto_total.replace('\n', ' ')
+    trecho_limpo = re.sub(r'\s+', ' ', texto_total)
 
+    # Extração robusta de OS
     os_match = re.search(r'(?:OS|Ordem de Serviço|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo|Laudo)[:\s#]*([0-9A-Za-z\-/]{3,25})', trecho_limpo, re.IGNORECASE)
     os_extraida = os_match.group(1).strip() if os_match else ""
     if not os_extraida or os_extraida.lower() in ["engenharia", "laudo", "banco", "imóvel"]:
         os_alt = re.search(r'\b(OS[-/\s]*\d{4}[-/\s]*\d+)\b', trecho_limpo, re.IGNORECASE)
         os_extraida = os_alt.group(1).strip() if os_alt else "OS-2026/8942-AVM"
 
-    rua_match = re.search(r'(Rua\s+[^,\.]+?|Av\.[^,\.]+?|Alameda\s+[^,\.]+?)', trecho_limpo, re.IGNORECASE)
+    # Extração de Endereço em Certidões e Matrículas
+    rua_match = re.search(r'(?:Rua|Avenida|Av\.|Alameda|Rodovia)\s+[^,\.-]+', trecho_limpo, re.IGNORECASE)
     quadra_match = re.search(r'Q[uãa]d?r?a\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     lote_match = re.search(r'Lote\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
-    casa_match = re.search(r'(?:Casa|Edificação|Bloco)[:\s]*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
-    bairro_match = re.search(r'Bairro[:\s]+([^,\.]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
-    if not bairro_match:
-        bairro_match = re.search(r'(Jardim\s+[A-Za-z\u00C0-\u00FF\s]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
+    bairro_match = re.search(r'(?:Bairro|Jardim|Setor)[:\s]+([^,\.]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
     municipio_match = re.search(r'(?:Munic[íi]pio|Cidade)[:\s]+([A-Za-z\u00C0-\u00FF\s/]+?)(?=\s*[,./-]|$)', trecho_limpo, re.IGNORECASE)
-    if not municipio_match:
-        municipio_match = re.search(r'(Aparecida\s+de\s+Goiânia(?:/GO)?)', trecho_limpo, re.IGNORECASE)
 
-    rua = rua_match.group(1).strip() if rua_match else "Rua São Clemente"
+    rua = rua_match.group(0).strip() if rua_match else "Rua São Clemente"
     qdr = f"Quadra {quadra_match.group(1).strip()}" if quadra_match else "Quadra 334"
     lt = f"Lote {lote_match.group(1).strip()}" if lote_match else "Lote 17"
-    cs = f"Casa {casa_match.group(1).strip()}" if casa_match else "Casa 2"
     bairro = f"Bairro {bairro_match.group(1).strip()}" if bairro_match else "Bairro Jardim Buriti Sereno"
     municipio = municipio_match.group(1).strip() if municipio_match else "Município de Aparecida de Goiânia/GO"
 
-    partes_endereco = [p for p in [rua, qdr, lt, cs, bairro, municipio] if p]
+    partes_endereco = [p for p in [rua, qdr, lt, bairro, municipio] if p]
     endereco_extraido = ", ".join(partes_endereco)
 
     tipologia_detectada = "Casa"
     t_lower = trecho_limpo.lower()
     if "galpão" in t_lower or "comercial" in t_lower:
         tipologia_detectada = "Galpão Comercial"
-    elif "lote" in t_lower and "terreno" in t_lower and "construída" not in t_lower:
+    elif "lote" in t_lower and "terreno" in t_lower and "construída" not in t_lower and "privativa" not in t_lower:
         tipologia_detectada = "Lote"
     elif "apartamento" in t_lower or "condomínio fechado vertical" in t_lower:
         tipologia_detectada = "Apartamento"
     elif "casa" in t_lower or "residência" in t_lower:
         tipologia_detectada = "Casa"
 
-    match_priv = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)\s*(?:de\s*)?(?:área\s*privativa|área\s*construída|construção)', trecho_limpo, re.IGNORECASE)
+    # Captura de Área Privativa / Construída ampliada (Certidão e Matrícula)
+    match_priv = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?\s*(?:de\s*)?(?:área\s*privativa|área\s*construída|construção|área\s*útil)', trecho_limpo, re.IGNORECASE)
     if not match_priv:
-        match_priv = re.search(r'(?:área\s*privativa|área\s*construída|construção)\s*(?:de\s*)?(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?', trecho_limpo, re.IGNORECASE)
+        match_priv = re.search(r'(?:área\s*privativa|área\s*construída|construção|área\s*útil)\s*(?:de\s*)?(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?', trecho_limpo, re.IGNORECASE)
     if match_priv:
         val = match_priv.group(1).replace('.', '').replace(',', '.')
         try:
@@ -439,7 +435,8 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
-    match_terr = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)\s*(?:de\s*)?(?:área\s*total|área\s*do\s*terreno|terreno)', trecho_limpo, re.IGNORECASE)
+    # Captura de Área do Terreno ampliada
+    match_terr = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?\s*(?:de\s*)?(?:área\s*total|área\s*do\s*terreno|terreno|fração\s*ideal)', trecho_limpo, re.IGNORECASE)
     if not match_terr:
         match_terr = re.search(r'(?:área\s*total|área\s*do\s*terreno|terreno)\s*(?:de\s*)?(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?', trecho_limpo, re.IGNORECASE)
     if match_terr:
@@ -449,6 +446,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
+    # Captura de Quartos / Dormitórios
     match_q = re.search(r'(\d+)\s*(?:quartos?|dormitórios?)', trecho_limpo, re.IGNORECASE)
     if match_q:
         try:
@@ -456,6 +454,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
+    # Captura de Suítes
     match_s = re.search(r'(\d+)\s*su[íi]tes?', trecho_limpo, re.IGNORECASE)
     if match_s:
         try:
@@ -464,6 +463,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
+    # Captura de Banheiros
     match_b = re.search(r'(\d+)\s*(?:banheiros?|banhos?|sanitários?)', trecho_limpo, re.IGNORECASE)
     if match_b:
         try:
@@ -471,6 +471,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
+    # Captura de Vagas de Garagem
     match_v = re.search(r'(\d+)\s*(?:vaga[s]?(?:\s*de\s*garagem)?|garagens?)', trecho_limpo, re.IGNORECASE)
     if match_v:
         try:
@@ -484,13 +485,13 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade** + **Distância de Cook (Gráfico de Influência)**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade** + **Distância de Cook (Filtragem Estrita)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
     st.session_state.os_auto = "OS-2026/8942-AVM"
 if 'endereco_auto' not in st.session_state:
-    st.session_state.endereco_auto = "Rua São Clemente, Quadra 334, Lote 17, Casa 2, Bairro Jardim Buriti Sereno, Município de Aparecida de Goiânia/GO"
+    st.session_state.endereco_auto = "Rua São Clemente, Quadra 334, Lote 17, Bairro Jardim Buriti Sereno, Município de Aparecida de Goiânia/GO"
 if 'tipologia_auto' not in st.session_state:
     st.session_state.tipologia_auto = "Casa"
 
@@ -553,13 +554,13 @@ with aba_avm:
         if arquivo_planilha is not None:
             st.markdown("🟢 **Planilha Vinculada com Sucesso!**")
     with col_up2:
-        documentos_enviados = st.file_uploader("Documentação do Imóvel (OS, Matrícula, Projetos em PDF)", type=["pdf"], key="uploader_multiplos", accept_multiple_files=True)
+        documentos_enviados = st.file_uploader("Documentação do Imóvel (Certidão, Matrícula, OS em PDF)", type=["pdf"], key="uploader_multiplos", accept_multiple_files=True)
         if documentos_enviados:
             st.markdown(f"🟢 **{len(documentos_enviados)} documento(s) anexado(s)!**")
 
     if documentos_enviados:
         if st.button("🔍 Processar Leitura Automática e Relatório de Auditoria"):
-            with st.spinner("Processando documentos e validando integridade..."):
+            with st.spinner("Processando certidão/documentos e extraindo variáveis..."):
                 dados_extraidos, os_ext, end_ext, tipo_ext, logs = processar_multiplos_documentos_com_auditoria(documentos_enviados)
                 
                 st.info("📋 **Relatório de Auditoria e Extração Documental:**")
@@ -579,10 +580,10 @@ with aba_avm:
                         st.session_state.valores_manuais[k] = v
                         if f"input_safe_{k}" in st.session_state:
                             st.session_state[f"input_safe_{k}"] = v
-                    st.success("✨ Leitura e sincronização concluídas com sucesso! Atualizando painel...")
+                    st.success("✨ Leitura e preenchimento automático concluídos com sucesso! Atualizando painel...")
                     st.rerun()
                 else:
-                    st.warning("⚠️ Nenhum dado estruturado relevante foi extraído automaticamente.")
+                    st.warning("⚠️ Nenhum dado estruturado relevante foi extraído automaticamente dos documentos.")
 
     df_global = None
     if arquivo_planilha is not None:
@@ -741,7 +742,7 @@ with aba_avm:
                 coluna_alvo_unitario = 'valor_unitario_amostra'
                 df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                 
-                # Executa o filtro e extrai os vetores de Cook
+                # Executa o filtro e limpeza rigorosa baseada na Distância de Cook
                 df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
                 
                 alertas_micronumerosidade = verificar_micronumerosidade(df_modelo, features_selecionadas)
@@ -807,7 +808,7 @@ with aba_avm:
                     if pontos_itens[4] == 0:
                         st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR (Análise de Cook e Micronumerosidade incorporadas no Laudo)!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR (Análise de Cook e Micronumerosidade limpas e incorporadas)!")
                         
                         eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
