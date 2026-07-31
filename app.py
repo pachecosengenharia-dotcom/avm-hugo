@@ -15,7 +15,7 @@ from sklearn.linear_model import LinearRegression
 import scipy.stats as stats
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Fundamentação & Testes Estatísticos NBR", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # CÁLCULO ESTATÍSTICO AUTOMÁTICO (TESTE T E TESTE F DE SNEDECOR)
@@ -24,11 +24,9 @@ def calcular_estatisticas_regressao(X, y, coeficientes_reg):
     n = len(y)
     k = X.shape[1]
     
-    # Adiciona constante para cálculo estatístico completo
     X_matrix = np.hstack([np.ones((n, 1)), X.values])
     y_array = y.values
     
-    # Ajuste de OLS para obtenção dos p-valores reais
     y_pred_ols = X_matrix.dot(coeficientes_reg)
     residuos = y_array - y_pred_ols
     
@@ -41,14 +39,12 @@ def calcular_estatisticas_regressao(X, y, coeficientes_reg):
             cov_mat = var_res * np.linalg.inv(X_matrix.T.dot(X_matrix))
             desvio_padrao_se = np.sqrt(np.diagonal(cov_mat))
             t_stats = coeficientes_reg / desvio_padrao_se
-            # P-valores bicaudais para cada regressor (Item 5)
             p_valores_t = [2 * (1 - stats.t.cdf(np.abs(t), df=graus_liberdade)) for t in t_stats]
         except Exception:
             p_valores_t = [0.05] * (k + 1)
     else:
         p_valores_t = [0.05] * (k + 1)
         
-    # Teste F de Snedecor para o modelo global (Item 6)
     soma_sq_reg = np.sum((y_pred_ols - np.mean(y_array)) ** 2)
     soma_sq_tot = np.sum((y_array - np.mean(y_array)) ** 2)
     
@@ -78,16 +74,18 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valo
     
     p_item4 = 1 if tem_extrapolacao else 3
     
-    # Item 5: Avaliação automática com base no nível de significância máximo dos regressores (teste bicaudal)
+    # Item 5: Regra exata de significância dos regressores (teste bicaudal)
     max_p_regressor = max(p_valores_t[1:]) if len(p_valores_t) > 1 else 0.05
+    
     if max_p_regressor <= 0.10:
         p_item5 = 3
-    elif max_p_regressor <= 0.30:
+    elif max_p_regressor <= 0.20:
         p_item5 = 2
-    else:
+    elif max_p_regressor <= 0.30:
         p_item5 = 1
+    else:
+        p_item5 = 0  # Inválido (> 30%)
         
-    # Item 6: Avaliação automática com base no Teste F de Snedecor (p-valor do modelo)
     if p_valor_f <= 0.01:
         p_item6 = 3
     elif p_valor_f <= 0.05:
@@ -108,12 +106,12 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valo
     pontos_itens = [p_item1, p_item2, p_item3, p_item4, p_item5, p_item6]
     soma_pontos = sum(pontos_itens)
 
-    if soma_pontos >= 16 and n_amostras >= 30 and r2 >= 0.70 and not tem_extrapolacao:
+    if soma_pontos >= 16 and n_amostras >= 30 and r2 >= 0.70 and not tem_extrapolacao and p_item5 > 0:
         fundamentacao = "Grau III"
-    elif soma_pontos >= 10 and n_amostras >= 12:
+    elif soma_pontos >= 10 and n_amostras >= 12 and p_item5 > 0:
         fundamentacao = "Grau II"
     else:
-        fundamentacao = "Grau I"
+        fundamentacao = "Inválido / Grau I"
 
     if r2 >= 0.70:
         precisao = "Grau III"
@@ -173,9 +171,9 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM ESPAÇAMENTO SEGURO
+# GERADOR DE PDF CUSTOMIZADO
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, buf_ad, buf_res):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, buf_ad, buf_res):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -191,19 +189,27 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph(f"<b>Informante / Contato:</b> {informante} | <b>Telefone:</b> {telefone}", text_style))
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("1. Variáveis e Parâmetros Utilizados", subtitle_style))
-    param_text = " | ".join([f"<b>{k}:</b> {v:.2f}" if isinstance(v, float) else f"<b>{k}:</b> {v}" for k, v in valores_usuario.items()])
+    story.append(Paragraph("1. Variáveis e Parâmetros Utilizados (Vermelho indica Extrapolação)", subtitle_style))
+    
+    param_formatted_list = []
+    for k, v in valores_usuario.items():
+        val_str = f"{v:.2f}" if isinstance(v, float) else f"{v}"
+        if k in variaveis_extrapoladas:
+            param_formatted_list.append(f"<font color='red'><b>{k}: {val_str} (EXTRAPOLADO)</b></font>")
+        else:
+            param_formatted_list.append(f"<b>{k}:</b> {val_str}")
+    param_text = " | ".join(param_formatted_list)
     story.append(Paragraph(param_text, text_style))
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("2. Equação do Modelo de Avaliação (Log-Linear Homogeneizado)", subtitle_style))
+    story.append(Paragraph("2. Equação do Modelo Válido (Log-Linear Homogeneizado)", subtitle_style))
     eq_str = f"<b>ln({variavel_alvo})</b> = {coeficientes.get('intercepto', 0):,.2f}"
     for feat in features:
         coef = coeficientes.get(feat, 0.0)
         sinal = "+" if coef >= 0 else ""
         eq_str += f" {sinal} ({coef:,.2f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
-    story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras = {n_amostras} | <b>Signif. Regressores (Máx p-t):</b> {max_p_regressor:.4f} | <b>Signif. Modelo (p-F):</b> {p_valor_f:.4f}", text_style))
+    story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Amostras = {n_amostras} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações", subtitle_style))
@@ -229,8 +235,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ["1", "Caracterização do imóvel avaliando", str(pontos_itens[0])],
         ["2", f"Quantidade de dados de mercado (n = {n_amostras})", str(pontos_itens[1])],
         ["3", "Identificação dos dados de mercado", str(pontos_itens[2])],
-        ["4", "Extrapolação", str(pontos_itens[3])],
-        ["5", f"Significância Regressores (Máx p = {max_p_regressor:.4f})", str(pontos_itens[4])],
+        ["4", f"Extrapolação ({'Com Extrapol. - Nota 1' if variaveis_extrapoladas else 'Sem Extrapol. - Nota 3'})", str(pontos_itens[3])],
+        ["5", f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", str(pontos_itens[4])],
         ["6", f"Significância Modelo F (p = {p_valor_f:.4f})", str(pontos_itens[5])],
         ["SOMA", f"Fundamentação: {fundamentacao} | Precisão: {precisao}", f"{soma_pontos} PONTOS"]
     ], colWidths=[30, 334, 190])
@@ -401,8 +407,8 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Fundamentação & Testes Estatísticos")
-st.markdown("Plataforma integrada com testes estatísticos automáticos (Teste t e Teste F de Snedecor) para os Itens 5 e 6.")
+st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
+st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): equações com regressores inválidos são bloqueadas automaticamente.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -593,9 +599,9 @@ with aba_avm:
             ]
             
             valores_usuario = {}
+            variaveis_extrapoladas = []
             cols_inputs = st.columns(len(features_selecionadas))
             
-            tem_extrapolacao_detectada = False
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
@@ -612,32 +618,39 @@ with aba_avm:
                                 val_inicial = valor_ia
                                 break
                     
+                    nome_formatado = feat.replace('_', ' ').title()
+                    
                     if eh_inteiro:
                         val_inicial = int(round(float(val_inicial)))
-                        valores_usuario[feat] = st.number_input(
-                            f"{feat.replace('_', ' ').title()}", 
+                        val_input = st.number_input(
+                            f"{nome_formatado}", 
                             value=val_inicial,
                             step=1, 
                             format="%d",
                             key=f"input_safe_{tipologia_imovel}_{feat}"
                         )
+                        valores_usuario[feat] = val_input
                         st.caption(f"📊 Limites da Amostra: [{int(min_amostra)} a {int(max_amostra)}]")
                     else:
                         val_inicial = float(val_inicial)
-                        valores_usuario[feat] = st.number_input(
-                            f"{feat.replace('_', ' ').title()}", 
+                        val_input = st.number_input(
+                            f"{nome_formatado}", 
                             value=val_inicial,
                             format="%.2f",
                             key=f"input_safe_{tipologia_imovel}_{feat}"
                         )
+                        valores_usuario[feat] = val_input
                         st.caption(f"📊 Limites da Amostra: [{min_amostra:.2f} a {max_amostra:.2f}]")
                     
                     if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
-                        tem_extrapolacao_detectada = True
+                        variaveis_extrapoladas.append(feat)
+                        st.error(f"⚠️ Alerta: '{nome_formatado}' está EXTRAPOLADO em relação à amostra!")
 
                     st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
-            if st.button("🚀 Executar Modelo com Testes Estatísticos Automáticos"):
+            tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
+
+            if st.button("🚀 Executar e Validar Equação pelo Motor NBR"):
                 df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
                 df_modelo = filtrar_outliers(df_modelo, variavel_alvo)
                 
@@ -655,7 +668,6 @@ with aba_avm:
                     coeficientes = {feat: coef for feat, coef in zip(features_selecionadas, lin_reg.coef_)}
                     coeficientes['intercepto'] = lin_reg.intercept_
 
-                    # Vetor completo para testes estatísticos
                     coef_array = np.array([lin_reg.intercept_] + list(lin_reg.coef_))
                     p_valores_t, p_valor_f = calcular_estatisticas_regressao(X, y_log, coef_array)
 
@@ -684,43 +696,44 @@ with aba_avm:
                     var_max = abs((v_max - v_medio) / v_medio) * 100
 
                     fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f_calc = calcular_graus_nbr_rigoroso(
-                        len(df_modelo), r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_detectada, notas_manuais_input
+                        len(df_modelo), r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
                     )
 
-                    y_real_log_amostras = y_log.values
-                    y_pred_log_amostras = modelo.predict(X)
-                    buf_ad, buf_res = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras)
+                    # Bloqueio caso o Item 5 seja inválido (> 30%)
+                    if pontos_itens[4] == 0:
+                        st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%). Ajuste ou retire as variáveis não significantes para gerar um modelo válido.")
+                    else:
+                        st.success("✅ Equação validada com sucesso pelo motor NBR (Atende aos critérios normativos)!")
+                        r1, r2_col, r3 = st.columns(3)
+                        r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"-{var_min:.1f}%")
+                        r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}", "Média")
+                        r3.metric("Valor Máximo (Mercado)", f"R$ {v_max:,.2f}", f"+{var_max:.1f}%")
+                        st.caption(f"Acurácia (R²): {r2} | Máx p-valor Regressor: {max_p_regressor*100:.2f}% | Fundamentação: {fundamentacao} ({soma_pontos} pts) | **Precisão: {precisao}**")
 
-                    st.success("✅ Modelo executado com testes de significância (Teste t e Teste F) calculados automaticamente!")
-                    r1, r2_col, r3 = st.columns(3)
-                    r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"-{var_min:.1f}%")
-                    r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}", "Média")
-                    r3.metric("Valor Máximo (Mercado)", f"R$ {v_max:,.2f}", f"+{var_max:.1f}%")
-                    st.caption(f"Acurácia (R²): {r2} | Máx p-valor Regressores: {max_p_regressor:.4f} | p-valor Teste F: {p_valor_f_calc:.4f} | Fundamentação: {fundamentacao} ({soma_pontos} pts) | **Precisão: {precisao}**")
-
-                    pdf_bytes = gerar_laudo_pdf_ia(
-                        tenant_selecionado, tipologia_imovel, variavel_alvo, 
-                        ordem_servico_input, endereco_imovel_input,
-                        informante_nome, informante_tel,
-                        {
-                            'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max,
-                            'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max,
-                            'var_min': var_min, 'var_max': var_max
-                        },
-                        r2, len(df_modelo), features_selecionadas, coeficientes, valores_usuario,
-                        fundamentacao, precisao,
-                        st.session_state.status_juridico_global,
-                        st.session_state.score_juridico_global,
-                        soma_pontos, pontos_itens,
-                        max_p_regressor, p_valor_f_calc,
-                        buf_ad, buf_res
-                    )
-                    st.download_button(
-                        "📄 Baixar Laudo Completo em PDF (NBR 14653)",
-                        data=pdf_bytes,
-                        file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
-                        mime="application/pdf",
-                    )
+                        pdf_bytes = gerar_laudo_pdf_ia(
+                            tenant_selecionado, tipologia_imovel, variavel_alvo, 
+                            ordem_servico_input, endereco_imovel_input,
+                            informante_nome, informante_tel,
+                            {
+                                'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max,
+                                'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max,
+                                'var_min': var_min, 'var_max': var_max
+                            },
+                            r2, len(df_modelo), features_selecionadas, coeficientes, valores_usuario,
+                            variaveis_extrapoladas,
+                            fundamentacao, precisao,
+                            st.session_state.status_juridico_global,
+                            st.session_state.score_juridico_global,
+                            soma_pontos, pontos_itens,
+                            max_p_regressor, p_valor_f_calc,
+                            buf_ad, buf_res
+                        )
+                        st.download_button(
+                            "📄 Baixar Laudo Completo em PDF (NBR 14653)",
+                            data=pdf_bytes,
+                            file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
+                            mime="application/pdf",
+                        )
         else:
             st.warning("⚠️ Selecione ao menos uma variável independente.")
 
