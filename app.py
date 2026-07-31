@@ -169,7 +169,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO
+# GERADOR DE PDF CUSTOMIZADO (COM 6 CASAS DECIMAIS NA EQUAÇÃO)
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, buf_ad, buf_res):
     buffer = io.BytesIO()
@@ -200,12 +200,13 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph(param_text, text_style))
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("2. Equação do Modelo Válido (Log-Linear Homogeneizado)", subtitle_style))
-    eq_str = f"<b>ln({variavel_alvo})</b> = {coeficientes.get('intercepto', 0):,.2f}"
+    story.append(Paragraph("2. Equação do Modelo Válido (Log-Linear Homogeneizado - 6 Casas Decimais)", subtitle_style))
+    intercepto_val = coeficientes.get('intercepto', 0)
+    eq_str = f"<b>ln({variavel_alvo})</b> = {intercepto_val:,.6f}"
     for feat in features:
         coef = coeficientes.get(feat, 0.0)
         sinal = "+" if coef >= 0 else ""
-        eq_str += f" {sinal} ({coef:,.2f} * {feat})"
+        eq_str += f" {sinal} ({coef:,.6f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
     story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Amostras = {n_amostras} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
     story.append(Spacer(1, 4))
@@ -711,6 +712,16 @@ with aba_avm:
                         st.warning("Experimente desmarcar as variáveis com p-valor alto para que a equação seja aprovada.")
                     else:
                         st.success("✅ Equação validada com sucesso pelo motor NBR (Atende aos critérios normativos)!")
+                        
+                        # Exibição na tela com 6 casas decimais
+                        eq_display = f"**ln({variavel_alvo})** = {coeficientes['intercepto']:,.6f}"
+                        for feat in features_selecionadas:
+                            coef_v = coeficientes[feat]
+                            sinal_v = "+" if coef_v >= 0 else ""
+                            eq_display += f" {sinal_v} ({coef_v:,.6f} * {feat})"
+                        st.markdown(f"##### Equação do Modelo (6 Casas Decimais):")
+                        st.code(eq_display)
+
                         r1, r2_col, r3 = st.columns(3)
                         r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"-{var_min:.1f}%")
                         r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}", "Média")
