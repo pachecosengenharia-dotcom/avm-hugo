@@ -58,27 +58,31 @@ def calcular_estatisticas_regressao(X, y, coeficientes_reg):
     return p_valores_t, p_valor_f
 
 # =====================================================================
-# VERIFICAÇÃO DE MICRONUMEROSIDADE (NBR 14653: Mínimo 10% por atributo)
+# VERIFICAÇÃO DE MICRONUMEROSIDADE (APENAS EM CÓDIGOS ALOCADOS / QUALITATIVAS E DICOTÔMICAS)
 # =====================================================================
 def verificar_micronumerosidade(df, features_selecionadas):
     alertas_micronumerosidade = []
     n_total = len(df)
     
+    # Palavras-chave que caracterizam códigos alocados, qualitativos ou variáveis dicotômicas
+    termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado']
+    
     for feat in features_selecionadas:
+        feat_lower = feat.lower()
         serie = df[feat]
         valores_unicos = serie.unique()
         
-        # Identifica se é dicotômica (ex: 0 e 1, Sim e Não) ou código alocado (valores inteiros discretos com poucos grupos)
+        # Verifica se é dicotômica (ex: 0 e 1) ou código alocado qualitativo (poucos valores inteiros distintos)
         is_dicotomica = len(valores_unicos) == 2
-        is_codigo_alocado = pd.api.types.is_integer_dtype(serie) and len(valores_unicos) <= 6
+        is_codigo_alocado_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and pd.api.types.is_integer_dtype(serie) and len(valores_unicos) <= 6
         
-        if is_dicotomica or is_codigo_alocado:
+        if is_dicotomica or is_codigo_alocado_qualitativo:
             for val in valores_unicos:
                 contagem = (serie == val).sum()
                 percentual = (contagem / n_total) * 100
                 if percentual < 10.0:
                     alertas_micronumerosidade.append(
-                        f"⚠️ **{feat}** (Atributo/Valor: `{val}`): possui apenas {contagem} amostras (**{percentual:.1f}%**). O mínimo exigido pela NBR 14653 é **10%** ({max(1, int(n_total * 0.1))} amostras)."
+                        f"⚠️ **{feat}** (Atributo/Código `{val}`): possui apenas {contagem} amostras (**{percentual:.1f}%**). O mínimo exigido pela NBR 14653 para códigos alocados é **10%** ({max(1, int(n_total * 0.1))} amostras)."
                     )
                     
     return alertas_micronumerosidade
@@ -433,7 +437,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade ($\ge 10\%$ por atributo em variáveis dicotômicas/códigos alocados)**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade ($\ge 10\%$ por atributo em códigos alocados / qualitativos e dicotômicas)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -685,7 +689,7 @@ with aba_avm:
                 df_modelo = df_global[colunas_necessarias].dropna().copy()
                 df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                 
-                # Executa verificação de micronumerosidade (mínimo 10% por atributo em dicotômicas/códigos alocados)
+                # Executa verificação restrita de micronumerosidade apenas em códigos alocados / qualitativos e dicotômicas
                 alertas_micronumerosidade = verificar_micronumerosidade(df_modelo, features_selecionadas)
                 
                 fator_escala = 1000.0 if df_modelo[col_valor_total].mean() < 5000.0 else 1.0
@@ -699,10 +703,10 @@ with aba_avm:
                     st.error("Amostras insuficientes após filtragem de outliers (mínimo de 3).")
                 else:
                     if alertas_micronumerosidade:
-                        st.warning("⚠️ **Avisos de Micronumerosidade (ABNT NBR 14653):**")
+                        st.warning("⚠️ **Avisos de Micronumerosidade (ABNT NBR 14653 - Códigos Alocados / Qualitativas):**")
                         for alerta in alertas_micronumerosidade:
                             st.write(alerta)
-                        st.info("ℹ️ Variáveis com menos de 10% de dados em um mesmo atributo podem comprometer a estabilidade estatística do modelo, embora o cálculo prossiga abaixo.")
+                        st.info("ℹ️ Atributos com menos de 10% de dados em códigos alocados podem comprometer a estabilidade estatística, embora o cálculo prossiga abaixo.")
 
                     df_modelo_log = df_modelo.copy()
                     df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
@@ -753,7 +757,7 @@ with aba_avm:
                     if pontos_itens[4] == 0:
                         st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR (Micronumerosidade verificada)!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR (Micronumerosidade aplicada corretamente em códigos alocados)!")
                         
                         eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
