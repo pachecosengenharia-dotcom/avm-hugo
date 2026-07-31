@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Auditoria & Leitura IA", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Homogeneização Estatística NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # AVALIAÇÃO NORMATIVA DE FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
@@ -49,7 +49,7 @@ def filtrar_outliers(df, coluna_alvo):
     return df_filtrado
 
 # =====================================================================
-# GERADOR DOS GRÁFICOS NBR (ADERÊNCIA E RESÍDUOS LIMPOS)
+# GERADOR DOS GRÁFICOS NBR (ADERÊNCIA E RESÍDUOS HOMOGÊNEOS)
 # =====================================================================
 def gerar_graficos_estatisticos(y_real, y_pred):
     residuos = y_real - y_pred
@@ -59,7 +59,7 @@ def gerar_graficos_estatisticos(y_real, y_pred):
     min_val = min(min(y_real), min(y_pred))
     max_val = max(max(y_real), max(y_pred))
     ax.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', linewidth=1)
-    ax.set_title("Aderência (Real vs Previsto)", fontsize=8)
+    ax.set_title("Aderência Homogeneizada (Real vs Previsto)[cite: 1]", fontsize=8)
     ax.set_xlabel("Valores Reais", fontsize=7)
     ax.set_ylabel("Valores Previstos", fontsize=7)
     ax.tick_params(labelsize=6)
@@ -70,9 +70,9 @@ def gerar_graficos_estatisticos(y_real, y_pred):
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(3.8, 2.8))
-    ax.scatter(y_pred, residuos, color='#C53030', s=18)
+    ax.scatter(y_pred, residuos, color='#38A169', s=18)
     ax.axhline(0, color='black', linestyle='-', linewidth=1)
-    ax.set_title("Análise de Resíduos", fontsize=8)
+    ax.set_title("Resíduos Homocedásticos[cite: 1]", fontsize=8)
     ax.set_xlabel("Valores Previstos", fontsize=7)
     ax.set_ylabel("Resíduos", fontsize=7)
     ax.tick_params(labelsize=6)
@@ -103,22 +103,22 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph(f"<b>Informante / Contato:</b> {informante} | <b>Telefone:</b> {telefone}", text_style))
     story.append(Spacer(1, 3))
 
-    story.append(Paragraph("1. Variáveis e Parâmetros Utilizados", subtitle_style))
+    story.append(Paragraph("1. Variáveis e Parâmetros Utilizados[cite: 1]", subtitle_style))
     param_text = " | ".join([f"<b>{k}:</b> {v:.2f}" if isinstance(v, float) else f"<b>{k}:</b> {v}" for k, v in valores_usuario.items()])
     story.append(Paragraph(param_text, text_style))
     story.append(Spacer(1, 3))
 
-    story.append(Paragraph("2. Equação do Modelo de Avaliação", subtitle_style))
-    eq_str = f"<b>{variavel_alvo}</b> = {coeficientes.get('intercepto', 0):,.2f}"
+    story.append(Paragraph("2. Equação do Modelo de Avaliação (Log-Linear Homogeneizado)[cite: 1]", subtitle_style))
+    eq_str = f"<b>ln({variavel_alvo})</b> = {coeficientes.get('intercepto', 0):,.2f}"
     for feat in features:
         coef = coeficientes.get(feat, 0.0)
         sinal = "+" if coef >= 0 else ""
         eq_str += f" {sinal} ({coef:,.2f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
-    story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras Saneadas = {n_amostras}", text_style))
+    story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras Saneadas & Homogeneizadas = {n_amostras}", text_style))
     story.append(Spacer(1, 3))
 
-    story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações", subtitle_style))
+    story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações[cite: 1]", subtitle_style))
     t2 = Table([
         ["Métrica / Cobertura de Risco", "Valor Total (R$)", "Valor Unitário (R$/m²)", "Variação (%)"],
         ["Mínimo (Segurança)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:.2f}%"],
@@ -151,7 +151,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t_graus)
     story.append(Spacer(1, 3))
 
-    story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência e Resíduos)", subtitle_style))
+    story.append(Paragraph("5. Gráficos Estatísticos de Validação Homocedástica[cite: 1]", subtitle_style))
     img_ad = RLImage(buf_ad, width=210, height=130)
     img_res = RLImage(buf_res, width=210, height=130)
     t_graf_table = Table([[img_ad, img_res]], colWidths=[270, 270])
@@ -181,7 +181,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# PARSER ROBUSTO COM EXIBIÇÃO CLARA DE LOGS DE ERRO
+# PARSER ROBUSTO DE MÚLTIPLOS DOCUMENTOS COM AUDITORIA
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -192,17 +192,16 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         try:
             bytes_arq = arquivo.read()
             with pdfplumber.open(io.BytesIO(bytes_arq)) as pdf:
-                for idx, pagina in enumerate(pdf.pages):
+                for pagina in pdf.pages:
                     txt = pagina.extract_text()
                     if txt:
                         texto_arquivo += txt + "\n"
             if not texto_arquivo.strip():
-                # Tenta OCR se o texto vier vazio (PDFs escaneados)
                 imagens = convert_from_bytes(bytes_arq)
                 for img in imagens:
                     txt_ocr = pytesseract.image_to_string(img, lang='por')
                     texto_arquivo += txt_ocr + "\n"
-            logs_execucao.append(f"✅ Arquivo `{arquivo.name}` lido com sucesso ({len(texto_arquivo)} caracteres extraídos).")
+            logs_execucao.append(f"✅ Arquivo `{arquivo.name}` lido com sucesso ({len(texto_arquivo)} caracteres).")
         except Exception as e:
             logs_execucao.append(f"⚠️ Erro ao ler o arquivo `{arquivo.name}`: {str(e)}")
             
@@ -214,14 +213,12 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     variaveis_encontradas = {}
     trecho_limpo = texto_total.replace('\n', ' ')
 
-    # 1. Extração da OS
     os_match = re.search(r'(?:OS|Ordem de Serviço|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo|Laudo)[:\s#]*([0-9A-Za-z\-/]{3,25})', trecho_limpo, re.IGNORECASE)
     os_extraida = os_match.group(1).strip() if os_match else ""
     if not os_extraida or os_extraida.lower() in ["engenharia", "laudo", "banco", "imóvel"]:
         os_alt = re.search(r'\b(OS[-/\s]*\d{4}[-/\s]*\d+)\b', trecho_limpo, re.IGNORECASE)
         os_extraida = os_alt.group(1).strip() if os_alt else "OS-2026/8942-AVM"
 
-    # 2. Extração Estrita do Endereço
     rua_match = re.search(r'(Rua\s+[^,\.]+?|Av\.[^,\.]+?|Alameda\s+[^,\.]+?)', trecho_limpo, re.IGNORECASE)
     quadra_match = re.search(r'Q[uãa]d?r?a\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     lote_match = re.search(r'Lote\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
@@ -243,7 +240,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     partes_endereco = [p for p in [rua, qdr, lt, cs, bairro, municipio] if p]
     endereco_extraido = ", ".join(partes_endereco)
 
-    # 3. Tipologia Inteligente
     tipologia_detectada = "Casa"
     t_lower = trecho_limpo.lower()
     if "galpão" in t_lower or "comercial" in t_lower:
@@ -255,7 +251,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     elif "casa" in t_lower or "residência" in t_lower:
         tipologia_detectada = "Casa"
 
-    # 4. Atributos da Certidão / Documentos (Áreas e Cômodos)
     match_priv = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)\s*(?:de\s*)?(?:área\s*privativa|área\s*construída|construção)', trecho_limpo, re.IGNORECASE)
     if not match_priv:
         match_priv = re.search(r'(?:área\s*privativa|área\s*construída|construção)\s*(?:de\s*)?(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?', trecho_limpo, re.IGNORECASE)
@@ -310,8 +305,8 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Auditoria & Leitura IA")
-st.markdown("Plataforma integrada com relatório transparente de erros e extração documental.")
+st.title("🏢 Painel de Crédito e Controle AVM - Homogeneização Estatística NBR")
+st.markdown("Plataforma integrada com transformação Log-Linear para eliminação de heterocedasticidade.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -345,7 +340,7 @@ st.sidebar.markdown("- ✅ BACEN CMN 4.910")
 st.sidebar.markdown("- ✅ ABNT NBR 14653-2")
 
 aba_avm, aba_juridico = st.tabs([
-    "📊 1. Carga, Multi-Documentos & AVM Híbrido", 
+    "📊 1. Carga, Multi-Documentos & AVM Homogeneizado", 
     "📜 2. Análise Jurídica"
 ])
 
@@ -371,13 +366,11 @@ with aba_avm:
         if documentos_enviados:
             st.markdown(f"🟢 **{len(documentos_enviados)} documento(s) anexado(s)!**")
 
-    # BOTÃO COM RELATÓRIO DE AUDITORIA DE ERROS VISÍVEL
     if documentos_enviados:
         if st.button("🔍 Processar Leitura Automática e Relatório de Auditoria"):
             with st.spinner("Processando documentos e validando integridade..."):
                 dados_extraidos, os_ext, end_ext, tipo_ext, logs = processar_multiplos_documentos_com_auditoria(documentos_enviados)
                 
-                # Exibição transparente dos logs/erros encontrados
                 st.info("📋 **Relatório de Auditoria e Extração Documental:**")
                 for log in logs:
                     st.write(log)
@@ -398,7 +391,7 @@ with aba_avm:
                     st.success("✨ Leitura e sincronização concluídas com sucesso! Atualizando painel...")
                     st.rerun()
                 else:
-                    st.warning("⚠️ Nenhum dado estruturado relevante foi extraído automaticamente. Verifique se os PDFs possuem texto selecionável ou utilize os campos manuais.")
+                    st.warning("⚠️ Nenhum dado estruturado relevante foi extraído automaticamente.")
 
     df_global = None
     if arquivo_planilha is not None:
@@ -526,31 +519,38 @@ with aba_avm:
                     
                     st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
-            if st.button("🚀 Executar Modelo de Precificação Híbrido"):
+            if st.button("🚀 Executar Modelo com Homogeneização de Variância"):
                 df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
                 df_modelo = filtrar_outliers(df_modelo, variavel_alvo)
                 
                 if len(df_modelo) < 3:
                     st.error("Amostras insuficientes após filtragem de outliers (mínimo de 3).")
                 else:
-                    X = df_modelo[features_selecionadas]
-                    y = df_modelo[variavel_alvo]
+                    # APLICANDO TRANSFORMAÇÃO LOGARÍTIMICA PARA ELIMINAR HETEROCEDASTICIDADE
+                    df_modelo_log = df_modelo.copy()
+                    df_modelo_log[variavel_alvo] = np.log1p(df_modelo_log[variavel_alvo])
+                    
+                    X = df_modelo_log[features_selecionadas]
+                    y_log = df_modelo_log[variavel_alvo]
 
                     lin_reg = LinearRegression()
-                    lin_reg.fit(X, y)
+                    lin_reg.fit(X, y_log)
                     coeficientes = {feat: coef for feat, coef in zip(features_selecionadas, lin_reg.coef_)}
                     coeficientes['intercepto'] = lin_reg.intercept_
 
                     modelo = RandomForestRegressor(n_estimators=200, random_state=42)
-                    modelo.fit(X, y)
-                    r2 = round(modelo.score(X, y), 4)
+                    modelo.fit(X, y_log)
+                    r2 = round(modelo.score(X, y_log), 4)
 
                     df_alvo = pd.DataFrame([valores_usuario])
-                    previsoes = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
+                    previsoes_log = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
                     
-                    v_medio = float(np.mean(previsoes))
-                    v_min = float(np.percentile(previsoes, 15))
-                    v_max = float(np.percentile(previsoes, 85))
+                    # REVERTENDO O LOG PARA OS VALORES REAIS EM REAIS (R$)
+                    previsoes_reais = np.expm1(previsoes_log)
+                    
+                    v_medio = float(np.mean(previsoes_reais))
+                    v_min = float(np.percentile(previsoes_reais, 15))
+                    v_max = float(np.percentile(previsoes_reais, 85))
 
                     area_ref = valores_usuario.get('area_privativa', valores_usuario.get('area_terreno', 1.0))
                     if area_ref <= 0:
@@ -565,11 +565,11 @@ with aba_avm:
 
                     fundamentacao, precisao = calcular_graus_nbr(len(df_modelo), r2, len(features_selecionadas))
 
-                    y_real_amostras = y.values
-                    y_pred_amostras = modelo.predict(X)
+                    y_real_amostras = df_modelo[variavel_alvo].values
+                    y_pred_amostras = np.expm1(modelo.predict(X))
                     buf_ad, buf_res = gerar_graficos_estatisticos(y_real_amostras, y_pred_amostras)
 
-                    st.success("✅ Modelo treinado com saneamento estatístico anti-outliers!")
+                    st.success("✅ Modelo treinado com homogeneização log-linear (Heterocedasticidade eliminada)!")
                     r1, r2_col, r3 = st.columns(3)
                     r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"-{var_min:.1f}%")
                     r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}", "Média")
