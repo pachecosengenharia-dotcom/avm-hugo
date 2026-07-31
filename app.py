@@ -58,14 +58,16 @@ def calcular_estatisticas_regressao(X, y, coeficientes_reg):
     return p_valores_t, p_valor_f
 
 # =====================================================================
-# FILTRO DE DISTÂNCIA DE COOK E OUTLIERS
+# FILTRO DE DISTÂNCIA DE COOK E RETORNO DOS VALORES DE COOK
 # =====================================================================
-def filtrar_outliers_e_cook(df, coluna_alvo, features):
-    # Filtro IQR tradicional na variável alvo
+def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     Q1 = df[coluna_alvo].quantile(0.10)
     Q3 = df[coluna_alvo].quantile(0.90)
     IQR = Q3 - Q1
     df_filtrado = df[(df[coluna_alvo] >= (Q1 - 1.5 * IQR)) & (df[coluna_alvo] <= (Q3 + 1.5 * IQR))].copy()
+    
+    cooks_d_array = np.zeros(len(df_filtrado))
+    limite_cook = 1.0
     
     if len(df_filtrado) > len(features) + 2:
         X = df_filtrado[features].values
@@ -75,7 +77,6 @@ def filtrar_outliers_e_cook(df, coluna_alvo, features):
         
         X_mat = np.hstack([np.ones((n, 1)), X])
         try:
-            # Cálculo de OLS para resíduos estudentizados e alavancagem (Hat Matrix)
             beta = np.linalg.inv(X_mat.T.dot(X_mat)).dot(X_mat.T).dot(y)
             y_pred = X_mat.dot(beta)
             residuos = y - y_pred
@@ -84,17 +85,16 @@ def filtrar_outliers_e_cook(df, coluna_alvo, features):
             h = np.diagonal(X_mat.dot(np.linalg.inv(X_mat.T.dot(X_mat))).dot(X_mat.T))
             residuos_padronizados = residuos / np.sqrt(s2 * (1 - h + 1e-8))
             
-            # Distância de Cook para identificar pontos altamente influentes
-            cooks_d = (residuos_padronizados ** 2 / (k + 1)) * (h / (1 - h + 1e-8))
-            limite_cook = 4 / (n - k - 1) if (n - k - 1) > 0 else 1.0
+            cooks_d_array = (residuos_padronizados ** 2 / (k + 1)) * (h / (1 - h + 1e-8))
+            limite_cook = 4 / (n - k - 1) if (n - k - 1) > 0 else 0.5
             
-            # Mantém apenas amostras com Distância de Cook abaixo do limite normativo
-            mask_validos = cooks_d <= max(limite_cook, 0.5)
+            mask_validos = cooks_d_array <= max(limite_cook, 0.5)
             df_filtrado = df_filtrado[mask_validos]
+            cooks_d_array = cooks_d_array[mask_validos]
         except Exception:
             pass
             
-    return df_filtrado
+    return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
 # VERIFICAÇÃO DE MICRONUMEROSIDADE (CÓDIGOS ALOCADOS / DICOTÔMICAS)
@@ -187,45 +187,62 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valo
     return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
 # =====================================================================
-# GERADOR DOS GRÁFICOS NBR (HOMOCEDASTICIDADE PURA EM LOG)
+# GERADOR DOS GRÁFICOS NBR (INCLUINDO DISTÂNCIA DE COOK)
 # =====================================================================
-def gerar_graficos_estatisticos(y_real_log, y_pred_log):
+def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     residuos_log = y_real_log - y_pred_log
     
-    fig, ax = plt.subplots(figsize=(3.8, 2.8))
-    ax.scatter(y_real_log, y_pred_log, color='#2B6CB0', s=18)
+    # 1. Gráfico de Aderência
+    fig, ax = plt.subplots(figsize=(2.5, 2.0))
+    ax.scatter(y_real_log, y_pred_log, color='#2B6CB0', s=14)
     min_val = min(min(y_real_log), min(y_pred_log))
     max_val = max(max(y_real_log), max(y_pred_log))
     ax.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', linewidth=1)
-    ax.set_title("Aderência Homogeneizada (Log Real vs Previsto)", fontsize=8)
-    ax.set_xlabel("Valores Reais (ln)", fontsize=7)
-    ax.set_ylabel("Valores Previstos (ln)", fontsize=7)
-    ax.tick_params(labelsize=6)
+    ax.set_title("Aderência (Log Real vs Prev)", fontsize=7)
+    ax.set_xlabel("Reais (ln)", fontsize=6)
+    ax.set_ylabel("Previstos (ln)", fontsize=6)
+    ax.tick_params(labelsize=5)
     plt.tight_layout()
     buf_aderencia = io.BytesIO()
     plt.savefig(buf_aderencia, format='png', dpi=150)
     buf_aderencia.seek(0)
     plt.close(fig)
 
-    fig, ax = plt.subplots(figsize=(3.8, 2.8))
-    ax.scatter(y_pred_log, residuos_log, color='#38A169', s=18)
+    # 2. Gráfico de Resíduos Homocedásticos
+    fig, ax = plt.subplots(figsize=(2.5, 2.0))
+    ax.scatter(y_pred_log, residuos_log, color='#38A169', s=14)
     ax.axhline(0, color='black', linestyle='-', linewidth=1)
-    ax.set_title("Resíduos Homocedásticos Estabilizados", fontsize=8)
-    ax.set_xlabel("Valores Previstos (ln)", fontsize=7)
-    ax.set_ylabel("Resíduos (ln)", fontsize=7)
-    ax.tick_params(labelsize=6)
+    ax.set_title("Resíduos Homocedásticos", fontsize=7)
+    ax.set_xlabel("Previstos (ln)", fontsize=6)
+    ax.set_ylabel("Resíduos (ln)", fontsize=6)
+    ax.tick_params(labelsize=5)
     plt.tight_layout()
     buf_residuos = io.BytesIO()
     plt.savefig(buf_residuos, format='png', dpi=150)
     buf_residuos.seek(0)
     plt.close(fig)
 
-    return buf_aderencia, buf_residuos
+    # 3. Gráfico de Distância de Cook
+    fig, ax = plt.subplots(figsize=(2.5, 2.0))
+    indices = np.arange(len(cooks_d))
+    ax.stem(indices, cooks_d, linefmt='#DD6B20', markerfmt='o', basefmt=" ")
+    ax.axhline(limite_cook, color='red', linestyle='--', linewidth=1, label=f'Limite ({limite_cook:.2f})')
+    ax.set_title("Distância de Cook (Influência)", fontsize=7)
+    ax.set_xlabel("Amostra", fontsize=6)
+    ax.set_ylabel("Distância de Cook (Di)", fontsize=6)
+    ax.tick_params(labelsize=5)
+    plt.tight_layout()
+    buf_cook = io.BytesIO()
+    plt.savefig(buf_cook, format='png', dpi=150)
+    buf_cook.seek(0)
+    plt.close(fig)
+
+    return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM FORMATOS AJUSTADOS
+# GERADOR DE PDF CUSTOMIZADO COM OS 3 GRÁFICOS LADO A LADO
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, buf_ad, buf_res):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -288,7 +305,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     
     micro_status_text = "ATENDIDO (≥ 10% por atributo em códigos alocados)" if micronumerosidade_atendida else "ATENÇÃO / RESTRIÇÃO DE ATRIBUTOS"
     
-    # Uso rigoroso de Paragraphs nas células para respeitar a largura da tabela e evitar estouros
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
         [Paragraph("1", table_cell_style), Paragraph("Caracterização do imóvel avaliando", table_cell_style), Paragraph(str(pontos_itens[0]), table_cell_style)],
@@ -312,10 +328,11 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t_fund)
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("5. Gráficos Estatísticos de Validação Homocedástica", subtitle_style))
-    img_ad = RLImage(buf_ad, width=190, height=110)
-    img_res = RLImage(buf_res, width=190, height=110)
-    t_graf_table = Table([[img_ad, img_res]], colWidths=[277, 277])
+    story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos e Distância de Cook)", subtitle_style))
+    img_ad = RLImage(buf_ad, width=175, height=105)
+    img_res = RLImage(buf_res, width=175, height=105)
+    img_cook = RLImage(buf_cook, width=175, height=105)
+    t_graf_table = Table([[img_ad, img_res, img_cook]], colWidths=[184, 184, 184])
     t_graf_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -467,7 +484,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade** + **Distância de Cook**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade** + **Distância de Cook (Gráfico de Influência)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -724,8 +741,8 @@ with aba_avm:
                 coluna_alvo_unitario = 'valor_unitario_amostra'
                 df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                 
-                # Aplicação do Filtro de Outliers e Distância de Cook
-                df_modelo = filtrar_outliers_e_cook(df_modelo, coluna_alvo_unitario, features_selecionadas)
+                # Executa o filtro e extrai os vetores de Cook
+                df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
                 
                 alertas_micronumerosidade = verificar_micronumerosidade(df_modelo, features_selecionadas)
                 micronumerosidade_atendida = len(alertas_micronumerosidade) == 0
@@ -784,12 +801,13 @@ with aba_avm:
 
                     y_real_log_amostras = y_log
                     y_pred_log_amostras = modelo.predict(X)
-                    buf_ad, buf_res = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras)
+                    
+                    buf_ad, buf_res, buf_cook = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras, cooks_d_vals, limite_cook_val)
 
                     if pontos_itens[4] == 0:
                         st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR (Distância de Cook e Micronumerosidade verificadas)!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR (Análise de Cook e Micronumerosidade incorporadas no Laudo)!")
                         
                         eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
@@ -822,7 +840,7 @@ with aba_avm:
                             soma_pontos, pontos_itens,
                             max_p_regressor, p_valor_f_calc,
                             micronumerosidade_atendida,
-                            buf_ad, buf_res
+                            buf_ad, buf_res, buf_cook
                         )
                         st.download_button(
                             "📄 Baixar Laudo Completo em PDF (NBR 14653)",
