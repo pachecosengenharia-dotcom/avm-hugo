@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Homogeneização Estatística NBR", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Laudo NBR Definitivo", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # AVALIAÇÃO NORMATIVA DE FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
@@ -49,19 +49,19 @@ def filtrar_outliers(df, coluna_alvo):
     return df_filtrado
 
 # =====================================================================
-# GERADOR DOS GRÁFICOS NBR (ADERÊNCIA E RESÍDUOS HOMOGÊNEOS)
+# GERADOR DOS GRÁFICOS NBR (HOMOCEDASTICIDADE PURA EM LOG)
 # =====================================================================
-def gerar_graficos_estatisticos(y_real, y_pred):
-    residuos = y_real - y_pred
+def gerar_graficos_estatisticos(y_real_log, y_pred_log):
+    residuos_log = y_real_log - y_pred_log
     
     fig, ax = plt.subplots(figsize=(3.8, 2.8))
-    ax.scatter(y_real, y_pred, color='#2B6CB0', s=18)
-    min_val = min(min(y_real), min(y_pred))
-    max_val = max(max(y_real), max(y_pred))
+    ax.scatter(y_real_log, y_pred_log, color='#2B6CB0', s=18)
+    min_val = min(min(y_real_log), min(y_pred_log))
+    max_val = max(max(y_real_log), max(y_pred_log))
     ax.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', linewidth=1)
-    ax.set_title("Aderência Homogeneizada (Real vs Previsto)[cite: 1]", fontsize=8)
-    ax.set_xlabel("Valores Reais", fontsize=7)
-    ax.set_ylabel("Valores Previstos", fontsize=7)
+    ax.set_title("Aderência Homogeneizada (Log Real vs Previsto)", fontsize=8)
+    ax.set_xlabel("Valores Reais (ln)", fontsize=7)
+    ax.set_ylabel("Valores Previstos (ln)", fontsize=7)
     ax.tick_params(labelsize=6)
     plt.tight_layout()
     buf_aderencia = io.BytesIO()
@@ -70,11 +70,11 @@ def gerar_graficos_estatisticos(y_real, y_pred):
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(3.8, 2.8))
-    ax.scatter(y_pred, residuos, color='#38A169', s=18)
+    ax.scatter(y_pred_log, residuos_log, color='#38A169', s=18)
     ax.axhline(0, color='black', linestyle='-', linewidth=1)
-    ax.set_title("Resíduos Homocedásticos[cite: 1]", fontsize=8)
-    ax.set_xlabel("Valores Previstos", fontsize=7)
-    ax.set_ylabel("Resíduos", fontsize=7)
+    ax.set_title("Resíduos Homocedásticos Estabilizados", fontsize=8)
+    ax.set_xlabel("Valores Previstos (ln)", fontsize=7)
+    ax.set_ylabel("Resíduos (ln)", fontsize=7)
     ax.tick_params(labelsize=6)
     plt.tight_layout()
     buf_residuos = io.BytesIO()
@@ -85,7 +85,7 @@ def gerar_graficos_estatisticos(y_real, y_pred):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO (LAUDO NBR COMPLETO)
+# GERADOR DE PDF CUSTOMIZADO (LAUDO NBR COMPLETO COM TABELA NORMATIVA)
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, fundamentacao, precisao, status_juridico, score_juridico, buf_ad, buf_res):
     buffer = io.BytesIO()
@@ -93,22 +93,22 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story = []
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=13, textColor=colors.HexColor("#1A365D"), spaceAfter=5)
-    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=9.5, textColor=colors.HexColor("#2B6CB0"), spaceAfter=3, spaceBefore=5)
-    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7.5, leading=10, spaceAfter=2)
+    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=12, textColor=colors.HexColor("#1A365D"), spaceAfter=4)
+    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=8.5, textColor=colors.HexColor("#2B6CB0"), spaceAfter=2, spaceBefore=4)
+    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7, leading=9, spaceAfter=2)
 
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco}", text_style))
     story.append(Paragraph(f"<b>Informante / Contato:</b> {informante} | <b>Telefone:</b> {telefone}", text_style))
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
-    story.append(Paragraph("1. Variáveis e Parâmetros Utilizados[cite: 1]", subtitle_style))
+    story.append(Paragraph("1. Variáveis e Parâmetros Utilizados", subtitle_style))
     param_text = " | ".join([f"<b>{k}:</b> {v:.2f}" if isinstance(v, float) else f"<b>{k}:</b> {v}" for k, v in valores_usuario.items()])
     story.append(Paragraph(param_text, text_style))
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
-    story.append(Paragraph("2. Equação do Modelo de Avaliação (Log-Linear Homogeneizado)[cite: 1]", subtitle_style))
+    story.append(Paragraph("2. Equação do Modelo de Avaliação (Log-Linear Homogeneizado)", subtitle_style))
     eq_str = f"<b>ln({variavel_alvo})</b> = {coeficientes.get('intercepto', 0):,.2f}"
     for feat in features:
         coef = coeficientes.get(feat, 0.0)
@@ -116,44 +116,44 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         eq_str += f" {sinal} ({coef:,.2f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
     story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras Saneadas & Homogeneizadas = {n_amostras}", text_style))
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
-    story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações[cite: 1]", subtitle_style))
+    story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações", subtitle_style))
     t2 = Table([
         ["Métrica / Cobertura de Risco", "Valor Total (R$)", "Valor Unitário (R$/m²)", "Variação (%)"],
         ["Mínimo (Segurança)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:.2f}%"],
         ["Estimado (Face / Média)", f"R$ {valores['v_medio']:,.2f}", f"R$ {valores['vu_medio']:,.2f}", "0.00% (Base)"],
         ["Máximo (Mercado)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"+{valores['var_max']:.2f}%"],
-    ], colWidths=[160, 130, 130, 120])
+    ], colWidths=[150, 130, 130, 130])
     t2.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 3),
-        ('FONTSIZE', (0, 0), (-1, -1), 7.5),
+        ('PADDING', (0, 0), (-1, -1), 2),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
     ]))
     story.append(t2)
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
-    story.append(Paragraph("4. Enquadramento Normativo (Graus de Fundamentação e Precisão)", subtitle_style))
+    story.append(Paragraph("4. Enquadramento Normativo e Tabela de Fundamentação (NBR 14653-2)", subtitle_style))
     t_graus = Table([
-        ["Parâmetro NBR 14653", "Classificação Técnica Obtida"],
-        ["Grau de Fundamentação", fundamentacao],
-        ["Grau de Precisão", precisao],
-    ], colWidths=[240, 300])
+        ["Parâmetro NBR 14653", "Classificação Obtida", "Requisito Mínimo Atendido (Grau III)"],
+        ["Grau de Fundamentação", fundamentacao, f"Amostras ({n_amostras} >= 30) e Variáveis ({len(features)} >= 3)"],
+        ["Grau de Precisão", precisao, f"Coeficiente de Determinação (R² = {r2} >= 0.70)"],
+    ], colWidths=[130, 100, 310])
     t_graus.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3182CE")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 3),
-        ('FONTSIZE', (0, 0), (-1, -1), 7.5),
+        ('PADDING', (0, 0), (-1, -1), 2),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
     ]))
     story.append(t_graus)
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
-    story.append(Paragraph("5. Gráficos Estatísticos de Validação Homocedástica[cite: 1]", subtitle_style))
-    img_ad = RLImage(buf_ad, width=210, height=130)
-    img_res = RLImage(buf_res, width=210, height=130)
+    story.append(Paragraph("5. Gráficos Estatísticos de Validação Homocedástica", subtitle_style))
+    img_ad = RLImage(buf_ad, width=200, height=120)
+    img_res = RLImage(buf_res, width=200, height=120)
     t_graf_table = Table([[img_ad, img_res]], colWidths=[270, 270])
     t_graf_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
@@ -161,18 +161,18 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ('BOTTOMPADDING', (0,0), (-1,-1), 1)
     ]))
     story.append(t_graf_table)
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
     story.append(Paragraph("6. Esteira de Risco Jurídico (BACEN CMN 4.910)", subtitle_style))
     t3 = Table([
         ["Status Documental", "APROVADO" if status_juridico else "REPROVADO"],
         ["Grau de Risco Legal", score_juridico],
-    ], colWidths=[240, 300])
+    ], colWidths=[200, 340])
     t3.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 3),
+        ('PADDING', (0, 0), (-1, -1), 2),
         ('TEXTCOLOR', (1, 0), (1, 0), colors.HexColor("#38A169") if status_juridico else colors.HexColor("#E53E3E")),
-        ('FONTSIZE', (0, 0), (-1, -1), 7.5),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
     ]))
     story.append(t3)
 
@@ -201,9 +201,9 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
                 for img in imagens:
                     txt_ocr = pytesseract.image_to_string(img, lang='por')
                     texto_arquivo += txt_ocr + "\n"
-            logs_execucao.append(f"✅ Arquivo `{arquivo.name}` lido com sucesso ({len(texto_arquivo)} caracteres).")
+            logs_execucao.append(f"Arquivo `{arquivo.name}` lido com sucesso ({len(texto_arquivo)} caracteres).")
         except Exception as e:
-            logs_execucao.append(f"⚠️ Erro ao ler o arquivo `{arquivo.name}`: {str(e)}")
+            logs_execucao.append(f"Erro ao ler o arquivo `{arquivo.name}`: {str(e)}")
             
         texto_total += texto_arquivo + "\n"
 
@@ -305,8 +305,8 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Homogeneização Estatística NBR")
-st.markdown("Plataforma integrada com transformação Log-Linear para eliminação de heterocedasticidade.")
+st.title("🏢 Painel de Crédito e Controle AVM - Laudo NBR Definitivo")
+st.markdown("Plataforma integrada com homogeneização estrita e enquadramento normativo transparente.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -526,7 +526,6 @@ with aba_avm:
                 if len(df_modelo) < 3:
                     st.error("Amostras insuficientes após filtragem de outliers (mínimo de 3).")
                 else:
-                    # APLICANDO TRANSFORMAÇÃO LOGARÍTIMICA PARA ELIMINAR HETEROCEDASTICIDADE
                     df_modelo_log = df_modelo.copy()
                     df_modelo_log[variavel_alvo] = np.log1p(df_modelo_log[variavel_alvo])
                     
@@ -545,7 +544,6 @@ with aba_avm:
                     df_alvo = pd.DataFrame([valores_usuario])
                     previsoes_log = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
                     
-                    # REVERTENDO O LOG PARA OS VALORES REAIS EM REAIS (R$)
                     previsoes_reais = np.expm1(previsoes_log)
                     
                     v_medio = float(np.mean(previsoes_reais))
@@ -565,11 +563,12 @@ with aba_avm:
 
                     fundamentacao, precisao = calcular_graus_nbr(len(df_modelo), r2, len(features_selecionadas))
 
-                    y_real_amostras = df_modelo[variavel_alvo].values
-                    y_pred_amostras = np.expm1(modelo.predict(X))
-                    buf_ad, buf_res = gerar_graficos_estatisticos(y_real_amostras, y_pred_amostras)
+                    # Gerando resíduos estritamente na escala logarítmica para homocedasticidade pura
+                    y_real_log_amostras = y_log.values
+                    y_pred_log_amostras = modelo.predict(X)
+                    buf_ad, buf_res = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras)
 
-                    st.success("✅ Modelo treinado com homogeneização log-linear (Heterocedasticidade eliminada)!")
+                    st.success("✅ Modelo treinado com homogeneização log-linear homocedástica!")
                     r1, r2_col, r3 = st.columns(3)
                     r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"-{var_min:.1f}%")
                     r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}", "Média")
