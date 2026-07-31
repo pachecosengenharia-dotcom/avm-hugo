@@ -280,7 +280,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO (COM SEÇÃO DE ANÁLISE JURÍDICA COMPLETA)
+# GERADOR DE PDF CUSTOMIZADO (COM SEÇÃO DE ANÁLISE JURÍDICA E DADOS)
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
@@ -342,7 +342,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     if micronumerosidade_atendida:
-        micro_status_text = "ATENDIDO (Exclusão automática aplicada: todos os atributos possuem ≥ 10%)"
+        micro_status_text = "ATENDIDO (Todos os atributos possuem ≥ 10%)"
     else:
         detalhes_str = "; ".join([d['mensagem'].replace('**', '') for d in alertas_micro_detalhes])
         micro_status_text = f"ATENÇÃO/RESTRIÇÃO: {detalhes_str}"
@@ -661,19 +661,17 @@ with aba_avm:
                 df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
                 df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
                 
-                # Saneamento por exclusão prévio para alinhar o contador da tela com o modelo final
-                df_modelo_teste = sanear_micronumerosidade_por_exclusao(df_modelo_teste, features_selecionadas)
+                # Executa verificação real de micronumerosidade para exibir exatamente o mesmo alerta da plataforma e do laudo
                 alertas_micronumerosidade = verificar_micronumerosidade(df_modelo_teste, features_selecionadas)
-                
                 micronumerosidade_atendida = len(alertas_micronumerosidade) == 0
                 n_dados_tela = len(df_modelo_teste)
                 
                 if not micronumerosidade_atendida:
-                    st.warning(f"⚠️ **Mecanismo Inteligente de Micronumerosidade Ativado (Base Efetiva: {n_dados_tela} dados):**")
+                    st.warning(f"⚠️ **Mecanismo Inteligente de Micronumerosidade Ativado (Base Analisada: {n_dados_tela} dados):**")
                     for alt in alertas_micronumerosidade:
                         st.write(alt['mensagem'])
                 else:
-                    st.success(f"🟢 **Critério de Micronumerosidade ATENDIDO:** Saneamento aplicado com sucesso. Total de dados efetivos: **{n_dados_tela} dados** (≥ 10% representatividade).")
+                    st.success(f"🟢 **Critério de Micronumerosidade ATENDIDO:** Total de dados na base: **{n_dados_tela} dados** (≥ 10% representatividade).")
 
                 st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliendo & Limites do Dado (Extrapolação)")
                 
