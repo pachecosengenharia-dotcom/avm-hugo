@@ -97,14 +97,14 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO POR EXCLUSÃO AUTOMÁTICA (MOTOR ROBUSTO DE MICRONUMEROSIDADE)
+# SANEAMENTO POR EXCLUSÃO AUTOMÁTICA (UNIVERSAL E BLINDADO)
 # =====================================================================
 def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
     df_saneado = df.copy()
     termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado']
     
     alteracao = True
-    max_iter = 20  # Aumentado para garantir varreduras completas em cascata
+    max_iter = 20
     iteracao = 0
     
     while alteracao and iteracao < max_iter:
@@ -123,13 +123,14 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
             valores_unicos = serie.unique()
             
             is_dicotomica = len(valores_unicos) == 2
-            is_codigo_alocado_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and (pd.api.types.is_integer_dtype(serie) or pd.api.types.is_object_dtype(serie)) and len(valores_unicos) <= 10
+            # Aceita inteiros, texto ou floats que representam códigos discretos (poucos valores únicos)
+            is_codigo_alocado_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 10
             
             if is_dicotomica or is_codigo_alocado_qualitativo:
                 for val in valores_unicos:
                     contagem = (serie == val).sum()
                     percentual = (contagem / n_total) * 100 if n_total > 0 else 0
-                    # Remove rigorosamente qualquer classe abaixo de 10%
+                    # Exclui obrigatoriamente qualquer classe abaixo de 10%
                     if percentual < 10.0:
                         idx_minoria = df_saneado[df_saneado[feat] == val].index
                         indices_para_remover.extend(idx_minoria)
