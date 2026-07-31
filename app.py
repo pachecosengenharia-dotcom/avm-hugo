@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Leitura Documental Avançada", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Leitura Documental Completa", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # AVALIAÇÃO NORMATIVA DE FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
@@ -181,7 +181,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# PARSER INTELIGENTE DE MÚLTIPLOS DOCUMENTOS (OS, ENDEREÇO, TIPOLOGIA, ATRIBUTOS)
+# PARSER INTELIGENTE E PRECISO DE MÚLTIPLOS DOCUMENTOS
 # =====================================================================
 def processar_multiplos_documentos(lista_arquivos):
     texto_total = ""
@@ -223,11 +223,10 @@ def processar_multiplos_documentos(lista_arquivos):
     os_match = re.search(r'(?:OS|Ordem de Serviço|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo|Laudo)[:\s#]*([0-9A-Za-z\-/]{3,25})', trecho_limpo, re.IGNORECASE)
     os_extraida = os_match.group(1).strip() if os_match else ""
     if not os_extraida or os_extraida.lower() in ["engenharia", "laudo", "banco", "imóvel"]:
-        # Tenta procurar padrões como números de OS comuns (ex: 2026/... ou dígitos isolados com barra)
         os_alt = re.search(r'\b(OS[-/\s]*\d{4}[-/\s]*\d+)\b', trecho_limpo, re.IGNORECASE)
         os_extraida = os_alt.group(1).strip() if os_alt else "OS-2026/8942-AVM"
 
-    # 2. Extração Precisa do Endereço (Rua, Quadra, Lote, Casa, Bairro, Município)
+    # 2. Extração Precisa do Endereço Completo
     rua_match = re.search(r'(Rua\s+[^,\.]+?|Av\.[^,\.]+?|Alameda\s+[^,\.]+?)', trecho_limpo, re.IGNORECASE)
     quadra_match = re.search(r'Q[uãa]d?r?a\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     lote_match = re.search(r'Lote\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
@@ -263,53 +262,59 @@ def processar_multiplos_documentos(lista_arquivos):
     elif "casa" in texto_lower or "residência" in texto_lower:
         tipologia_detectada = "Casa"
 
-    # 4. Atributos Numéricos Robustos
-    match_privativa = re.search(r'([\d.,!]+)\s*(?:metros\s*quadrados|m²)?\s*de\s*área\s*(?:privativa|construída)', trecho_limpo, re.IGNORECASE)
-    if not match_privativa:
-        match_privativa = re.search(r'área\s*(?:privativa|construída)\s*(?:de\s*)?([\d.,!]+)', trecho_limpo, re.IGNORECASE)
-    if match_privativa:
-        val = match_privativa.group(1).replace('.', '').replace(',', '.').replace('!', '1')
+    # 4. Extração Altamente Rigorosa de Áreas e Cômodos (Certidão / Documentos)
+    # Área Privativa / Construída
+    match_priv = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)\s*(?:de\s*)?(?:área\s*privativa|área\s*construída|construção)', trecho_limpo, re.IGNORECASE)
+    if not match_priv:
+        match_priv = re.search(r'(?:área\s*privativa|área\s*construída|construção)\s*(?:de\s*)?(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?', trecho_limpo, re.IGNORECASE)
+    if match_priv:
+        val = match_priv.group(1).replace('.', '').replace(',', '.')
         try:
             variaveis_encontradas['area_privativa'] = float(val)
         except ValueError:
             pass
 
-    match_terreno = re.search(r'([\d.,!]+)\s*(?:metros\s*quadrados|m²)?\s*(?:de\s*)?área\s*(?:total|do\s*terreno)', trecho_limpo, re.IGNORECASE)
-    if not match_terreno:
-        match_terreno = re.search(r'área\s*(?:total|do\s*terreno)\s*(?:de\s*)?([\d.,!]+)', trecho_limpo, re.IGNORECASE)
-    if match_terreno:
-        val = match_terreno.group(1).replace('.', '').replace(',', '.').replace('!', '1')
+    # Área do Terreno
+    match_terr = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)\s*(?:de\s*)?(?:área\s*total|área\s*do\s*terreno|terreno)', trecho_limpo, re.IGNORECASE)
+    if not match_terr:
+        match_terr = re.search(r'(?:área\s*total|área\s*do\s*terreno|terreno)\s*(?:de\s*)?(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?', trecho_limpo, re.IGNORECASE)
+    if match_terr:
+        val = match_terr.group(1).replace('.', '').replace(',', '.')
         try:
             variaveis_encontradas['area_terreno'] = float(val)
         except ValueError:
             pass
 
-    match_quartos = re.search(r'(\d+)\s*quarto[s]?', trecho_limpo, re.IGNORECASE)
-    if match_quartos:
+    # Quartos
+    match_q = re.search(r'(\d+)\s*(?:quartos?|dormitórios?)', trecho_limpo, re.IGNORECASE)
+    if match_q:
         try:
-            variaveis_encontradas['quartos'] = int(match_quartos.group(1))
+            variaveis_encontradas['quartos'] = int(match_q.group(1))
         except ValueError:
             pass
 
-    match_suites = re.search(r'(\d+)\s*su[íi]te[s]?', trecho_limpo, re.IGNORECASE)
-    if match_suites:
+    # Suítes
+    match_s = re.search(r'(\d+)\s*su[íi]tes?', trecho_limpo, re.IGNORECASE)
+    if match_s:
         try:
-            variaveis_encontradas['suites'] = int(match_suites.group(1))
-            variaveis_encontradas['suite'] = int(match_suites.group(1))
+            variaveis_encontradas['suites'] = int(match_s.group(1))
+            variaveis_encontradas['suite'] = int(match_s.group(1))
         except ValueError:
             pass
 
-    match_banheiros = re.search(r'(\d+)\s*(?:banheiro[s]?|banho[s]?)', trecho_limpo, re.IGNORECASE)
-    if match_banheiros:
+    # Banheiros
+    match_b = re.search(r'(\d+)\s*(?:banheiros?|banhos?|sanitários?)', trecho_limpo, re.IGNORECASE)
+    if match_b:
         try:
-            variaveis_encontradas['banheiros'] = int(match_banheiros.group(1))
+            variaveis_encontradas['banheiros'] = int(match_b.group(1))
         except ValueError:
             pass
 
-    match_vagas = re.search(r'(\d+)\s*(?:vaga[s]?\s*de\s*garagem|garagem)', trecho_limpo, re.IGNORECASE)
-    if match_vagas:
+    # Vagas de Garagem
+    match_v = re.search(r'(\d+)\s*(?:vagas?(?:\s*de\s*garagem)?|garagens?)', trecho_limpo, re.IGNORECASE)
+    if match_v:
         try:
-            variaveis_encontradas['vagas_garagem'] = int(match_vagas.group(1))
+            variaveis_encontradas['vagas_garagem'] = int(match_v.group(1))
         except ValueError:
             pass
 
