@@ -14,26 +14,26 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Fundamentação & Extrapolação", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Fundamentação & Precisão NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# AVALIAÇÃO NORMATIVA AUTOMÁTICA DA FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
+# AVALIAÇÃO NORMATIVA DA FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
 # =====================================================================
-def calcular_graus_nbr_automatico(n_amostras, r2, n_variaveis, tem_extrapolacao=False, notas_manuais=None):
-    p_item1 = 3 if n_amostras >= 15 else 2
+def calcular_graus_nbr_hibrido(n_amostras, r2, n_variaveis, tem_extrapolacao=False, notas_manuais=None):
+    # Itens 1 e 3 controlados por input manual, com padrões seguros caso não definidos
+    p_item1 = notas_manuais.get('item1', 2) if notas_manuais else 2
+    
+    # Itens automáticos baseados nas amostras e modelo
     p_item2 = 3 if n_amostras >= 30 else (2 if n_amostras >= 12 else 1)
-    p_item3 = 3 if n_amostras >= 20 else 1
     
-    # Item 4: Extrapolação (3 pontos se NÃO houver extrapolação, conforme norma)
+    p_item3 = notas_manuais.get('item3', 2) if notas_manuais else 2
+    
     p_item4 = 1 if tem_extrapolacao else 3
-    
     p_item5 = 3 if n_variaveis >= 3 else 2
     p_item6 = 3 if r2 >= 0.70 else (2 if r2 >= 0.50 else 1)
     
     if notas_manuais:
-        p_item1 = notas_manuais.get('item1', p_item1)
         p_item2 = notas_manuais.get('item2', p_item2)
-        p_item3 = notas_manuais.get('item3', p_item3)
         p_item4 = notas_manuais.get('item4', p_item4)
         p_item5 = notas_manuais.get('item5', p_item5)
         p_item6 = notas_manuais.get('item6', p_item6)
@@ -41,7 +41,7 @@ def calcular_graus_nbr_automatico(n_amostras, r2, n_variaveis, tem_extrapolacao=
     pontos_itens = [p_item1, p_item2, p_item3, p_item4, p_item5, p_item6]
     soma_pontos = sum(pontos_itens)
 
-    if soma_pontos >= 16 and n_amostras >= 30 and r2 >= 0.70:
+    if soma_pontos >= 14 and n_amostras >= 30 and r2 >= 0.70:
         fundamentacao = "Grau III"
     elif soma_pontos >= 10:
         fundamentacao = "Grau II"
@@ -106,7 +106,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM TABELA NORMATIVA PREENCHIDA
+# GERADOR DE PDF CUSTOMIZADO COM TABELA NORMATIVA E GRAU DE PRECISÃO
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, buf_ad, buf_res):
     buffer = io.BytesIO()
@@ -136,7 +136,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         sinal = "+" if coef >= 0 else ""
         eq_str += f" {sinal} ({coef:,.2f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
-    story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras Saneadas & Homogeneizadas = {n_amostras}", text_style))
+    story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras Saneadas & Homogeneizadas = {n_amostras} | <b>Precisão:</b> {precisao}", text_style))
     story.append(Spacer(1, 2))
 
     story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações", subtitle_style))
@@ -156,17 +156,17 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t2)
     story.append(Spacer(1, 2))
 
-    story.append(Paragraph("4. Planilha de Fundamentação Normativa (ABNT NBR 14653)", subtitle_style))
+    story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     t_fund = Table([
-        ["Item", "Descrição do Critério Normativo", "Pontuação Obtida"],
+        ["Item", "Descrição do Critério Normativo", "Pontuação / Grau Obtido"],
         ["1", "Caracterização do imóvel avaliando", str(pontos_itens[0])],
         ["2", f"Quantidade de dados de mercado (n = {n_amostras})", str(pontos_itens[1])],
         ["3", "Identificação dos dados de mercado", str(pontos_itens[2])],
         ["4", "Extrapolação (Dentro dos limites amostrais)", str(pontos_itens[3])],
         ["5", f"Limite admissível de ajuste (k = {len(features)})", str(pontos_itens[4])],
         ["6", f"Intervalo admissível de ajuste (R² = {r2})", str(pontos_itens[5])],
-        ["<b>SOMA</b>", f"<b>Enquadramento Final: {fundamentacao}</b>", f"<b>{soma_pontos} PONTOS</b>"]
-    ], colWidths=[30, 360, 150])
+        ["<b>SOMA / PRECISÃO</b>", f"<b>Fundamentação: {fundamentacao} | Precisão: {precisao}</b>", f"<b>{soma_pontos} PONTOS</b>"]
+    ], colWidths=[30, 330, 180])
     t_fund.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3182CE")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -331,8 +331,8 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Fundamentação & Extrapolação")
-st.markdown("Plataforma integrada com limites de amostra e pontuação automática/manual NBR.")
+st.title("🏢 Painel de Crédito e Controle AVM - Fundamentação & Precisão NBR")
+st.markdown("Plataforma integrada com notas manuais (Itens 1 e 3), limites de amostra e grau de precisão.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -360,13 +360,14 @@ informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value="H
 informante_tel = st.sidebar.text_input("Telefone do Informante", value="(62) 98888-8888")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("⚙️ **Ajuste Manual de Notas NBR (Opcional)**")
-usar_notas_manuais = st.sidebar.checkbox("Definir notas da tabela manualmente", value=False)
+st.sidebar.markdown("⚙️ **Atribuição Manual de Notas NBR (Obrigatório Itens 1 e 3)**")
 notas_manuais_input = {}
-if usar_notas_manuais:
-    notas_manuais_input['item1'] = st.sidebar.number_input("Nota Item 1 (Caracterização)", min_value=1, max_value=3, value=3)
+notas_manuais_input['item1'] = st.sidebar.number_input("Nota Item 1 (Caracterização do Imóvel)", min_value=1, max_value=3, value=3, help="Insira manualmente conforme o grau de caracterização.")
+notas_manuais_input['item3'] = st.sidebar.number_input("Nota Item 3 (Identificação dos Dados)", min_value=1, max_value=3, value=3, help="Insira manualmente conforme o rigor da identificação dos dados.")
+
+usar_todas_manuais = st.sidebar.checkbox("Ajustar também os demais itens manualmente", value=False)
+if usar_todas_manuais:
     notas_manuais_input['item2'] = st.sidebar.number_input("Nota Item 2 (Qtd Amostras)", min_value=1, max_value=3, value=3)
-    notas_manuais_input['item3'] = st.sidebar.number_input("Nota Item 3 (Identificação)", min_value=1, max_value=3, value=3)
     notas_manuais_input['item4'] = st.sidebar.number_input("Nota Item 4 (Extrapolação)", min_value=1, max_value=3, value=3)
     notas_manuais_input['item5'] = st.sidebar.number_input("Nota Item 5 (Limites Ajuste)", min_value=1, max_value=3, value=3)
     notas_manuais_input['item6'] = st.sidebar.number_input("Nota Item 6 (Intervalo Ajuste)", min_value=1, max_value=3, value=3)
@@ -561,13 +562,12 @@ with aba_avm:
                         )
                         st.caption(f"📊 Limites da Amostra: [{min_amostra:.2f} a {max_amostra:.2f}]")
                     
-                    # Verificação automática de extrapolação
                     if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
                         tem_extrapolacao_detectada = True
 
                     st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
-            if st.button("🚀 Executar Modelo com Fundamentação Dinâmica"):
+            if st.button("🚀 Executar Modelo com Notas Manuais e Precisão NBR"):
                 df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
                 df_modelo = filtrar_outliers(df_modelo, variavel_alvo)
                 
@@ -609,21 +609,20 @@ with aba_avm:
                     var_min = abs((v_min - v_medio) / v_medio) * 100
                     var_max = abs((v_max - v_medio) / v_medio) * 100
 
-                    notas_arg = notas_manuais_input if usar_notas_manuais else None
-                    fundamentacao, precisao, soma_pontos, pontos_itens = calcular_graus_nbr_automatico(
-                        len(df_modelo), r2, len(features_selecionadas), tem_extrapolacao_detectada, notas_arg
+                    fundamentacao, precisao, soma_pontos, pontos_itens = calcular_graus_nbr_hibrido(
+                        len(df_modelo), r2, len(features_selecionadas), tem_extrapolacao_detectada, notas_manuais_input
                     )
 
                     y_real_log_amostras = y_log.values
                     y_pred_log_amostras = modelo.predict(X)
                     buf_ad, buf_res = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras)
 
-                    st.success("✅ Modelo treinado com verificação de limites e pontuação normativa ajustada!")
+                    st.success("✅ Modelo executado com sucesso e parâmetros NBR atualizados!")
                     r1, r2_col, r3 = st.columns(3)
                     r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"-{var_min:.1f}%")
                     r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}", "Média")
                     r3.metric("Valor Máximo (Mercado)", f"R$ {v_max:,.2f}", f"+{var_max:.1f}%")
-                    st.caption(f"Acurácia (R²): {r2} | Amostras Saneadas: {len(df_modelo)} | Fundamentação: {fundamentacao} ({soma_pontos} pts) | Precisão: {precisao}")
+                    st.caption(f"Acurácia (R²): {r2} | Amostras Saneadas: {len(df_modelo)} | Fundamentação: {fundamentacao} ({soma_pontos} pts) | **Precisão: {precisao}**")
 
                     pdf_bytes = gerar_laudo_pdf_ia(
                         tenant_selecionado, tipologia_imovel, variavel_alvo, 
