@@ -305,7 +305,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     
-    # Sincronização rigorosa do status de micronumerosidade com a interface
+    # Sincronização rigorosa garantida com o estado atual da execução
     micro_status_text = "ATENDIDO (≥ 10% por atributo em códigos alocados)" if micronumerosidade_atendida else "ATENÇÃO / RESTRIÇÃO DE ATRIBUTOS"
     
     t_fund_data = [
@@ -362,7 +362,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER DE CERTIDÃO / MATRÍCULA
+# MOTOR DE PARSER DE CERTIDÃO / MATRÍCULA NORMALIZADO
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -438,12 +438,13 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
                 pass
         return None
 
+    # Mapeamento estrito das variáveis para garantir compatibilidade com as colunas
     area_priv = extrair_valor_numerico(r'(?:área\s*(?:privativa|construída|útil|edificada|principal))\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)', trecho_limpo)
-    if area_priv:
+    if area_priv is not None:
         variaveis_encontradas['area_privativa'] = area_priv
 
     area_terr = extrair_valor_numerico(r'(?:área\s*(?:total|do\s*terreno|terreno|fração\s*ideal|global))\D{1,25}(\d{1,5}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)', trecho_limpo)
-    if area_terr:
+    if area_terr is not None:
         variaveis_encontradas['area_terreno'] = area_terr
 
     match_q = re.search(r'(\d+)\s*(?:quartos?|dormitórios?)', trecho_limpo, re.IGNORECASE)
@@ -577,8 +578,8 @@ with aba_avm:
                     
                     for k, v in dados_extraidos.items():
                         st.session_state.valores_manuais[k] = v
-                        if f"input_safe_{k}" in st.session_state:
-                            st.session_state[f"input_safe_{k}"] = v
+                        st.session_state[f"input_safe_{tipologia_imovel}_{k}"] = v
+                    
                     st.success("✨ Leitura e preenchimento automático concluídos com sucesso! Atualizando painel...")
                     st.rerun()
                 else:
@@ -822,7 +823,7 @@ with aba_avm:
                 
                 df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
                 
-                # Validação estrita de micronumerosidade pós-filtro para sincronizar o PDF e a tela
+                # Validação rigorosa e síncrona
                 alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
                 micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
                 
