@@ -24,8 +24,8 @@ def calcular_estatisticas_regressao(X, y, coeficientes_reg):
     n = len(y)
     k = X.shape[1]
     
-    X_matrix = np.hstack([np.ones((n, 1)), X.values])
-    y_array = y.values
+    X_matrix = np.hstack([np.ones((n, 1)), X])
+    y_array = y
     
     y_pred_ols = X_matrix.dot(coeficientes_reg)
     residuos = y_array - y_pred_ols
@@ -169,7 +169,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO (VALOR TOTAL CALCULADO A PARTIR DO UNITÁRIO)
+# GERADOR DE PDF CUSTOMIZADO
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, buf_ad, buf_res):
     buffer = io.BytesIO()
@@ -202,7 +202,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("2. Equação do Modelo Válido (Log-Linear Homogeneizado - 6 Casas Decimais)", subtitle_style))
     intercepto_val = coeficientes.get('intercepto', 0)
-    eq_str = f"<b>ln({variavel_alvo})</b> = {intercepto_val:,.6f}"
+    eq_str = f"<b>ln(Valor Unitário)</b> = {intercepto_val:,.6f}"
     for feat in features:
         coef = coeficientes.get(feat, 0.0)
         sinal = "+" if coef >= 0 else ""
@@ -516,14 +516,14 @@ with aba_avm:
                 df_global = pd.read_excel(arquivo_planilha)
             
             df_global.columns = [
-                c.lower().strip().replace(" ", "_")
+                str(c).lower().strip().replace(" ", "_")
                 .replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
                 .replace("ã", "a").replace("õ", "o").replace("ç", "c").replace("â", "a").replace("ê", "e")
                 for c in df_global.columns
             ]
             
-            # Remove colunas duplicadas automaticamente para evitar ValueError
-            df_global = df_global.loc[:, ~df_global.columns.duplicated()]
+            # Remove duplicatas de colunas de forma segura para evitar reindex erros
+            df_global = df_global.loc[:, ~df_global.columns.duplicated()].copy()
             
             st.success(f"✅ Base de mercado processada! {len(df_global)} amostras carregadas.")
         except Exception as e:
@@ -572,7 +572,7 @@ with aba_avm:
             }
             
         df_global = pd.DataFrame(data_padrao)
-        df_global = df_global.loc[:, ~df_global.columns.duplicated()]
+        df_global = df_global.loc[:, ~df_global.columns.duplicated()].copy()
         st.info(f"ℹ️ Utilizando base padrão demonstrativa para a tipologia: **{tipologia_imovel}**.")
 
     st.markdown("---")
@@ -657,7 +657,9 @@ with aba_avm:
             tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
 
             if st.button("🚀 Executar e Validar Equação pelo Motor NBR"):
-                df_modelo = df_global[features_selecionadas + [col_valor_total, col_area_base]].dropna()
+                # Tratamento isolado e limpo do dataframe para evitar duplicação de índices
+                colunas_necessarias = list(set(features_selecionadas + [col_valor_total, col_area_base]))
+                df_modelo = df_global[colunas_necessarias].dropna().copy()
                 df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                 
                 coluna_alvo_unitario = 'valor_unitario_amostra'
@@ -671,8 +673,8 @@ with aba_avm:
                     df_modelo_log = df_modelo.copy()
                     df_modelo_log[coluna_alvo_unitario] = np.log1p(df_modelo_log[coluna_alvo_unitario])
                     
-                    X = df_modelo_log[features_selecionadas]
-                    y_log = df_modelo_log[coluna_alvo_unitario]
+                    X = df_modelo_log[features_selecionadas].values
+                    y_log = df_modelo_log[coluna_alvo_unitario].values
 
                     lin_reg = LinearRegression()
                     lin_reg.fit(X, y_log)
@@ -686,7 +688,7 @@ with aba_avm:
                     modelo.fit(X, y_log)
                     r2 = round(modelo.score(X, y_log), 4)
 
-                    df_alvo = pd.DataFrame([valores_usuario])
+                    df_alvo = pd.DataFrame([valores_usuario])[features_selecionadas]
                     previsoes_log_unitario = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
                     
                     previsoes_unitarios_reais = np.expm1(previsoes_log_unitario)
@@ -710,7 +712,7 @@ with aba_avm:
                         len(df_modelo), r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
                     )
 
-                    y_real_log_amostras = y_log.values
+                    y_real_log_amostras = y_log
                     y_pred_log_amostras = modelo.predict(X)
                     buf_ad, buf_res = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras)
 
