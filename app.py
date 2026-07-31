@@ -280,7 +280,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO
+# GERADOR DE PDF CUSTOMIZADO (COM SEÇÃO DE ANÁLISE JURÍDICA)
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
@@ -301,7 +301,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("1. Variáveis e Parâmetros Utilizados (Vermelho indica Extrapolação)", subtitle_style))
-    
     param_formatted_list = []
     for k, v in valores_usuario.items():
         val_str = f"{v:.2f}" if isinstance(v, float) else f"{v}"
@@ -342,7 +341,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
-    
     if micronumerosidade_atendida:
         micro_status_text = "ATENDIDO (Exclusão automática aplicada: todos os atributos possuem ≥ 10%)"
     else:
@@ -403,7 +401,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER LIMPO E ROBUSTO (ENDEREÇO E QUADRA CORRETOS)
+# MOTOR DE PARSER LIMPO E ROBUSTO
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -436,7 +434,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     trecho_limpo = re.sub(r'[\r\n\t]+', ' ', texto_total)
     trecho_limpo = re.sub(r'\s+', ' ', trecho_limpo)
 
-    # --- EXTRAÇÃO PRECISA DA OS / REFERÊNCIA ---
     ref_match = re.search(r'Refer[êe]ncia[:\s#]*([0-9\.\/\-]+)', trecho_limpo, re.IGNORECASE)
     if ref_match:
         os_extraida = ref_match.group(1).strip()
@@ -444,7 +441,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         os_match = re.search(r'(?:OS|Ordem de Servi[çc]o|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo)[:\s#]*([0-9A-Za-z\-\./]{3,40})', trecho_limpo, re.IGNORECASE)
         os_extraida = os_match.group(1).strip() if os_match else ""
 
-    # --- EXTRAÇÃO LIMPA E DIRECIONADA DO ENDEREÇO (EVITANDO LIXOS DA OS) ---
     end_match = re.search(r'Endereço[:\s]+([^C]+?)(?=\s*CEP:|\s*Cidade/UF:|\s*Bairro:|\s*Complemento:|$)', trecho_limpo, re.IGNORECASE)
     rua_base = end_match.group(1).strip() if end_match else ""
     if not rua_base or "Prazo" in rua_base or "Valor" in rua_base:
@@ -452,8 +448,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         rua_base = rua_alt.group(1).strip() if rua_alt else "Rua São Clemente"
 
     cond_match = re.search(r'condom[íi]nio\s+"([^"]+)"', trecho_limpo, re.IGNORECASE)
-    
-    # Captura rigorosa do número da Quadra (Evitando erros de OCR como NTO)
     quadra_match = re.search(r'(?:Quadra|Q[uãa]d?r?a)\.?[:\s]*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     qdr_val = quadra_match.group(1).strip() if quadra_match and quadra_match.group(1).strip().lower() not in ['nto', ''] else "334"
     
@@ -633,7 +627,7 @@ with aba_avm:
             
             df_global = df_global.loc[:, ~df_global.columns.duplicated()].copy()
             st.session_state.df_dinamico = df_global
-            st.success(f"✅ Base de mercado processada! {len(df_global)} dados carregados.")
+            st.success(f"✅ Base de mercado processada! Total bruto na planilha: {len(df_global)} dados.")
         except Exception as e:
             st.error(f"Erro ao processar planilha de mercado: {e}")
     else:
@@ -667,18 +661,19 @@ with aba_avm:
                 df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
                 df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
                 
-                # Executa o saneamento por exclusão automática de dados
+                # Saneamento por exclusão para refletir o número real (ex: 307 dados) na tela
                 df_modelo_teste = sanear_micronumerosidade_por_exclusao(df_modelo_teste, features_selecionadas)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_modelo_teste, features_selecionadas)
                 
                 micronumerosidade_atendida = len(alertas_micronumerosidade) == 0
+                n_dados_tela = len(df_modelo_teste)
                 
                 if not micronumerosidade_atendida:
-                    st.warning("⚠️ **Mecanismo Inteligente de Micronumerosidade Ativado (ABNT NBR 14653):**")
+                    st.warning(f"⚠️ **Mecanismo Inteligente de Micronumerosidade Ativado (Base Efetiva: {n_dados_tela} dados):**")
                     for alt in alertas_micronumerosidade:
                         st.write(alt['mensagem'])
                 else:
-                    st.success(f"🟢 **Critério de Micronumerosidade ATENDIDO:** Saneamento por exclusão aplicado com sucesso. Total de dados válidos na base: **{len(df_modelo_teste)} dados** (todas as classes possuem ≥ 10%).")
+                    st.success(f"🟢 **Critério de Micronumerosidade ATENDIDO:** Saneamento aplicado com sucesso. Total de dados efetivos: **{n_dados_tela} dados** (≥ 10% representatividade).")
 
                 st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliendo & Limites do Dado (Extrapolação)")
                 
