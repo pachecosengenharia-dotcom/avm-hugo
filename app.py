@@ -88,7 +88,6 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
             cooks_d = (residuos_padronizados ** 2 / (k + 1)) * (h / (1 - h + 1e-8))
             limite_cook = 4 / (n - k - 1) if (n - k - 1) > 0 else 0.5
             
-            # Filtro estrito: remove dados que ultrapassam o limite de Cook para limpar o gráfico
             mask_validos = cooks_d <= limite_cook
             df_filtrado = df_filtrado[mask_validos]
             cooks_d_array = cooks_d[mask_validos]
@@ -188,7 +187,7 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valo
     return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
 # =====================================================================
-# GERADOR DOS GRÁFICOS NBR (COM AJUSTE DE ESCALA PARA COOK)
+# GERADOR DOS GRÁFICOS NBR
 # =====================================================================
 def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     residuos_log = y_real_log - y_pred_log
@@ -301,7 +300,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
-    
     micro_status_text = "ATENDIDO (≥ 10% por atributo em códigos alocados)" if micronumerosidade_atendida else "ATENÇÃO / RESTRIÇÃO DE ATRIBUTOS"
     
     t_fund_data = [
@@ -358,7 +356,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# PARSER ROBUSTO E AMPLIADO DE MÚLTIPLOS DOCUMENTOS (CERTIDÃO / MATRÍCULA / OS)
+# PARSER RIGOROSO DE CERTIDÃO / MATRÍCULA (EXPRESSÕES DIRECIONADAS)
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -390,14 +388,9 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     variaveis_encontradas = {}
     trecho_limpo = re.sub(r'\s+', ' ', texto_total)
 
-    # Extração robusta de OS
     os_match = re.search(r'(?:OS|Ordem de Serviço|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo|Laudo)[:\s#]*([0-9A-Za-z\-/]{3,25})', trecho_limpo, re.IGNORECASE)
-    os_extraida = os_match.group(1).strip() if os_match else ""
-    if not os_extraida or os_extraida.lower() in ["engenharia", "laudo", "banco", "imóvel"]:
-        os_alt = re.search(r'\b(OS[-/\s]*\d{4}[-/\s]*\d+)\b', trecho_limpo, re.IGNORECASE)
-        os_extraida = os_alt.group(1).strip() if os_alt else "OS-2026/8942-AVM"
+    os_extraida = os_match.group(1).strip() if os_match else "OS-2026/8942-AVM"
 
-    # Extração de Endereço em Certidões e Matrículas
     rua_match = re.search(r'(?:Rua|Avenida|Av\.|Alameda|Rodovia)\s+[^,\.-]+', trecho_limpo, re.IGNORECASE)
     quadra_match = re.search(r'Q[uãa]d?r?a\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     lote_match = re.search(r'Lote\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
@@ -424,29 +417,25 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     elif "casa" in t_lower or "residência" in t_lower:
         tipologia_detectada = "Casa"
 
-    # Captura de Área Privativa / Construída ampliada (Certidão e Matrícula)
-    match_priv = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?\s*(?:de\s*)?(?:área\s*privativa|área\s*construída|construção|área\s*útil)', trecho_limpo, re.IGNORECASE)
-    if not match_priv:
-        match_priv = re.search(r'(?:área\s*privativa|área\s*construída|construção|área\s*útil)\s*(?:de\s*)?(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?', trecho_limpo, re.IGNORECASE)
+    # EXTRAÇÃO RIGOROSA: Área Privativa / Construída (busca estrita por rótulos da certidão)
+    match_priv = re.search(r'(?:área\s*(?:privativa|construída|útil))\D{0,15}(\d{1,3}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)', trecho_limpo, re.IGNORECASE)
     if match_priv:
-        val = match_priv.group(1).replace('.', '').replace(',', '.')
+        val_str = match_priv.group(1).replace('.', '').replace(',', '.')
         try:
-            variaveis_encontradas['area_privativa'] = float(val)
+            variaveis_encontradas['area_privativa'] = float(val_str)
         except ValueError:
             pass
 
-    # Captura de Área do Terreno ampliada
-    match_terr = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?\s*(?:de\s*)?(?:área\s*total|área\s*do\s*terreno|terreno|fração\s*ideal)', trecho_limpo, re.IGNORECASE)
-    if not match_terr:
-        match_terr = re.search(r'(?:área\s*total|área\s*do\s*terreno|terreno)\s*(?:de\s*)?(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?', trecho_limpo, re.IGNORECASE)
+    # EXTRAÇÃO RIGOROSA: Área do Terreno / Total
+    match_terr = re.search(r'(?:área\s*(?:total|do\s*terreno|terreno|fração\s*ideal))\D{0,15}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)', trecho_limpo, re.IGNORECASE)
     if match_terr:
-        val = match_terr.group(1).replace('.', '').replace(',', '.')
+        val_str = match_terr.group(1).replace('.', '').replace(',', '.')
         try:
-            variaveis_encontradas['area_terreno'] = float(val)
+            variaveis_encontradas['area_terreno'] = float(val_str)
         except ValueError:
             pass
 
-    # Captura de Quartos / Dormitórios
+    # EXTRAÇÃO RIGOROSA: Quartos / Dormitórios
     match_q = re.search(r'(\d+)\s*(?:quartos?|dormitórios?)', trecho_limpo, re.IGNORECASE)
     if match_q:
         try:
@@ -454,16 +443,17 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
-    # Captura de Suítes
+    # EXTRAÇÃO RIGOROSA: Suítes (evita capturar números soltos da certidão)
     match_s = re.search(r'(\d+)\s*su[íi]tes?', trecho_limpo, re.IGNORECASE)
     if match_s:
         try:
-            variaveis_encontradas['suites'] = int(match_s.group(1))
-            variaveis_encontradas['suite'] = int(match_s.group(1))
+            val_suite = int(match_s.group(1))
+            variaveis_encontradas['suites'] = val_suite
+            variaveis_encontradas['suite'] = val_suite
         except ValueError:
             pass
 
-    # Captura de Banheiros
+    # EXTRAÇÃO RIGOROSA: Banheiros
     match_b = re.search(r'(\d+)\s*(?:banheiros?|banhos?|sanitários?)', trecho_limpo, re.IGNORECASE)
     if match_b:
         try:
@@ -471,7 +461,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
-    # Captura de Vagas de Garagem
+    # EXTRAÇÃO RIGOROSA: Vagas de Garagem
     match_v = re.search(r'(\d+)\s*(?:vaga[s]?(?:\s*de\s*garagem)?|garagens?)', trecho_limpo, re.IGNORECASE)
     if match_v:
         try:
@@ -485,7 +475,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade** + **Distância de Cook (Filtragem Estrita)**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Micronumerosidade** + **Distância de Cook**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -742,7 +732,6 @@ with aba_avm:
                 coluna_alvo_unitario = 'valor_unitario_amostra'
                 df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                 
-                # Executa o filtro e limpeza rigorosa baseada na Distância de Cook
                 df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
                 
                 alertas_micronumerosidade = verificar_micronumerosidade(df_modelo, features_selecionadas)
@@ -808,7 +797,7 @@ with aba_avm:
                     if pontos_itens[4] == 0:
                         st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR (Análise de Cook e Micronumerosidade limpas e incorporadas)!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR!")
                         
                         eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
