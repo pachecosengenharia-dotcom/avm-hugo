@@ -743,6 +743,7 @@ with aba_avm:
                     df_modelo = df_global[colunas_necessarias].dropna().copy()
                     df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                     
+                    # 1. Saneamento rigoroso por exclusão antes de qualquer cálculo estatístico
                     df_modelo = sanear_micronumerosidade_por_exclusao(df_modelo, features_selecionadas)
                     
                     fator_escala = 1000.0 if df_modelo[col_valor_total].mean() < 5000.0 else 1.0
@@ -750,8 +751,10 @@ with aba_avm:
                     coluna_alvo_unitario = 'valor_unitario_amostra'
                     df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                     
+                    # 2. Distância de Cook sobre a base já saneada
                     df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
                     
+                    # 3. Verificação final pós-saneamento rigoroso (garante que 0 alertas restem se a base foi limpa)
                     alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
                     micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
                     
