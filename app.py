@@ -521,6 +521,10 @@ with aba_avm:
                 .replace("ã", "a").replace("õ", "o").replace("ç", "c").replace("â", "a").replace("ê", "e")
                 for c in df_global.columns
             ]
+            
+            # Remove colunas duplicadas automaticamente para evitar ValueError
+            df_global = df_global.loc[:, ~df_global.columns.duplicated()]
+            
             st.success(f"✅ Base de mercado processada! {len(df_global)} amostras carregadas.")
         except Exception as e:
             st.error(f"Erro ao processar planilha de mercado: {e}")
@@ -568,6 +572,7 @@ with aba_avm:
             }
             
         df_global = pd.DataFrame(data_padrao)
+        df_global = df_global.loc[:, ~df_global.columns.duplicated()]
         st.info(f"ℹ️ Utilizando base padrão demonstrativa para a tipologia: **{tipologia_imovel}**.")
 
     st.markdown("---")
@@ -578,7 +583,6 @@ with aba_avm:
     if len(colunas_numericas) >= 2:
         c1, c2 = st.columns(2)
         with c1:
-            # Identificação automática ou seleção da coluna de valor total e área base
             col_valor_total = st.selectbox("Coluna de Valor Total na Base:", [c for c in colunas_numericas if 'valor' in c or 'preco' in c] + colunas_numericas)
         with c2:
             col_area_base = st.selectbox("Coluna de Área Base (ex: area_privativa ou area_terreno):", [c for c in colunas_numericas if 'area' in c] + colunas_numericas)
@@ -656,7 +660,6 @@ with aba_avm:
                 df_modelo = df_global[features_selecionadas + [col_valor_total, col_area_base]].dropna()
                 df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                 
-                # Variável Alvo passa a ser o VALOR UNITÁRIO (Valor Total / Área Base)
                 coluna_alvo_unitario = 'valor_unitario_amostra'
                 df_modelo[coluna_alvo_unitario] = df_modelo[col_valor_total] / df_modelo[col_area_base]
                 
@@ -692,12 +695,10 @@ with aba_avm:
                     vu_min = float(np.percentile(previsoes_unitarios_reais, 15))
                     vu_max = float(np.percentile(previsoes_unitarios_reais, 85))
 
-                    # Área base do imóvel avaliando para calcular o VALOR TOTAL
                     area_avaliando = valores_usuario.get(col_area_base, 1.0)
                     if area_avaliando <= 0:
                         area_avaliando = 1.0
 
-                    # O Valor Total é o Valor Unitário multiplicado pela Área Base do avaliando
                     v_medio = vu_medio * area_avaliando
                     v_min = vu_min * area_avaliando
                     v_max = vu_max * area_avaliando
