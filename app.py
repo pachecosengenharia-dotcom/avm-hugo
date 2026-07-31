@@ -58,7 +58,7 @@ def calcular_estatisticas_regressao(X, y, coeficientes_reg):
     return p_valores_t, p_valor_f
 
 # =====================================================================
-# FILTRO RIGOROSO DE DISTÂNCIA DE COOK E REMOÇÃO DE INFLUENTES
+# FILTRO DE DISTÂNCIA DE COOK E REMOÇÃO DE INFLUENTES
 # =====================================================================
 def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     Q1 = df[coluna_alvo].quantile(0.10)
@@ -356,7 +356,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# PARSER RIGOROSO DE CERTIDÃO / MATRÍCULA (EXPRESSÕES DIRECIONADAS)
+# PARSER ROBUSTO E PRECISO DE CERTIDÃO / MATRÍCULA
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -386,7 +386,10 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         return {}, "", "", "", logs_execucao
 
     variaveis_encontradas = {}
-    trecho_limpo = re.sub(r'\s+', ' ', texto_total)
+    
+    # Limpeza preservando a estrutura de pontuação para números reais
+    trecho_limpo = re.sub(r'[\r\n\t]+', ' ', texto_total)
+    trecho_limpo = re.sub(r'\s+', ' ', trecho_limpo)
 
     os_match = re.search(r'(?:OS|Ordem de Serviço|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo|Laudo)[:\s#]*([0-9A-Za-z\-/]{3,25})', trecho_limpo, re.IGNORECASE)
     os_extraida = os_match.group(1).strip() if os_match else "OS-2026/8942-AVM"
@@ -417,25 +420,34 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     elif "casa" in t_lower or "residência" in t_lower:
         tipologia_detectada = "Casa"
 
-    # EXTRAÇÃO RIGOROSA: Área Privativa / Construída (busca estrita por rótulos da certidão)
-    match_priv = re.search(r'(?:área\s*(?:privativa|construída|útil))\D{0,15}(\d{1,3}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)', trecho_limpo, re.IGNORECASE)
-    if match_priv:
-        val_str = match_priv.group(1).replace('.', '').replace(',', '.')
-        try:
-            variaveis_encontradas['area_privativa'] = float(val_str)
-        except ValueError:
-            pass
+    # --- PARSER PRECISO PARA CERTIDÃO / MATRÍCULA ---
+    # Captura padrão brasileiro de área (ex: 126,82 ou 1.250,50 ou 126.82)
+    def extrair_numero_formatado(padrao_regex, texto):
+        m = re.search(padrao_regex, texto, re.IGNORECASE)
+        if m:
+            val_str = m.group(1).strip()
+            # Se tem ponto como milhar e vírgula como decimal (ex: 1.234,56)
+            if '.' in val_str and ',' in val_str:
+                val_str = val_str.replace('.', '').replace(',', '.')
+            elif ',' in val_str:
+                val_str = val_str.replace(',', '.')
+            try:
+                return float(val_str)
+            except ValueError:
+                pass
+        return None
 
-    # EXTRAÇÃO RIGOROSA: Área do Terreno / Total
-    match_terr = re.search(r'(?:área\s*(?:total|do\s*terreno|terreno|fração\s*ideal))\D{0,15}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)', trecho_limpo, re.IGNORECASE)
-    if match_terr:
-        val_str = match_terr.group(1).replace('.', '').replace(',', '.')
-        try:
-            variaveis_encontradas['area_terreno'] = float(val_str)
-        except ValueError:
-            pass
+    # 1. Área Privativa ou Construída
+    area_priv = extrair_numero_formatado(r'(?:área\s*(?:privativa|construída|útil|edificada))\D{1,25}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)', trecho_limpo)
+    if area_priv:
+        variaveis_encontradas['area_privativa'] = area_priv
 
-    # EXTRAÇÃO RIGOROSA: Quartos / Dormitórios
+    # 2. Área do Terreno ou Total
+    area_terr = extrair_numero_formatado(r'(?:área\s*(?:total|do\s*terreno|terreno|fração\s*ideal))\D{1,25}(\d{1,5}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)', trecho_limpo)
+    if area_terr:
+        variaveis_encontradas['area_terreno'] = area_terr
+
+    # 3. Quartos / Dormitórios
     match_q = re.search(r'(\d+)\s*(?:quartos?|dormitórios?)', trecho_limpo, re.IGNORECASE)
     if match_q:
         try:
@@ -443,7 +455,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
-    # EXTRAÇÃO RIGOROSA: Suítes (evita capturar números soltos da certidão)
+    # 4. Suítes (Busca exata pelo termo)
     match_s = re.search(r'(\d+)\s*su[íi]tes?', trecho_limpo, re.IGNORECASE)
     if match_s:
         try:
@@ -453,7 +465,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
-    # EXTRAÇÃO RIGOROSA: Banheiros
+    # 5. Banheiros
     match_b = re.search(r'(\d+)\s*(?:banheiros?|banhos?|sanitários?)', trecho_limpo, re.IGNORECASE)
     if match_b:
         try:
@@ -461,7 +473,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
-    # EXTRAÇÃO RIGOROSA: Vagas de Garagem
+    # 6. Vagas de Garagem
     match_v = re.search(r'(\d+)\s*(?:vaga[s]?(?:\s*de\s*garagem)?|garagens?)', trecho_limpo, re.IGNORECASE)
     if match_v:
         try:
