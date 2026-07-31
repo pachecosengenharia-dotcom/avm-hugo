@@ -407,7 +407,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): a variável alvo é o **valor unitário**, apresentando o **valor total** calculado pela área base.")
+st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): cálculo correto do valor unitário e total.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -522,9 +522,7 @@ with aba_avm:
                 for c in df_global.columns
             ]
             
-            # Remove duplicatas de colunas de forma segura para evitar reindex erros
             df_global = df_global.loc[:, ~df_global.columns.duplicated()].copy()
-            
             st.success(f"✅ Base de mercado processada! {len(df_global)} amostras carregadas.")
         except Exception as e:
             st.error(f"Erro ao processar planilha de mercado: {e}")
@@ -631,7 +629,7 @@ with aba_avm:
                         val_input = st.number_input(
                             f"{nome_formatado}", 
                             value=val_inicial,
-                            step=1, 
+                        step=1, 
                             format="%d",
                             key=f"input_safe_{tipologia_imovel}_{feat}"
                         )
@@ -657,11 +655,11 @@ with aba_avm:
             tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
 
             if st.button("🚀 Executar e Validar Equação pelo Motor NBR"):
-                # Tratamento isolado e limpo do dataframe para evitar duplicação de índices
                 colunas_necessarias = list(set(features_selecionadas + [col_valor_total, col_area_base]))
                 df_modelo = df_global[colunas_necessarias].dropna().copy()
                 df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                 
+                # Cálculo do Valor Unitário real da amostra
                 coluna_alvo_unitario = 'valor_unitario_amostra'
                 df_modelo[coluna_alvo_unitario] = df_modelo[col_valor_total] / df_modelo[col_area_base]
                 
@@ -671,7 +669,8 @@ with aba_avm:
                     st.error("Amostras insuficientes após filtragem de outliers (mínimo de 3).")
                 else:
                     df_modelo_log = df_modelo.copy()
-                    df_modelo_log[coluna_alvo_unitario] = np.log1p(df_modelo_log[coluna_alvo_unitario])
+                    # Uso de log natural direto (sem expm1 na regressão do unitário para garantir escala correta)
+                    df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
                     
                     X = df_modelo_log[features_selecionadas].values
                     y_log = df_modelo_log[coluna_alvo_unitario].values
@@ -691,7 +690,8 @@ with aba_avm:
                     df_alvo = pd.DataFrame([valores_usuario])[features_selecionadas]
                     previsoes_log_unitario = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
                     
-                    previsoes_unitarios_reais = np.expm1(previsoes_log_unitario)
+                    # Retorno correto da exponencial do valor unitário
+                    previsoes_unitarios_reais = np.exp(previsoes_log_unitario)
                     
                     vu_medio = float(np.mean(previsoes_unitarios_reais))
                     vu_min = float(np.percentile(previsoes_unitarios_reais, 15))
@@ -701,6 +701,7 @@ with aba_avm:
                     if area_avaliando <= 0:
                         area_avaliando = 1.0
 
+                    # Valor Total correto = Valor Unitário * Área Base do Imóvel Avaliando
                     v_medio = vu_medio * area_avaliando
                     v_min = vu_min * area_avaliando
                     v_max = vu_max * area_avaliando
