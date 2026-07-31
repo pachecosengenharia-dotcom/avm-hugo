@@ -361,7 +361,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER DE CERTIDÃO / MATRÍCULA ULTRA-FLEXÍVEL
+# MOTOR DE PARSER DE CERTIDÃO / MATRÍCULA COM FILTRO DE ÁREA COBERTA
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -438,12 +438,14 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
                     pass
         return None
 
-    padroes_privativa = [
-        r'(?:área\s*(?:privativa|construída|útil|edificada|principal|coberta))\D{1,30}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
-        r'(?:constr[uú]ida\s*(?:de|com|totalizando)?)\D{1,20}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
-        r'(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)\s*m²?\s*(?:de\s*)?(?:área\s*)?(?:privativa|construída|útil)'
+    # --- PARSER RIGOROSO PARA CONSIDERAR APENAS ÁREA PRIVATIVA/CONSTRUÍDA COBERTA ---
+    # Prioriza explicitamente menções a "coberta" ou "principal" e evita somar áreas descobertas
+    padroes_privativa_coberta = [
+        r'(?:área\s*(?:privativa|construída|útil|edificada|principal)\s*coberta)\D{1,30}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
+        r'(?:privativa\s*total\s*coberta)\D{1,30}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
+        r'(?:área\s*(?:privativa|construída|útil|edificada|principal))\D{1,30}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)'
     ]
-    area_priv = extrair_valor_numerico(padroes_privativa, trecho_limpo)
+    area_priv = extrair_valor_numerico(padroes_privativa_coberta, trecho_limpo)
     if area_priv is not None:
         variaveis_encontradas['area_privativa'] = area_priv
 
@@ -455,14 +457,14 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     if area_terr is not None:
         variaveis_encontradas['area_terreno'] = area_terr
 
-    match_q = re.search(r'(\d+)\s*(?:quartos?|dormitórios?|su[íi]tes?\s*e\s*quartos?)', trecho_limpo, re.IGNORECASE)
+    match_q = re.search(r'\b([1-9])\s*(?:quartos?|dormitórios?)\b', trecho_limpo, re.IGNORECASE)
     if match_q:
         try:
             variaveis_encontradas['quartos'] = int(match_q.group(1))
         except ValueError:
             pass
 
-    match_s = re.search(r'(\d+)\s*(?:su[íi]tes?|suíte[s]?)', trecho_limpo, re.IGNORECASE)
+    match_s = re.search(r'\b([1-9])\s*(?:su[íi]tes?|suíte[s]?)\b', trecho_limpo, re.IGNORECASE)
     if match_s:
         try:
             val_suite = int(match_s.group(1))
@@ -471,14 +473,14 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
-    match_b = re.search(r'(\d+)\s*(?:banheiros?|banhos?|sanitários?)', trecho_limpo, re.IGNORECASE)
+    match_b = re.search(r'\b([1-9])\s*(?:banheiros?|banhos?|sanitários?)\b', trecho_limpo, re.IGNORECASE)
     if match_b:
         try:
             variaveis_encontradas['banheiros'] = int(match_b.group(1))
         except ValueError:
             pass
 
-    match_v = re.search(r'(\d+)\s*(?:vaga[s]?(?:\s*de\s*garagem)?|garagens?)', trecho_limpo, re.IGNORECASE)
+    match_v = re.search(r'\b([1-9])\s*(?:vaga[s]?(?:\s*de\s*garagem)?|garagens?)\b', trecho_limpo, re.IGNORECASE)
     if match_v:
         try:
             variaveis_encontradas['vagas_garagem'] = int(match_v.group(1))
@@ -617,7 +619,6 @@ with aba_avm:
         if st.session_state.df_dinamico is not None:
             df_global = st.session_state.df_dinamico
 
-    # Bloqueia a configuração e execução se a planilha de mercado não estiver carregada
     if df_global is None:
         st.warning("⚠️ Por favor, faça o upload da **Planilha Base Comparativa (.xlsx ou .csv)** acima para liberar a configuração das variáveis e o motor AVM.")
     else:
