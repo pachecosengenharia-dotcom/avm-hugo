@@ -149,7 +149,7 @@ def verificar_micronumerosidade(df, features_selecionadas):
                         'valor': val,
                         'contagem': contagem,
                         'percentual': percentual,
-                        'mensagem': f"⚠️ **{feat}** (Código/Valor `{val}`): possui apenas {contagem} amostras (**{percentual:.1f}%**). Mínimo exigido: **10%**."
+                        'mensagem': f"⚠️ **{feat}** (Código/Valor `{val}`): possui apenas {contagem} dados (**{percentual:.1f}%**). Mínimo exigido: **10%**."
                     })
                     
     return alertas_micronumerosidade
@@ -157,12 +157,12 @@ def verificar_micronumerosidade(df, features_selecionadas):
 # =====================================================================
 # AVALIAÇÃO NORMATIVA RIGOROSA (NBR 14653)
 # =====================================================================
-def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valor_f, tem_extrapolacao=False, notas_manuais=None):
+def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f, tem_extrapolacao=False, notas_manuais=None):
     p_item1 = notas_manuais.get('item1', 2) if notas_manuais else 2
     
-    if n_amostras >= 30:
+    if n_dados >= 30:
         p_item2 = 3
-    elif n_amostras >= 12:
+    elif n_dados >= 12:
         p_item2 = 2
     else:
         p_item2 = 1
@@ -201,9 +201,9 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valo
     pontos_itens = [p_item1, p_item2, p_item3, p_item4, p_item5, p_item6]
     soma_pontos = sum(pontos_itens)
 
-    if soma_pontos >= 16 and n_amostras >= 30 and r2 >= 0.70 and not tem_extrapolacao and p_item5 > 0:
+    if soma_pontos >= 16 and n_dados >= 30 and r2 >= 0.70 and not tem_extrapolacao and p_item5 > 0:
         fundamentacao = "Grau III"
-    elif soma_pontos >= 10 and n_amostras >= 12 and p_item5 > 0:
+    elif soma_pontos >= 10 and n_dados >= 12 and p_item5 > 0:
         fundamentacao = "Grau II"
     else:
         fundamentacao = "Inválido / Grau I"
@@ -257,7 +257,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
         ax.stem(indices, cooks_d, linefmt='#DD6B20', markerfmt='o', basefmt=" ")
         ax.axhline(limite_cook, color='red', linestyle='--', linewidth=1, label=f'Limite')
     ax.set_title("Distância de Cook", fontsize=7)
-    ax.set_xlabel("Amostra", fontsize=6)
+    ax.set_xlabel("Dado", fontsize=6)
     ax.set_ylabel("Di", fontsize=6)
     ax.tick_params(labelsize=5)
     plt.tight_layout()
@@ -271,7 +271,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, buf_ad, buf_res, buf_cook):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -310,7 +310,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         sinal = "+" if coef >= 0 else ""
         eq_str += f" {sinal} ({coef:,.6f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
-    story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Amostras = {n_amostras} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
+    story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Dados = {n_dados} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações", subtitle_style))
@@ -341,7 +341,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
         [Paragraph("1", table_cell_style), Paragraph("Caracterização do imóvel avaliando", table_cell_style), Paragraph(str(pontos_itens[0]), table_cell_style)],
-        [Paragraph("2", table_cell_style), Paragraph(f"Quantidade de dados de mercado (n = {n_amostras})", table_cell_style), Paragraph(str(pontos_itens[1]), table_cell_style)],
+        [Paragraph("2", table_cell_style), Paragraph(f"Quantidade de dados de mercado (n = {n_dados})", table_cell_style), Paragraph(str(pontos_itens[1]), table_cell_style)],
         [Paragraph("3", table_cell_style), Paragraph("Identificação dos dados de mercado", table_cell_style), Paragraph(str(pontos_itens[2]), table_cell_style)],
         [Paragraph("4", table_cell_style), Paragraph(f"Extrapolação ({'Com Extrapol. - Nota 1' if variaveis_extrapoladas else 'Sem Extrapol. - Nota 3'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
         [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
@@ -392,7 +392,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER CIRÚRGICO E LIMPO PARA OS E ENDEREÇO
+# MOTOR DE PARSER LIMPO E PRECISO (SEM LIXOS DA OS NO ENDEREÇO)
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -425,7 +425,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     trecho_limpo = re.sub(r'[\r\n\t]+', ' ', texto_total)
     trecho_limpo = re.sub(r'\s+', ' ', trecho_limpo)
 
-    # --- EXTRAÇÃO PRECISA DO NÚMERO DA OS OU REFERÊNCIA ---
+    # --- EXTRAÇÃO DA OS / REFERÊNCIA ---
     ref_match = re.search(r'Refer[êe]ncia[:\s#]*([0-9\.\/\-]+)', trecho_limpo, re.IGNORECASE)
     if ref_match:
         os_extraida = ref_match.group(1).strip()
@@ -433,10 +433,10 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         os_match = re.search(r'(?:OS|Ordem de Servi[çc]o|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo)[:\s#]*([0-9A-Za-z\-\./]{3,40})', trecho_limpo, re.IGNORECASE)
         os_extraida = os_match.group(1).strip() if os_match else ""
 
-    # --- EXTRAÇÃO LIMPA E DIRECIONADA DO ENDEREÇO (EVITANDO LIXOS DA OS) ---
+    # --- EXTRAÇÃO RIGOROSA DO ENDEREÇO (ISOLANDO CAMPOS DA OS) ---
     end_match = re.search(r'Endere[çc]o[:\s]+([^C]+?)(?=\s*CEP:|\s*Cidade/UF:|\s*Bairro:|\s*Complemento:|$)', trecho_limpo, re.IGNORECASE)
     rua_base = end_match.group(1).strip() if end_match else ""
-    if not rua_base:
+    if not rua_base or "Prazo" in rua_base:
         rua_alt = re.search(r'de\s+frente\s+para\s+a\s+([^,]+)', trecho_limpo, re.IGNORECASE)
         rua_base = rua_alt.group(1).strip() if rua_alt else "Rua São Clemente"
 
@@ -452,7 +452,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     bairro = f"Bairro {bairro_match.group(1).strip()}" if bairro_match else ""
     cidade = cidade_match.group(1).strip() if cidade_match else "APARECIDA DE GOIANIA/GO"
 
-    partes_endereco = [p for p in [rua_base, cond, qdr, lt, bairro, cidade] if p]
+    partes_endereco = [p for p in [rua_base, cond, qdr, lt, bairro, cidade] if p and "Prazo" not in p and "Valor" not in p]
     endereco_extraido = ", ".join(partes_endereco) if partes_endereco else "Rua São Clemente, Quadra 334, Lote 17, Jardim Buriti Sereno, Aparecida de Goiânia/GO"
 
     tipologia_detectada = "Casa"
@@ -534,7 +534,7 @@ notas_manuais_input['item3'] = st.sidebar.number_input("Nota Item 3 (Identifica�
 
 usar_todas_manuais = st.sidebar.checkbox("Ajustar itens restantes manualmente se necessário", value=False)
 if usar_todas_manuais:
-    notas_manuais_input['item2_manual'] = st.sidebar.number_input("Nota Item 2 (Qtd Amostras)", min_value=1, max_value=3, value=2)
+    notas_manuais_input['item2_manual'] = st.sidebar.number_input("Nota Item 2 (Qtd Dados)", min_value=1, max_value=3, value=2)
     notas_manuais_input['item4_manual'] = st.sidebar.number_input("Nota Item 4 (Extrapolação)", min_value=1, max_value=3, value=2)
     notas_manuais_input['item5_manual'] = st.sidebar.number_input("Nota Item 5 (Signif. Regressores)", min_value=1, max_value=3, value=2)
     notas_manuais_input['item6_manual'] = st.sidebar.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=2)
@@ -652,7 +652,6 @@ with aba_avm:
                 df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
                 df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
                 
-                # Saneamento automático e verificação sincronizada
                 df_modelo_teste = sanear_micronumerosidade_automatico(df_modelo_teste, features_selecionadas)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_modelo_teste, features_selecionadas)
                 
@@ -665,7 +664,7 @@ with aba_avm:
                 else:
                     st.success("🟢 **Critério de Micronumerosidade ATENDIDO:** Saneamento automático aplicado com sucesso (todas as classes possuem ≥ 10% de representatividade).")
 
-                st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliendo & Limites da Amostra (Extrapolação)")
+                st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliendo & Limites do Dado (Extrapolação)")
                 
                 dados_ia = st.session_state.get('dados_extraidos_ia', {})
                 campos_inteiros = [
@@ -706,7 +705,7 @@ with aba_avm:
                                 key=f"input_safe_{tipologia_imovel}_{feat}"
                             )
                             valores_usuario[feat] = val_input
-                            st.caption(f"📊 Limites da Amostra: [{int(min_amostra)} a {int(max_amostra)}]")
+                            st.caption(f"📊 Limites do Dado: [{int(min_amostra)} a {int(max_amostra)}]")
                         else:
                             val_inicial = float(val_inicial)
                             val_input = st.number_input(
@@ -716,11 +715,11 @@ with aba_avm:
                                 key=f"input_safe_{tipologia_imovel}_{feat}"
                             )
                             valores_usuario[feat] = val_input
-                            st.caption(f"📊 Limites da Amostra: [{min_amostra:.2f} a {max_amostra:.2f}]")
+                            st.caption(f"📊 Limites do Dado: [{min_amostra:.2f} a {max_amostra:.2f}]")
                         
                         if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
                             variaveis_extrapoladas.append(feat)
-                            st.error(f"⚠️ Alerta: '{nome_formatado}' está EXTRAPOLADO em relação à amostra!")
+                            st.error(f"⚠️ Alerta: '{nome_formatado}' está EXTRAPOLADO em relação aos dados!")
 
                         st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
@@ -743,8 +742,10 @@ with aba_avm:
                     alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
                     micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
                     
-                    if len(df_modelo) < 3:
-                        st.error("Amostras insuficientes após filtragem estatística rigorosa (mínimo de 3).")
+                    n_dados_efetivos = len(df_modelo)
+                    
+                    if n_dados_efetivos < 3:
+                        st.error("Dados insuficientes após filtragem estatística rigorosa (mínimo de 3).")
                     else:
                         df_modelo_log = df_modelo.copy()
                         df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
@@ -785,7 +786,7 @@ with aba_avm:
                         var_max = abs((v_max - v_medio) / v_medio) * 100
 
                         fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f_calc = calcular_graus_nbr_rigoroso(
-                            len(df_modelo), r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
+                            n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
                         )
 
                         y_real_log_amostras = y_log
@@ -821,7 +822,7 @@ with aba_avm:
                                     'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max,
                                     'var_min': var_min, 'var_max': var_max
                                 },
-                                r2, len(df_modelo), features_selecionadas, coeficientes, valores_usuario,
+                                r2, n_dados_efetivos, features_selecionadas, coeficientes, valores_usuario,
                                 variaveis_extrapoladas,
                                 fundamentacao, precisao,
                                 st.session_state.status_juridico_global,
