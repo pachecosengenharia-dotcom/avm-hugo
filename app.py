@@ -17,37 +17,64 @@ import streamlit as st
 st.set_page_config(page_title="Plataforma AVM SaaS - Fundamentação & Precisão NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# AVALIAÇÃO NORMATIVA DA FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
+# AVALIAÇÃO NORMATIVA RIGOROSA DA FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
 # =====================================================================
-def calcular_graus_nbr_hibrido(n_amostras, r2, n_variaveis, tem_extrapolacao=False, notas_manuais=None):
-    # Itens 1 e 3 controlados por input manual, com padrões seguros caso não definidos
+def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, tem_extrapolacao=False, notas_manuais=None):
+    # Itens 1 e 3 controlados por input manual obrigatório
     p_item1 = notas_manuais.get('item1', 2) if notas_manuais else 2
     
-    # Itens automáticos baseados nas amostras e modelo
-    p_item2 = 3 if n_amostras >= 30 else (2 if n_amostras >= 12 else 1)
-    
+    # Item 2: Quantidade de dados de mercado (Grau III exige n >= 30, Grau II exige n >= 12)
+    if n_amostras >= 30:
+        p_item2 = 3
+    elif n_amostras >= 12:
+        p_item2 = 2
+    else:
+        p_item2 = 1
+        
     p_item3 = notas_manuais.get('item3', 2) if notas_manuais else 2
     
+    # Item 4: Extrapolação (Grau III exige sem extrapolação estrita)
     p_item4 = 1 if tem_extrapolacao else 3
-    p_item5 = 3 if n_variaveis >= 3 else 2
-    p_item6 = 3 if r2 >= 0.70 else (2 if r2 >= 0.50 else 1)
     
+    # Item 5: Limite admissível de ajuste (k variáveis)
+    if n_variaveis <= 3:
+        p_item5 = 3
+    elif n_variaveis <= 6:
+        p_item5 = 2
+    else:
+        p_item5 = 1
+        
+    # Item 6: Intervalo admissível de ajuste (R²)
+    if r2 >= 0.70:
+        p_item6 = 3
+    elif r2 >= 0.50:
+        p_item6 = 2
+    else:
+        p_item6 = 1
+
+    # Sobrescrita manual opcional para itens específicos se acionado
     if notas_manuais:
-        p_item2 = notas_manuais.get('item2', p_item2)
-        p_item4 = notas_manuais.get('item4', p_item4)
-        p_item5 = notas_manuais.get('item5', p_item5)
-        p_item6 = notas_manuais.get('item6', p_item6)
+        if 'item2_manual' in notas_manuais:
+            p_item2 = notas_manuais['item2_manual']
+        if 'item4_manual' in notas_manuais:
+            p_item4 = notas_manuais['item4_manual']
+        if 'item5_manual' in notas_manuais:
+            p_item5 = notas_manuais['item5_manual']
+        if 'item6_manual' in notas_manuais:
+            p_item6 = notas_manuais['item6_manual']
 
     pontos_itens = [p_item1, p_item2, p_item3, p_item4, p_item5, p_item6]
     soma_pontos = sum(pontos_itens)
 
-    if soma_pontos >= 14 and n_amostras >= 30 and r2 >= 0.70:
+    # Enquadramento de Fundamentação baseado estritamente na norma e pontuação total
+    if soma_pontos >= 16 and n_amostras >= 30 and r2 >= 0.70 and not tem_extrapolacao:
         fundamentacao = "Grau III"
-    elif soma_pontos >= 10:
+    elif soma_pontos >= 10 and n_amostras >= 12:
         fundamentacao = "Grau II"
     else:
         fundamentacao = "Grau I"
 
+    # Enquadramento de Precisão baseado no R²
     if r2 >= 0.70:
         precisao = "Grau III"
     elif r2 >= 0.50:
@@ -106,28 +133,28 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM TABELA NORMATIVA E GRAU DE PRECISÃO
+# GERADOR DE PDF CUSTOMIZADO COM ESPAÇAMENTO SEGURO (SEM ENCAVALAMENTO)
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, buf_ad, buf_res):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=12, textColor=colors.HexColor("#1A365D"), spaceAfter=4)
-    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=8.5, textColor=colors.HexColor("#2B6CB0"), spaceAfter=2, spaceBefore=4)
-    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7, leading=9, spaceAfter=2)
+    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=11, textColor=colors.HexColor("#1A365D"), spaceAfter=6, leading=14)
+    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=8, textColor=colors.HexColor("#2B6CB0"), spaceAfter=3, spaceBefore=6, leading=10)
+    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7, leading=10, spaceAfter=3)
 
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco}", text_style))
     story.append(Paragraph(f"<b>Informante / Contato:</b> {informante} | <b>Telefone:</b> {telefone}", text_style))
-    story.append(Spacer(1, 2))
+    story.append(Spacer(1, 4))
 
     story.append(Paragraph("1. Variáveis e Parâmetros Utilizados", subtitle_style))
     param_text = " | ".join([f"<b>{k}:</b> {v:.2f}" if isinstance(v, float) else f"<b>{k}:</b> {v}" for k, v in valores_usuario.items()])
     story.append(Paragraph(param_text, text_style))
-    story.append(Spacer(1, 2))
+    story.append(Spacer(1, 4))
 
     story.append(Paragraph("2. Equação do Modelo de Avaliação (Log-Linear Homogeneizado)", subtitle_style))
     eq_str = f"<b>ln({variavel_alvo})</b> = {coeficientes.get('intercepto', 0):,.2f}"
@@ -136,8 +163,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         sinal = "+" if coef >= 0 else ""
         eq_str += f" {sinal} ({coef:,.2f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
-    story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras Saneadas & Homogeneizadas = {n_amostras} | <b>Precisão:</b> {precisao}", text_style))
-    story.append(Spacer(1, 2))
+    story.append(Paragraph(f"<b>Métricas do Ajuste:</b> R² = {r2} | Amostras Saneadas = {n_amostras} | <b>Precisão:</b> {precisao}", text_style))
+    story.append(Spacer(1, 4))
 
     story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações", subtitle_style))
     t2 = Table([
@@ -145,16 +172,16 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ["Mínimo (Segurança)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:.2f}%"],
         ["Estimado (Face / Média)", f"R$ {valores['v_medio']:,.2f}", f"R$ {valores['vu_medio']:,.2f}", "0.00% (Base)"],
         ["Máximo (Mercado)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"+{valores['var_max']:.2f}%"],
-    ], colWidths=[150, 130, 130, 130])
+    ], colWidths=[150, 135, 135, 134])
     t2.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 2),
+        ('PADDING', (0, 0), (-1, -1), 3),
         ('FONTSIZE', (0, 0), (-1, -1), 7),
     ]))
     story.append(t2)
-    story.append(Spacer(1, 2))
+    story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     t_fund = Table([
@@ -162,41 +189,44 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ["1", "Caracterização do imóvel avaliando", str(pontos_itens[0])],
         ["2", f"Quantidade de dados de mercado (n = {n_amostras})", str(pontos_itens[1])],
         ["3", "Identificação dos dados de mercado", str(pontos_itens[2])],
-        ["4", "Extrapolação (Dentro dos limites amostrais)", str(pontos_itens[3])],
+        ["4", "Extrapolação", str(pontos_itens[3])],
         ["5", f"Limite admissível de ajuste (k = {len(features)})", str(pontos_itens[4])],
         ["6", f"Intervalo admissível de ajuste (R² = {r2})", str(pontos_itens[5])],
-        ["<b>SOMA / PRECISÃO</b>", f"<b>Fundamentação: {fundamentacao} | Precisão: {precisao}</b>", f"<b>{soma_pontos} PONTOS</b>"]
-    ], colWidths=[30, 330, 180])
+        ["SOMA", f"Fundamentação: {fundamentacao} | Precisão: {precisao}", f"{soma_pontos} PONTOS"]
+    ], colWidths=[30, 334, 190])
     t_fund.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3182CE")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 2),
+        ('PADDING', (0, 0), (-1, -1), 3),
         ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor("#EDF2F7")),
+        ('TEXTCOLOR', (0, -1), (-1, -1), colors.HexColor("#1A365D")),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
     ]))
     story.append(t_fund)
-    story.append(Spacer(1, 2))
+    story.append(Spacer(1, 4))
 
     story.append(Paragraph("5. Gráficos Estatísticos de Validação Homocedástica", subtitle_style))
-    img_ad = RLImage(buf_ad, width=200, height=120)
-    img_res = RLImage(buf_res, width=200, height=120)
-    t_graf_table = Table([[img_ad, img_res]], colWidths=[270, 270])
+    img_ad = RLImage(buf_ad, width=190, height=110)
+    img_res = RLImage(buf_res, width=190, height=110)
+    t_graf_table = Table([[img_ad, img_res]], colWidths=[277, 277])
     t_graf_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 1)
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2)
     ]))
     story.append(t_graf_table)
-    story.append(Spacer(1, 2))
+    story.append(Spacer(1, 4))
 
     story.append(Paragraph("6. Esteira de Risco Jurídico (BACEN CMN 4.910)", subtitle_style))
     t3 = Table([
         ["Status Documental", "APROVADO" if status_juridico else "REPROVADO"],
         ["Grau de Risco Legal", score_juridico],
-    ], colWidths=[200, 340])
+    ], colWidths=[180, 374])
     t3.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 2),
+        ('PADDING', (0, 0), (-1, -1), 3),
         ('TEXTCOLOR', (1, 0), (1, 0), colors.HexColor("#38A169") if status_juridico else colors.HexColor("#E53E3E")),
         ('FONTSIZE', (0, 0), (-1, -1), 7),
     ]))
@@ -332,7 +362,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Fundamentação & Precisão NBR")
-st.markdown("Plataforma integrada com notas manuais (Itens 1 e 3), limites de amostra e grau de precisão.")
+st.markdown("Plataforma integrada com notas manuais (Itens 1 e 3), validação rigorosa de limites NBR e prevenção de encavalamento.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -362,15 +392,15 @@ informante_tel = st.sidebar.text_input("Telefone do Informante", value="(62) 988
 st.sidebar.markdown("---")
 st.sidebar.markdown("⚙️ **Atribuição Manual de Notas NBR (Obrigatório Itens 1 e 3)**")
 notas_manuais_input = {}
-notas_manuais_input['item1'] = st.sidebar.number_input("Nota Item 1 (Caracterização do Imóvel)", min_value=1, max_value=3, value=3, help="Insira manualmente conforme o grau de caracterização.")
-notas_manuais_input['item3'] = st.sidebar.number_input("Nota Item 3 (Identificação dos Dados)", min_value=1, max_value=3, value=3, help="Insira manualmente conforme o rigor da identificação dos dados.")
+notas_manuais_input['item1'] = st.sidebar.number_input("Nota Item 1 (Caracterização do Imóvel)", min_value=1, max_value=3, value=2, help="Insira manualmente conforme o grau de caracterização.")
+notas_manuais_input['item3'] = st.sidebar.number_input("Nota Item 3 (Identificação dos Dados)", min_value=1, max_value=3, value=2, help="Insira manualmente conforme o rigor da identificação dos dados.")
 
 usar_todas_manuais = st.sidebar.checkbox("Ajustar também os demais itens manualmente", value=False)
 if usar_todas_manuais:
-    notas_manuais_input['item2'] = st.sidebar.number_input("Nota Item 2 (Qtd Amostras)", min_value=1, max_value=3, value=3)
-    notas_manuais_input['item4'] = st.sidebar.number_input("Nota Item 4 (Extrapolação)", min_value=1, max_value=3, value=3)
-    notas_manuais_input['item5'] = st.sidebar.number_input("Nota Item 5 (Limites Ajuste)", min_value=1, max_value=3, value=3)
-    notas_manuais_input['item6'] = st.sidebar.number_input("Nota Item 6 (Intervalo Ajuste)", min_value=1, max_value=3, value=3)
+    notas_manuais_input['item2_manual'] = st.sidebar.number_input("Nota Item 2 (Qtd Amostras)", min_value=1, max_value=3, value=2)
+    notas_manuais_input['item4_manual'] = st.sidebar.number_input("Nota Item 4 (Extrapolação)", min_value=1, max_value=3, value=2)
+    notas_manuais_input['item5_manual'] = st.sidebar.number_input("Nota Item 5 (Limites Ajuste)", min_value=1, max_value=3, value=2)
+    notas_manuais_input['item6_manual'] = st.sidebar.number_input("Nota Item 6 (Intervalo Ajuste)", min_value=1, max_value=3, value=2)
 
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
 st.sidebar.markdown("---")
@@ -567,7 +597,7 @@ with aba_avm:
 
                     st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
-            if st.button("🚀 Executar Modelo com Notas Manuais e Precisão NBR"):
+            if st.button("🚀 Executar Modelo com Rigor Normativo NBR"):
                 df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
                 df_modelo = filtrar_outliers(df_modelo, variavel_alvo)
                 
@@ -609,7 +639,7 @@ with aba_avm:
                     var_min = abs((v_min - v_medio) / v_medio) * 100
                     var_max = abs((v_max - v_medio) / v_medio) * 100
 
-                    fundamentacao, precisao, soma_pontos, pontos_itens = calcular_graus_nbr_hibrido(
+                    fundamentacao, precisao, soma_pontos, pontos_itens = calcular_graus_nbr_rigoroso(
                         len(df_modelo), r2, len(features_selecionadas), tem_extrapolacao_detectada, notas_manuais_input
                     )
 
@@ -617,7 +647,7 @@ with aba_avm:
                     y_pred_log_amostras = modelo.predict(X)
                     buf_ad, buf_res = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras)
 
-                    st.success("✅ Modelo executado com sucesso e parâmetros NBR atualizados!")
+                    st.success("✅ Modelo executado com enquadramento normativo rigoroso!")
                     r1, r2_col, r3 = st.columns(3)
                     r1.metric("Valor Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"-{var_min:.1f}%")
                     r2_col.metric("Valor Estimado (Face)", f"R$ {v_medio:,.2f}", "Média")
