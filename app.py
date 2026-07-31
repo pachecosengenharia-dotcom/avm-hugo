@@ -63,8 +63,6 @@ def calcular_estatisticas_regressao(X, y, coeficientes_reg):
 def verificar_micronumerosidade(df, features_selecionadas):
     alertas_micronumerosidade = []
     n_total = len(df)
-    
-    # Palavras-chave que caracterizam códigos alocados, qualitativos ou variáveis dicotômicas
     termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado']
     
     for feat in features_selecionadas:
@@ -72,7 +70,6 @@ def verificar_micronumerosidade(df, features_selecionadas):
         serie = df[feat]
         valores_unicos = serie.unique()
         
-        # Verifica se é dicotômica (ex: 0 e 1) ou código alocado qualitativo (poucos valores inteiros distintos)
         is_dicotomica = len(valores_unicos) == 2
         is_codigo_alocado_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and pd.api.types.is_integer_dtype(serie) and len(valores_unicos) <= 6
         
@@ -199,9 +196,9 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log):
     return buf_aderencia, buf_residuos
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO
+# GERADOR DE PDF CUSTOMIZADO COM COMPROVAÇÃO DE MICRONUMEROSIDADE
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, buf_ad, buf_res):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_amostras, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, buf_ad, buf_res):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -259,6 +256,10 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
+    
+    # Adiciona linha descritiva informando o status da micronumerosidade no laudo
+    micro_status_str = "ATENDIDO (≥ 10% por atributo em códigos alocados / dicotômicas)" if micronumerosidade_atendida else "ATENÇÃO / RESTRIÇÃO DE ATRIBUTOS"
+    
     t_fund = Table([
         ["Item", "Descrição do Critério Normativo", "Pontuação / Grau Obtido"],
         ["1", "Caracterização do imóvel avaliando", str(pontos_itens[0])],
@@ -267,6 +268,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ["4", f"Extrapolação ({'Com Extrapol. - Nota 1' if variaveis_extrapoladas else 'Sem Extrapol. - Nota 3'})", str(pontos_itens[3])],
         ["5", f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", str(pontos_itens[4])],
         ["6", f"Significância Modelo F (p = {p_valor_f:.4f})", str(pontos_itens[5])],
+        ["MICRO", f"Critério de Micronumerosidade (Códigos Alocados / Dicotômicas)", micro_status_str],
         ["SOMA", f"Fundamentação: {fundamentacao} | Precisão: {precisao}", f"{soma_pontos} PONTOS"]
     ], colWidths=[30, 334, 190])
     t_fund.setStyle(TableStyle([
@@ -275,6 +277,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
         ('PADDING', (0, 0), (-1, -1), 3),
         ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('BACKGROUND', (0, -2), (-1, -2), colors.HexColor("#F7FAFC")),
+        ('TEXTCOLOR', (0, -2), (-1, -2), colors.HexColor("#2B6CB0")),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor("#EDF2F7")),
         ('TEXTCOLOR', (0, -1), (-1, -1), colors.HexColor("#1A365D")),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
@@ -689,8 +693,8 @@ with aba_avm:
                 df_modelo = df_global[colunas_necessarias].dropna().copy()
                 df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                 
-                # Executa verificação restrita de micronumerosidade apenas em códigos alocados / qualitativos e dicotômicas
                 alertas_micronumerosidade = verificar_micronumerosidade(df_modelo, features_selecionadas)
+                micronumerosidade_atendida = len(alertas_micronumerosidade) == 0
                 
                 fator_escala = 1000.0 if df_modelo[col_valor_total].mean() < 5000.0 else 1.0
                 
@@ -706,7 +710,8 @@ with aba_avm:
                         st.warning("⚠️ **Avisos de Micronumerosidade (ABNT NBR 14653 - Códigos Alocados / Qualitativas):**")
                         for alerta in alertas_micronumerosidade:
                             st.write(alerta)
-                        st.info("ℹ️ Atributos com menos de 10% de dados em códigos alocados podem comprometer a estabilidade estatística, embora o cálculo prossiga abaixo.")
+                    else:
+                        st.success("🟢 **Critério de Micronumerosidade ATENDIDO:** Todas as classes/atributos em códigos alocados possuem ≥ 10% de representatividade na amostra.")
 
                     df_modelo_log = df_modelo.copy()
                     df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
@@ -757,7 +762,7 @@ with aba_avm:
                     if pontos_itens[4] == 0:
                         st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR (Micronumerosidade aplicada corretamente em códigos alocados)!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR!")
                         
                         eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
@@ -789,6 +794,7 @@ with aba_avm:
                             st.session_state.score_juridico_global,
                             soma_pontos, pontos_itens,
                             max_p_regressor, p_valor_f_calc,
+                            micronumerosidade_atendida,
                             buf_ad, buf_res
                         )
                         st.download_button(
