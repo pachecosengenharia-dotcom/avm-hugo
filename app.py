@@ -407,7 +407,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): cálculo correto do valor unitário real e do valor total.")
+st.markdown("Validação rigorosa do Item 5 (Significância $\le 30\%$): cálculo correto e proporcional do valor unitário e total.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -659,12 +659,9 @@ with aba_avm:
                 df_modelo = df_global[colunas_necessarias].dropna().copy()
                 df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                 
-                # Fator multiplicador de correção caso a base esteja em milhares ou reais
-                fator_escala = 1.0 if df_modelo[col_valor_total].mean() > 10000 else 1000.0
-                
-                # Cálculo correto do Valor Unitário real em R$/m²
+                # Cálculo correto e direto do Valor Unitário real em R$/m² (sem fatores artificiais)
                 coluna_alvo_unitario = 'valor_unitario_amostra'
-                df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
+                df_modelo[coluna_alvo_unitario] = df_modelo[col_valor_total] / df_modelo[col_area_base]
                 
                 df_modelo = filtrar_outliers(df_modelo, coluna_alvo_unitario)
                 
@@ -698,11 +695,12 @@ with aba_avm:
                     vu_min = float(np.percentile(previsoes_unitarios_reais, 15))
                     vu_max = float(np.percentile(previsoes_unitarios_reais, 85))
 
-                    area_avaliando = valores_usuario.get(col_area_base, 1.0)
+                    # Identifica a área principal do avaliando (privativa ou terreno) para calcular o valor global
+                    area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
                     if area_avaliando <= 0:
                         area_avaliando = 1.0
 
-                    # Valor Total correto = Valor Unitário Real * Área Base do Imóvel Avaliando
+                    # Valor Total correto = Valor Unitário Real * Área Privativa (ou Área Base) do Imóvel Avaliando
                     v_medio = vu_medio * area_avaliando
                     v_min = vu_min * area_avaliando
                     v_max = vu_max * area_avaliando
@@ -727,7 +725,7 @@ with aba_avm:
                             st.write(f"- **{feat_name}**: p-valor = {p_feat*100:.2f}% ({status_p})")
                         st.warning("Experimente desmarcar as variáveis com p-valor alto para que a equação seja aprovada.")
                     else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR (Variável Alvo: Valor Unitário Real)!")
+                        st.success("✅ Equação validada com sucesso pelo motor NBR (Escala de Valores Corrigida)!")
                         
                         eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                         for feat in features_selecionadas:
