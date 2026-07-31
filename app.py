@@ -97,14 +97,14 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO POR EXCLUSÃO AUTOMÁTICA (UNIVERSAL E BLINDADO)
+# SANEAMENTO POR EXCLUSÃO AUTOMÁTICA (UNIFICADO E BLINDADO)
 # =====================================================================
 def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
     df_saneado = df.copy()
     termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado']
     
     alteracao = True
-    max_iter = 20
+    max_iter = 25
     iteracao = 0
     
     while alteracao and iteracao < max_iter:
@@ -123,14 +123,14 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
             valores_unicos = serie.unique()
             
             is_dicotomica = len(valores_unicos) == 2
-            # Aceita inteiros, texto ou floats que representam códigos discretos (poucos valores únicos)
-            is_codigo_alocado_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 10
+            # Identifica colunas qualitativas independentemente se foram lidas como inteiro, texto ou float
+            is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 10
             
-            if is_dicotomica or is_codigo_alocado_qualitativo:
+            if is_dicotomica or is_qualitativo:
                 for val in valores_unicos:
                     contagem = (serie == val).sum()
                     percentual = (contagem / n_total) * 100 if n_total > 0 else 0
-                    # Exclui obrigatoriamente qualquer classe abaixo de 10%
+                    # Exclui rigorosamente se estiver abaixo de 10%
                     if percentual < 10.0:
                         idx_minoria = df_saneado[df_saneado[feat] == val].index
                         indices_para_remover.extend(idx_minoria)
@@ -154,9 +154,9 @@ def verificar_micronumerosidade(df, features_selecionadas):
         valores_unicos = serie.unique()
         
         is_dicotomica = len(valores_unicos) == 2
-        is_codigo_alocado_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 10
+        is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 10
         
-        if is_dicotomica or is_codigo_alocado_qualitativo:
+        if is_dicotomica or is_qualitativo:
             for val in valores_unicos:
                 contagem = (serie == val).sum()
                 percentual = (contagem / n_total) * 100 if n_total > 0 else 0
