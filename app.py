@@ -280,7 +280,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO (COM SEÇÃO DE ANÁLISE JURÍDICA)
+# GERADOR DE PDF CUSTOMIZADO (COM SEÇÃO DE ANÁLISE JURÍDICA COMPLETA)
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
@@ -661,7 +661,7 @@ with aba_avm:
                 df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
                 df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
                 
-                # Saneamento por exclusão para refletir o número real (ex: 307 dados) na tela
+                # Saneamento por exclusão prévio para alinhar o contador da tela com o modelo final
                 df_modelo_teste = sanear_micronumerosidade_por_exclusao(df_modelo_teste, features_selecionadas)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_modelo_teste, features_selecionadas)
                 
