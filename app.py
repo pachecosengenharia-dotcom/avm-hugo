@@ -14,21 +14,22 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Fundamentação Automática & Extrapolação", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Fundamentação & Extrapolação", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # AVALIAÇÃO NORMATIVA AUTOMÁTICA DA FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
 # =====================================================================
-def calcular_graus_nbr_automatico(n_amostras, r2, n_variaveis, notas_manuais=None):
-    # Avaliação automática inicial dos critérios da norma
+def calcular_graus_nbr_automatico(n_amostras, r2, n_variaveis, tem_extrapolacao=False, notas_manuais=None):
     p_item1 = 3 if n_amostras >= 15 else 2
     p_item2 = 3 if n_amostras >= 30 else (2 if n_amostras >= 12 else 1)
     p_item3 = 3 if n_amostras >= 20 else 1
-    p_item4 = 2  # Extrapolação dentro dos limites
+    
+    # Item 4: Extrapolação (3 pontos se NÃO houver extrapolação, conforme norma)
+    p_item4 = 1 if tem_extrapolacao else 3
+    
     p_item5 = 3 if n_variaveis >= 3 else 2
     p_item6 = 3 if r2 >= 0.70 else (2 if r2 >= 0.50 else 1)
     
-    # Se o usuário forneceu notas manuais de ajuste, substitui
     if notas_manuais:
         p_item1 = notas_manuais.get('item1', p_item1)
         p_item2 = notas_manuais.get('item2', p_item2)
@@ -40,7 +41,7 @@ def calcular_graus_nbr_automatico(n_amostras, r2, n_variaveis, notas_manuais=Non
     pontos_itens = [p_item1, p_item2, p_item3, p_item4, p_item5, p_item6]
     soma_pontos = sum(pontos_itens)
 
-    if soma_pontos >= 14 and n_amostras >= 30 and r2 >= 0.70:
+    if soma_pontos >= 16 and n_amostras >= 30 and r2 >= 0.70:
         fundamentacao = "Grau III"
     elif soma_pontos >= 10:
         fundamentacao = "Grau II"
@@ -161,7 +162,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ["1", "Caracterização do imóvel avaliando", str(pontos_itens[0])],
         ["2", f"Quantidade de dados de mercado (n = {n_amostras})", str(pontos_itens[1])],
         ["3", "Identificação dos dados de mercado", str(pontos_itens[2])],
-        ["4", "Extrapolação", str(pontos_itens[3])],
+        ["4", "Extrapolação (Dentro dos limites amostrais)", str(pontos_itens[3])],
         ["5", f"Limite admissível de ajuste (k = {len(features)})", str(pontos_itens[4])],
         ["6", f"Intervalo admissível de ajuste (R² = {r2})", str(pontos_itens[5])],
         ["<b>SOMA</b>", f"<b>Enquadramento Final: {fundamentacao}</b>", f"<b>{soma_pontos} PONTOS</b>"]
@@ -363,11 +364,11 @@ st.sidebar.markdown("⚙️ **Ajuste Manual de Notas NBR (Opcional)**")
 usar_notas_manuais = st.sidebar.checkbox("Definir notas da tabela manualmente", value=False)
 notas_manuais_input = {}
 if usar_notas_manuais:
-    notas_manuais_input['item1'] = st.sidebar.number_input("Nota Item 1 (Caracterização)", min_value=1, max_value=3, value=2)
-    notas_manuais_input['item2'] = st.sidebar.number_input("Nota Item 2 (Qtd Amostras)", min_value=1, max_value=3, value=1)
+    notas_manuais_input['item1'] = st.sidebar.number_input("Nota Item 1 (Caracterização)", min_value=1, max_value=3, value=3)
+    notas_manuais_input['item2'] = st.sidebar.number_input("Nota Item 2 (Qtd Amostras)", min_value=1, max_value=3, value=3)
     notas_manuais_input['item3'] = st.sidebar.number_input("Nota Item 3 (Identificação)", min_value=1, max_value=3, value=3)
-    notas_manuais_input['item4'] = st.sidebar.number_input("Nota Item 4 (Extrapolação)", min_value=0, max_value=2, value=2)
-    notas_manuais_input['item5'] = st.sidebar.number_input("Nota Item 5 (Limites Ajuste)", min_value=1, max_value=3, value=2)
+    notas_manuais_input['item4'] = st.sidebar.number_input("Nota Item 4 (Extrapolação)", min_value=1, max_value=3, value=3)
+    notas_manuais_input['item5'] = st.sidebar.number_input("Nota Item 5 (Limites Ajuste)", min_value=1, max_value=3, value=3)
     notas_manuais_input['item6'] = st.sidebar.number_input("Nota Item 6 (Intervalo Ajuste)", min_value=1, max_value=3, value=3)
 
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
@@ -523,11 +524,11 @@ with aba_avm:
             valores_usuario = {}
             cols_inputs = st.columns(len(features_selecionadas))
             
+            tem_extrapolacao_detectada = False
             for i, feat in enumerate(features_selecionadas):
                 with cols_inputs[i % len(cols_inputs)]:
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                     
-                    # Calcula limites mínimo e máximo da amostra para exibição (Extrapolação)
                     min_amostra = df_global[feat].min() if not df_global[feat].empty else 0.0
                     max_amostra = df_global[feat].max() if not df_global[feat].empty else 0.0
                     
@@ -560,6 +561,10 @@ with aba_avm:
                         )
                         st.caption(f"📊 Limites da Amostra: [{min_amostra:.2f} a {max_amostra:.2f}]")
                     
+                    # Verificação automática de extrapolação
+                    if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
+                        tem_extrapolacao_detectada = True
+
                     st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
             if st.button("🚀 Executar Modelo com Fundamentação Dinâmica"):
@@ -605,7 +610,9 @@ with aba_avm:
                     var_max = abs((v_max - v_medio) / v_medio) * 100
 
                     notas_arg = notas_manuais_input if usar_notas_manuais else None
-                    fundamentacao, precisao, soma_pontos, pontos_itens = calcular_graus_nbr_automatico(len(df_modelo), r2, len(features_selecionadas), notas_arg)
+                    fundamentacao, precisao, soma_pontos, pontos_itens = calcular_graus_nbr_automatico(
+                        len(df_modelo), r2, len(features_selecionadas), tem_extrapolacao_detectada, notas_arg
+                    )
 
                     y_real_log_amostras = y_log.values
                     y_pred_log_amostras = modelo.predict(X)
