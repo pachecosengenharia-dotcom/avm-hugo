@@ -181,7 +181,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# PARSER AGREGADO DE MÚLTIPLOS DOCUMENTOS (OS, MATRÍCULA, PROJETOS)
+# PARSER AGREGADO DE MÚLTIPLOS DOCUMENTOS COM LEITURA RÁPIDA
 # =====================================================================
 def processar_multiplos_documentos(lista_arquivos):
     texto_total = ""
@@ -214,14 +214,16 @@ def processar_multiplos_documentos(lista_arquivos):
         texto_total += texto_arquivo + "\n"
 
     if not texto_total.strip():
-        return {}, "", "", "Casa"
+        return {}, "", "", ""
 
     variaveis_encontradas = {}
     trecho_limpo = texto_total.replace('\n', ' ')
 
-    # 1. Extração da OS
-    os_match = re.search(r'(?:OS|Ordem de Serviço|Laudo|Processo)[:\s#]*([A-Z0-9\-/]+)', trecho_limpo, re.IGNORECASE)
+    # 1. Extração da OS (Ignorando termos genéricos se aparecerem isolados)
+    os_match = re.search(r'(?:OS|Ordem de Serviço|Laudo Técnico|Processo)[:\s#]*([A-Z0-9\-/]{4,20})', trecho_limpo, re.IGNORECASE)
     os_extraida = os_match.group(1).strip() if os_match else ""
+    if os_extraida.lower() in ["engenharia", "laudo", "banco"]:
+        os_extraida = ""
 
     # 2. Extração do Endereço
     rua_match = re.search(r'(Rua\s+[^,\.]+?|Av\.[^,\.]+?|Alameda\s+[^,\.]+?)', trecho_limpo, re.IGNORECASE)
@@ -388,27 +390,30 @@ with aba_avm:
         if arquivo_planilha is not None:
             st.markdown("🟢 **Planilha Vinculada com Sucesso!**")
     with col_up2:
-        documentos_enviados = st.file_uploader("Documentação do Imóvel (OS, Matrícula, Projetos em PDF)", type=["pdf"], accept_multiple_files=True)
+        documentos_enviados = st.file_uploader("Documentação do Imóvel (OS, Matrícula, Projetos em PDF)", type=["pdf"], key="uploader_multiplos", accept_multiple_files=True)
         if documentos_enviados:
             st.markdown(f"🟢 **{len(documentos_enviados)} documento(s) anexado(s)!**")
 
+    # BOTÃO EXPLÍCITO PARA PROCESSAR OS DOCUMENTOS ANEXADOS SEM TRAVAR
     if documentos_enviados:
-        dados_extraidos, os_ext, end_ext, tipo_ext = processar_multiplos_documentos(documentos_enviados)
-        if dados_extraidos or end_ext or os_ext:
-            st.session_state.dados_extraidos_ia = dados_extraidos
-            if os_ext and len(os_ext) > 2:
-                st.session_state.os_auto = os_ext
-            if end_ext and len(end_ext) > 10:
-                st.session_state.endereco_auto = end_ext
-            if tipo_ext and tipo_ext in ["Casa", "Apartamento", "Lote", "Galpão Comercial"]:
-                st.session_state.tipologia_auto = tipo_ext
-            
-            for k, v in dados_extraidos.items():
-                st.session_state.valores_manuais[k] = v
-                if f"input_safe_{k}" in st.session_state:
-                    st.session_state[f"input_safe_{k}"] = v
-            st.success(f"✨ Leitura multi-documentos concluída com sucesso! OS, Endereço, Tipologia e Atributos extraídos.")
-            st.rerun()
+        if st.button("🔍 Processar Leitura Automática dos Documentos"):
+            with st.spinner("Lendo múltiplos arquivos e extraindo dados..."):
+                dados_extraidos, os_ext, end_ext, tipo_ext = processar_multiplos_documentos(documentos_enviados)
+                if dados_extraidos or end_ext or os_ext:
+                    st.session_state.dados_extraidos_ia = dados_extraidos
+                    if os_ext and len(os_ext) > 2:
+                        st.session_state.os_auto = os_ext
+                    if end_ext and len(end_ext) > 10:
+                        st.session_state.endereco_auto = end_ext
+                    if tipo_ext and tipo_ext in ["Casa", "Apartamento", "Lote", "Galpão Comercial"]:
+                        st.session_state.tipologia_auto = tipo_ext
+                    
+                    for k, v in dados_extraidos.items():
+                        st.session_state.valores_manuais[k] = v
+                        if f"input_safe_{k}" in st.session_state:
+                            st.session_state[f"input_safe_{k}"] = v
+                    st.success("✨ Leitura multi-documentos concluída com sucesso! Atualize a página ou clique abaixo.")
+                    st.rerun()
 
     df_global = None
     if arquivo_planilha is not None:
