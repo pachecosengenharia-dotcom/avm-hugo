@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-st.set_page_config(page_title="Plataforma AVM SaaS - Leitura Documental Completa", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Plataforma AVM SaaS - Auditoria & Leitura IA", page_icon="🏢", layout="wide")
 
 # =====================================================================
 # AVALIAÇÃO NORMATIVA DE FUNDAMENTAÇÃO E PRECISÃO (NBR 14653)
@@ -181,61 +181,54 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# PARSER INTELIGENTE E PRECISO DE MÚLTIPLOS DOCUMENTOS
+# PARSER ROBUSTO COM EXIBIÇÃO CLARA DE LOGS DE ERRO
 # =====================================================================
-def processar_multiplos_documentos(lista_arquivos):
+def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
+    logs_execucao = []
     
     for arquivo in lista_arquivos:
         texto_arquivo = ""
         try:
             bytes_arq = arquivo.read()
-        except Exception:
-            continue
-            
-        try:
             with pdfplumber.open(io.BytesIO(bytes_arq)) as pdf:
-                for pagina in pdf.pages:
+                for idx, pagina in enumerate(pdf.pages):
                     txt = pagina.extract_text()
                     if txt:
                         texto_arquivo += txt + "\n"
-        except Exception:
-            pass
-
-        if not texto_arquivo.strip():
-            try:
+            if not texto_arquivo.strip():
+                # Tenta OCR se o texto vier vazio (PDFs escaneados)
                 imagens = convert_from_bytes(bytes_arq)
                 for img in imagens:
                     txt_ocr = pytesseract.image_to_string(img, lang='por')
                     texto_arquivo += txt_ocr + "\n"
-            except Exception:
-                pass
-                
+            logs_execucao.append(f"✅ Arquivo `{arquivo.name}` lido com sucesso ({len(texto_arquivo)} caracteres extraídos).")
+        except Exception as e:
+            logs_execucao.append(f"⚠️ Erro ao ler o arquivo `{arquivo.name}`: {str(e)}")
+            
         texto_total += texto_arquivo + "\n"
 
     if not texto_total.strip():
-        return {}, "", "", ""
+        return {}, "", "", "", logs_execucao
 
     variaveis_encontradas = {}
     trecho_limpo = texto_total.replace('\n', ' ')
 
-    # 1. Extração Precisa da Ordem de Serviço (OS)
+    # 1. Extração da OS
     os_match = re.search(r'(?:OS|Ordem de Serviço|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo|Laudo)[:\s#]*([0-9A-Za-z\-/]{3,25})', trecho_limpo, re.IGNORECASE)
     os_extraida = os_match.group(1).strip() if os_match else ""
     if not os_extraida or os_extraida.lower() in ["engenharia", "laudo", "banco", "imóvel"]:
         os_alt = re.search(r'\b(OS[-/\s]*\d{4}[-/\s]*\d+)\b', trecho_limpo, re.IGNORECASE)
         os_extraida = os_alt.group(1).strip() if os_alt else "OS-2026/8942-AVM"
 
-    # 2. Extração Precisa do Endereço Completo
+    # 2. Extração Estrita do Endereço
     rua_match = re.search(r'(Rua\s+[^,\.]+?|Av\.[^,\.]+?|Alameda\s+[^,\.]+?)', trecho_limpo, re.IGNORECASE)
     quadra_match = re.search(r'Q[uãa]d?r?a\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     lote_match = re.search(r'Lote\.?:?\s*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
     casa_match = re.search(r'(?:Casa|Edificação|Bloco)[:\s]*([0-9A-Za-z\-]+)', trecho_limpo, re.IGNORECASE)
-    
     bairro_match = re.search(r'Bairro[:\s]+([^,\.]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
     if not bairro_match:
         bairro_match = re.search(r'(Jardim\s+[A-Za-z\u00C0-\u00FF\s]+?)(?=\s*[,.]|$)', trecho_limpo, re.IGNORECASE)
-        
     municipio_match = re.search(r'(?:Munic[íi]pio|Cidade)[:\s]+([A-Za-z\u00C0-\u00FF\s/]+?)(?=\s*[,./-]|$)', trecho_limpo, re.IGNORECASE)
     if not municipio_match:
         municipio_match = re.search(r'(Aparecida\s+de\s+Goiânia(?:/GO)?)', trecho_limpo, re.IGNORECASE)
@@ -252,18 +245,17 @@ def processar_multiplos_documentos(lista_arquivos):
 
     # 3. Tipologia Inteligente
     tipologia_detectada = "Casa"
-    texto_lower = trecho_limpo.lower()
-    if "galpão" in texto_lower or "comercial" in texto_lower:
+    t_lower = trecho_limpo.lower()
+    if "galpão" in t_lower or "comercial" in t_lower:
         tipologia_detectada = "Galpão Comercial"
-    elif "lote" in texto_lower and "terreno" in texto_lower and "construída" not in texto_lower:
+    elif "lote" in t_lower and "terreno" in t_lower and "construída" not in t_lower:
         tipologia_detectada = "Lote"
-    elif "apartamento" in texto_lower or "condomínio fechado vertical" in texto_lower or "pavimento" in texto_lower:
+    elif "apartamento" in t_lower or "condomínio fechado vertical" in t_lower:
         tipologia_detectada = "Apartamento"
-    elif "casa" in texto_lower or "residência" in texto_lower:
+    elif "casa" in t_lower or "residência" in t_lower:
         tipologia_detectada = "Casa"
 
-    # 4. Extração Altamente Rigorosa de Áreas e Cômodos (Certidão / Documentos)
-    # Área Privativa / Construída
+    # 4. Atributos da Certidão / Documentos (Áreas e Cômodos)
     match_priv = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)\s*(?:de\s*)?(?:área\s*privativa|área\s*construída|construção)', trecho_limpo, re.IGNORECASE)
     if not match_priv:
         match_priv = re.search(r'(?:área\s*privativa|área\s*construída|construção)\s*(?:de\s*)?(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?', trecho_limpo, re.IGNORECASE)
@@ -274,7 +266,6 @@ def processar_multiplos_documentos(lista_arquivos):
         except ValueError:
             pass
 
-    # Área do Terreno
     match_terr = re.search(r'(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)\s*(?:de\s*)?(?:área\s*total|área\s*do\s*terreno|terreno)', trecho_limpo, re.IGNORECASE)
     if not match_terr:
         match_terr = re.search(r'(?:área\s*total|área\s*do\s*terreno|terreno)\s*(?:de\s*)?(\d+[\d.,]*)\s*(?:m²|metros\s*quadrados)?', trecho_limpo, re.IGNORECASE)
@@ -285,7 +276,6 @@ def processar_multiplos_documentos(lista_arquivos):
         except ValueError:
             pass
 
-    # Quartos
     match_q = re.search(r'(\d+)\s*(?:quartos?|dormitórios?)', trecho_limpo, re.IGNORECASE)
     if match_q:
         try:
@@ -293,7 +283,6 @@ def processar_multiplos_documentos(lista_arquivos):
         except ValueError:
             pass
 
-    # Suítes
     match_s = re.search(r'(\d+)\s*su[íi]tes?', trecho_limpo, re.IGNORECASE)
     if match_s:
         try:
@@ -302,7 +291,6 @@ def processar_multiplos_documentos(lista_arquivos):
         except ValueError:
             pass
 
-    # Banheiros
     match_b = re.search(r'(\d+)\s*(?:banheiros?|banhos?|sanitários?)', trecho_limpo, re.IGNORECASE)
     if match_b:
         try:
@@ -310,21 +298,20 @@ def processar_multiplos_documentos(lista_arquivos):
         except ValueError:
             pass
 
-    # Vagas de Garagem
-    match_v = re.search(r'(\d+)\s*(?:vagas?(?:\s*de\s*garagem)?|garagens?)', trecho_limpo, re.IGNORECASE)
+    match_v = re.search(r'(\d+)\s*(?:vaga[s]?(?:\s*de\s*garagem)?|garagens?)', trecho_limpo, re.IGNORECASE)
     if match_v:
         try:
             variaveis_encontradas['vagas_garagem'] = int(match_v.group(1))
         except ValueError:
             pass
 
-    return variaveis_encontradas, os_extraida, endereco_extraido, tipologia_detectada
+    return variaveis_encontradas, os_extraida, endereco_extraido, tipologia_detectada, logs_execucao
 
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
-st.title("🏢 Painel de Crédito e Controle AVM - Multi-Documentos & Leitura IA")
-st.markdown("Plataforma integrada para upload de múltiplos documentos (OS, Matrícula, Projetos) com leitura unificada.")
+st.title("🏢 Painel de Crédito e Controle AVM - Auditoria & Leitura IA")
+st.markdown("Plataforma integrada com relatório transparente de erros e extração documental.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -384,10 +371,17 @@ with aba_avm:
         if documentos_enviados:
             st.markdown(f"🟢 **{len(documentos_enviados)} documento(s) anexado(s)!**")
 
+    # BOTÃO COM RELATÓRIO DE AUDITORIA DE ERROS VISÍVEL
     if documentos_enviados:
-        if st.button("🔍 Processar Leitura Automática dos Documentos"):
-            with st.spinner("Lendo múltiplos arquivos e extraindo OS, Endereço e Atributos..."):
-                dados_extraidos, os_ext, end_ext, tipo_ext = processar_multiplos_documentos(documentos_enviados)
+        if st.button("🔍 Processar Leitura Automática e Relatório de Auditoria"):
+            with st.spinner("Processando documentos e validando integridade..."):
+                dados_extraidos, os_ext, end_ext, tipo_ext, logs = processar_multiplos_documentos_com_auditoria(documentos_enviados)
+                
+                # Exibição transparente dos logs/erros encontrados
+                st.info("📋 **Relatório de Auditoria e Extração Documental:**")
+                for log in logs:
+                    st.write(log)
+                
                 if dados_extraidos or end_ext or os_ext:
                     st.session_state.dados_extraidos_ia = dados_extraidos
                     if os_ext and len(os_ext) > 2:
@@ -401,8 +395,10 @@ with aba_avm:
                         st.session_state.valores_manuais[k] = v
                         if f"input_safe_{k}" in st.session_state:
                             st.session_state[f"input_safe_{k}"] = v
-                    st.success("✨ Leitura multi-documentos concluída! Atualizando os campos automaticamente...")
+                    st.success("✨ Leitura e sincronização concluídas com sucesso! Atualizando painel...")
                     st.rerun()
+                else:
+                    st.warning("⚠️ Nenhum dado estruturado relevante foi extraído automaticamente. Verifique se os PDFs possuem texto selecionável ou utilize os campos manuais.")
 
     df_global = None
     if arquivo_planilha is not None:
@@ -420,7 +416,7 @@ with aba_avm:
             ]
             st.success(f"✅ Base de mercado processada! {len(df_global)} amostras carregadas.")
         except Exception as e:
-            st.error(f"Erro ao ler arquivo: {e}")
+            st.error(f"Erro ao processar planilha de mercado: {e}")
     else:
         if tipologia_imovel == "Lote":
             data_padrao = {
@@ -532,7 +528,6 @@ with aba_avm:
 
             if st.button("🚀 Executar Modelo de Precificação Híbrido"):
                 df_modelo = df_global[features_selecionadas + [variavel_alvo]].dropna()
-                
                 df_modelo = filtrar_outliers(df_modelo, variavel_alvo)
                 
                 if len(df_modelo) < 3:
