@@ -97,7 +97,7 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO POR EXCLUSÃO AUTOMÁTICA (MICRONUMEROSIDADE)
+# SANEAMENTO POR EXCLUSÃO AUTOMÁTICA (MICRONUMEROSIDADE SINCRONIZADA)
 # =====================================================================
 def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
     df_saneado = df.copy()
@@ -117,16 +117,19 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
         indices_para_remover = []
         for feat in features_selecionadas:
             feat_lower = feat.lower()
+            if feat not in df_saneado.columns:
+                continue
             serie = df_saneado[feat]
             valores_unicos = serie.unique()
             
             is_dicotomica = len(valores_unicos) == 2
-            is_codigo_alocado_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and pd.api.types.is_integer_dtype(serie) and len(valores_unicos) <= 6
+            is_codigo_alocado_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and (pd.api.types.is_integer_dtype(serie) or pd.api.types.is_object_dtype(serie)) and len(valores_unicos) <= 10
             
             if is_dicotomica or is_codigo_alocado_qualitativo:
                 for val in valores_unicos:
                     contagem = (serie == val).sum()
-                    percentual = (contagem / n_total) * 100
+                    percentual = (contagem / n_total) * 100 if n_total > 0 else 0
+                    # Exclui rigorosamente se estiver abaixo de 10% para forçar a aderência estrita à norma
                     if percentual < 10.0:
                         idx_minoria = df_saneado[df_saneado[feat] == val].index
                         indices_para_remover.extend(idx_minoria)
@@ -144,11 +147,13 @@ def verificar_micronumerosidade(df, features_selecionadas):
     
     for feat in features_selecionadas:
         feat_lower = feat.lower()
+        if feat not in df.columns:
+            continue
         serie = df[feat]
         valores_unicos = serie.unique()
         
         is_dicotomica = len(valores_unicos) == 2
-        is_codigo_alocado_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and pd.api.types.is_integer_dtype(serie) and len(valores_unicos) <= 6
+        is_codigo_alocado_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 10
         
         if is_dicotomica or is_codigo_alocado_qualitativo:
             for val in valores_unicos:
