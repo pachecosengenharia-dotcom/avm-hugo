@@ -71,7 +71,6 @@ def calcular_graus_nbr_rigoroso(n_amostras, r2, n_variaveis, p_valores_t, p_valo
         p_item2 = 1
         
     p_item3 = notas_manuais.get('item3', 2) if notas_manuais else 2
-    
     p_item4 = 1 if tem_extrapolacao else 3
     
     # Item 5: Regra exata de significância dos regressores (teste bicaudal)
@@ -583,9 +582,9 @@ with aba_avm:
         with c2:
             features_disponiveis = [c for c in colunas_numericas if c != variavel_alvo]
             features_selecionadas = st.multiselect(
-                "Escolha as Variáveis Independentes do Modelo (Auto + Manuais):",
+                "Escolha as Variáveis Independentes do Modelo (Dica: selecione menos variáveis para garantir significância):",
                 options=features_disponiveis,
-                default=features_disponiveis[:min(5, len(features_disponiveis))]
+                default=features_disponiveis[:min(2, len(features_disponiveis))]
             )
 
         if features_selecionadas:
@@ -699,9 +698,15 @@ with aba_avm:
                         len(df_modelo), r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
                     )
 
-                    # Bloqueio caso o Item 5 seja inválido (> 30%)
+                    # Bloco de Diagnóstico e Rejeição
                     if pontos_itens[4] == 0:
-                        st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%). Ajuste ou retire as variáveis não significantes para gerar um modelo válido.")
+                        st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
+                        st.info("💡 **Diagnóstico dos Regressores (Teste t bicaudal):**")
+                        for idx, feat_name in enumerate(features_selecionadas):
+                            p_feat = p_valores_t[idx + 1]
+                            status_p = "🔴 Inválido (> 30%)" if p_feat > 0.30 else "🟢 Válido"
+                            st.write(f"- **{feat_name}**: p-valor = {p_feat*100:.2f}% ({status_p})")
+                        st.warning("Experimente desmarcar as variáveis com p-valor alto para que a equação seja aprovada.")
                     else:
                         st.success("✅ Equação validada com sucesso pelo motor NBR (Atende aos critérios normativos)!")
                         r1, r2_col, r3 = st.columns(3)
