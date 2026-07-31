@@ -438,7 +438,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
                     pass
         return None
 
-    # --- PARSER CORRIGIDO E ABRANGENTE PARA ÁREA PRIVATIVA / CONSTRUÍDA ---
     padroes_privativa = [
         r'(?:área\s*(?:privativa|construída|útil|edificada|principal|coberta))\D{1,30}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
         r'(?:constr[uú]ida\s*(?:de|com|totalizando)?)\D{1,20}(\d{1,4}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
@@ -448,7 +447,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     if area_priv is not None:
         variaveis_encontradas['area_privativa'] = area_priv
 
-    # --- PARSER CORRIGIDO PARA ÁREA DO TERRENO ---
     padroes_terreno = [
         r'(?:área\s*(?:total|do\s*terreno|terreno|fração\s*ideal|global))\D{1,30}(\d{1,5}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)',
         r'(?:terreno\s*(?:com|de)?)\D{1,20}(\d{1,5}(?:\.\d{3})*,\d+|\d+[\.,]?\d*)'
@@ -457,7 +455,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     if area_terr is not None:
         variaveis_encontradas['area_terreno'] = area_terr
 
-    # --- PARSER ABRANGENTE PARA QUARTOS E SUÍTES ---
     match_q = re.search(r'(\d+)\s*(?:quartos?|dormitórios?|su[íi]tes?\s*e\s*quartos?)', trecho_limpo, re.IGNORECASE)
     if match_q:
         try:
@@ -465,7 +462,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         except ValueError:
             pass
 
-    # Varredura inteligente de suítes (busca explícita ou contida em descrições)
     match_s = re.search(r'(\d+)\s*(?:su[íi]tes?|suíte[s]?)', trecho_limpo, re.IGNORECASE)
     if match_s:
         try:
@@ -620,320 +616,278 @@ with aba_avm:
     else:
         if st.session_state.df_dinamico is not None:
             df_global = st.session_state.df_dinamico
-        else:
-            if tipologia_imovel == "Lote":
-                data_padrao = {
-                    'valor_total_declarado': [200000, 220000, 250000, 300000, 350000, 180000],
-                    'area_terreno': [300.0, 350.0, 400.0, 450.0, 500.0, 250.0],
-                    'indice_fiscal': [1000.0, 1100.0, 1200.0, 1500.0, 1600.0, 900.0],
-                    'estado_de_conservacao': [3, 4, 3, 5, 4, 3],
-                    'padrao_de_acabamento': [2, 2, 3, 3, 3, 2],
-                    'idade_aparente': [0, 0, 0, 0, 0, 0],
-                    'evento': [1, 1, 2, 1, 2, 1],
-                    'data_do_evento': [2024, 2024, 2025, 2025, 2026, 2026]
-                }
-            elif tipologia_imovel == "Galpão Comercial":
-                data_padrao = {
-                    'valor_total_declarado': [1200000, 1500000, 1800000, 2200000, 2500000, 1000000],
-                    'area_privativa': [600.0, 750.0, 900.0, 1100.0, 1300.0, 500.0],
-                    'area_terreno': [1000.0, 1200.0, 1500.0, 1800.0, 2000.0, 800.0],
-                    'pe_direito': [6.0, 7.0, 8.0, 8.5, 9.0, 6.0],
-                    'vagas_garagem': [5, 8, 10, 12, 15, 4],
-                    'indice_fiscal': [3500.0, 4000.0, 4500.0, 5000.0, 5500.0, 3000.0],
-                    'estado_de_conservacao': [4, 4, 3, 5, 4, 3],
-                    'padrao_de_acabamento': [3, 3, 4, 4, 5, 2],
-                    'idade_aparente': [5, 8, 3, 12, 6, 10],
-                    'evento': [1, 1, 2, 1, 2, 1],
-                    'data_do_evento': [2024, 2024, 2025, 2025, 2026, 2026]
-                }
-            else:
-                data_padrao = {
-                    'valor_total_declarado': [450000, 480000, 510000, 750000, 820000, 350000],
-                    'area_privativa': [75.0, 78.0, 80.0, 85.0, 92.0, 60.0],
-                    'area_terreno': [200.0, 220.0, 250.0, 360.0, 400.0, 0.0],
-                    'quartos': [2, 2, 3, 3, 3, 1],
-                    'suites': [1, 1, 1, 2, 2, 0],
-                    'banheiros': [1, 1, 2, 2, 2, 1],
-                    'vagas_garagem': [1, 2, 2, 2, 3, 1],
-                    'indice_fiscal': [1200.0, 1250.0, 1300.0, 3200.0, 3300.0, 1500.0],
-                    'estado_de_conservacao': [3, 4, 3, 5, 4, 3],
-                    'padrao_de_acabamento': [2, 3, 2, 4, 3, 2],
-                    'idade_aparente': [5, 10, 2, 15, 8, 3],
-                    'evento': [1, 1, 2, 1, 2, 1],
-                    'data_do_evento': [2024, 2024, 2025, 2025, 2026, 2026]
-                }
-            df_global = pd.DataFrame(data_padrao)
-            df_global = df_global.loc[:, ~df_global.columns.duplicated()].copy()
-            st.session_state.df_dinamico = df_global
-            st.info(f"ℹ️ Utilizando base padrão demonstrativa para a tipologia: **{tipologia_imovel}**.")
 
-    st.markdown("---")
-    st.subheader("🤖 2. Configuração e Seleção de Variáveis Independentes")
-    
-    colunas_numericas = df_global.select_dtypes(include=[np.number]).columns.tolist()
-    
-    if len(colunas_numericas) >= 2:
-        c1, c2 = st.columns(2)
-        with c1:
-            col_valor_total = st.selectbox("Coluna de Valor Total na Base:", [c for c in colunas_numericas if 'valor' in c or 'preco' in c] + colunas_numericas)
-        with c2:
-            col_area_base = st.selectbox("Coluna de Área Base (ex: area_privativa ou area_terreno):", [c for c in colunas_numericas if 'area' in c] + colunas_numericas)
+    # Bloqueia a configuração e execução se a planilha de mercado não estiver carregada
+    if df_global is None:
+        st.warning("⚠️ Por favor, faça o upload da **Planilha Base Comparativa (.xlsx ou .csv)** acima para liberar a configuração das variáveis e o motor AVM.")
+    else:
+        st.markdown("---")
+        st.subheader("🤖 2. Configuração e Seleção de Variáveis Independentes")
+        
+        colunas_numericas = df_global.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if len(colunas_numericas) >= 2:
+            c1, c2 = st.columns(2)
+            with c1:
+                col_valor_total = st.selectbox("Coluna de Valor Total na Base:", [c for c in colunas_numericas if 'valor' in c or 'preco' in c] + colunas_numericas)
+            with c2:
+                col_area_base = st.selectbox("Coluna de Área Base (ex: area_privativa ou area_terreno):", [c for c in colunas_numericas if 'area' in c] + colunas_numericas)
 
-        features_disponiveis = [c for c in colunas_numericas if c != col_valor_total]
-        features_selecionadas = st.multiselect(
-            "Escolha as Variáveis Independentes do Modelo:",
-            options=features_disponiveis,
-            default=[c for c in features_disponiveis if c != col_area_base][:min(2, len(features_disponiveis))]
-        )
+            features_disponiveis = [c for c in colunas_numericas if c != col_valor_total]
+            features_selecionadas = st.multiselect(
+                "Escolha as Variáveis Independentes do Modelo:",
+                options=features_disponiveis,
+                default=[c for c in features_disponiveis if c != col_area_base][:min(2, len(features_disponiveis))]
+            )
 
-        if features_selecionadas and col_valor_total and col_area_base:
-            colunas_necessarias = list(set(features_selecionadas + [col_valor_total, col_area_base]))
-            df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
-            df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
-            
-            alertas_micronumerosidade = verificar_micronumerosidade(df_modelo_teste, features_selecionadas)
-            
-            if alertas_micronumerosidade:
-                st.warning("⚠️ **Mecanismo Inteligente de Micronumerosidade Ativado (ABNT NBR 14653):**")
-                for alt in alertas_micronumerosidade:
-                    st.write(alt['mensagem'])
-                
-                st.markdown("🛠️ **Opções de Correção Eficiente para Eliminar a Micronumerosidade:**")
-                op_cor = st.radio(
-                    "Selecione o método de saneamento da amostra:",
-                    [
-                        "1. Agrupamento Automático (Fundir classes minoritárias na categoria majoritária)",
-                        "2. Inclusão Manual / Importar Amostras do Banco de Dados Interno",
-                        "3. Captação Automática de Amostras Complementares (Web Scraper Institucional)"
-                    ],
-                    key="radio_saneamento_micro"
-                )
-                
-                if "1." in op_cor:
-                    if st.button("✨ Aplicar Agrupamento Automático"):
-                        for alt in alertas_micronumerosidade:
-                            feat_incriminada = alt['feature']
-                            val_deficit = alt['valor']
-                            moda_val = df_global[feat_incriminada].mode()[0] if not df_global[feat_incriminada].empty else val_deficit
-                            df_global.loc[df_global[feat_incriminada] == val_deficit, feat_incriminada] = moda_val
-                        st.session_state.df_dinamico = df_global
-                        st.success("✅ Classes minoritárias agrupadas com sucesso! Micronumerosidade eliminada.")
-                        st.rerun()
-                elif "2." in op_cor:
-                    st.markdown("📥 **Adicionar Amostras Manuais para Suprir a Deficiência:**")
-                    with st.form("form_suplementar"):
-                        val_add_tot = st.number_input("Valor Total (R$)", value=500000.0)
-                        val_add_area = st.number_input("Área Base (m²)", value=100.0)
-                        val_add_feat = st.number_input("Valor do Atributo Deficitário", value=int(alertas_micronumerosidade[0]['valor']) if alertas_micronumerosidade else 1)
-                        btn_inserir_amostra = st.form_submit_button("Adicionar à Base")
-                        if btn_inserir_amostra:
-                            nova_linha = {
-                                col_valor_total: val_add_tot,
-                                col_area_base: val_add_area,
-                                alertas_micronumerosidade[0]['feature']: val_add_feat
-                            }
-                            for f in features_selecionadas:
-                                if f not in nova_linha:
-                                    nova_linha[f] = df_global[f].mean() if not df_global[f].empty else 1
-                            df_global = pd.concat([df_global, pd.DataFrame([nova_linha])], ignore_index=True)
-                            st.session_state.df_dinamico = df_global
-                            st.success("✅ Amostra suplementar inserida com sucesso!")
-                            st.rerun()
-                elif "3." in op_cor:
-                    if st.button("🌐 Executar Captação Web Institucional"):
-                        with st.spinner("Buscando amostras complementares no portal imobiliário corporativo..."):
-                            amostras_extra = []
-                            for _ in range(5):
-                                nova_amostra = {}
-                                for col in df_global.columns:
-                                    if col == col_valor_total:
-                                        nova_amostra[col] = df_global[col].mean() * np.random.uniform(0.9, 1.1)
-                                    elif col == col_area_base:
-                                        nova_amostra[col] = df_global[col].mean() * np.random.uniform(0.95, 1.05)
-                                    elif col in features_selecionadas:
-                                        nova_amostra[col] = alertas_micronumerosidade[0]['valor']
-                                    else:
-                                        nova_amostra[col] = df_global[col].iloc[0] if len(df_global) > 0 else 1
-                                amostras_extra.append(nova_amostra)
-                            df_global = pd.concat([df_global, pd.DataFrame(amostras_extra)], ignore_index=True)
-                            st.session_state.df_dinamico = df_global
-                            st.success("✅ 5 novas amostras capturadas e integradas via Web Institucional! Micronumerosidade sanada.")
-                            st.rerun()
-            else:
-                st.success("🟢 **Critério de Micronumerosidade ATENDIDO:** Todas as classes/atributos em códigos alocados possuem ≥ 10% de representatividade.")
-
-            st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliendo & Limites da Amostra (Extrapolação)")
-            
-            dados_ia = st.session_state.get('dados_extraidos_ia', {})
-            campos_inteiros = [
-                'quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem',
-                'estado_de_conservacao', 'conservacao', 'padrao_de_acabamento', 'acabamento', 
-                'idade_aparente', 'idade', 'evento', 'data_do_evento', 'ano', 'pe_direito'
-            ]
-            
-            valores_usuario = {}
-            variaveis_extrapoladas = []
-            cols_inputs = st.columns(len(features_selecionadas))
-            
-            for i, feat in enumerate(features_selecionadas):
-                with cols_inputs[i % len(cols_inputs)]:
-                    eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
-                    
-                    min_amostra = df_global[feat].min() if not df_global[feat].empty else 0.0
-                    max_amostra = df_global[feat].max() if not df_global[feat].empty else 0.0
-                    
-                    if feat in st.session_state.valores_manuais:
-                        val_inicial = st.session_state.valores_manuais[feat]
-                    else:
-                        val_inicial = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
-                        for chave_ia, valor_ia in dados_ia.items():
-                            if chave_ia == feat or chave_ia in feat or feat in chave_ia:
-                                val_inicial = valor_ia
-                                break
-                    
-                    nome_formatado = feat.replace('_', ' ').title()
-                    
-                    if eh_inteiro:
-                        val_inicial = int(round(float(val_inicial)))
-                        val_input = st.number_input(
-                            f"{nome_formatado}", 
-                            value=val_inicial,
-                            step=1, 
-                            format="%d",
-                            key=f"input_safe_{tipologia_imovel}_{feat}"
-                        )
-                        valores_usuario[feat] = val_input
-                        st.caption(f"📊 Limites da Amostra: [{int(min_amostra)} a {int(max_amostra)}]")
-                    else:
-                        val_inicial = float(val_inicial)
-                        val_input = st.number_input(
-                            f"{nome_formatado}", 
-                            value=val_inicial,
-                            format="%.2f",
-                            key=f"input_safe_{tipologia_imovel}_{feat}"
-                        )
-                        valores_usuario[feat] = val_input
-                        st.caption(f"📊 Limites da Amostra: [{min_amostra:.2f} a {max_amostra:.2f}]")
-                    
-                    if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
-                        variaveis_extrapoladas.append(feat)
-                        st.error(f"⚠️ Alerta: '{nome_formatado}' está EXTRAPOLADO em relação à amostra!")
-
-                    st.session_state.valores_manuais[feat] = valores_usuario[feat]
-
-            tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
-
-            if st.button("🚀 Executar e Validar Equação pelo Motor NBR"):
+            if features_selecionadas and col_valor_total and col_area_base:
                 colunas_necessarias = list(set(features_selecionadas + [col_valor_total, col_area_base]))
-                df_modelo = df_global[colunas_necessarias].dropna().copy()
-                df_modelo = df_modelo[df_modelo[col_area_base] > 0]
+                df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
+                df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
                 
-                fator_escala = 1000.0 if df_modelo[col_valor_total].mean() < 5000.0 else 1.0
+                alertas_micronumerosidade = verificar_micronumerosidade(df_modelo_teste, features_selecionadas)
                 
-                coluna_alvo_unitario = 'valor_unitario_amostra'
-                df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
-                
-                df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
-                
-                alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
-                micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
-                
-                if len(df_modelo) < 3:
-                    st.error("Amostras insuficientes após filtragem estatística rigorosa (mínimo de 3).")
-                else:
-                    df_modelo_log = df_modelo.copy()
-                    df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
+                if alertas_micronumerosidade:
+                    st.warning("⚠️ **Mecanismo Inteligente de Micronumerosidade Ativado (ABNT NBR 14653):**")
+                    for alt in alertas_micronumerosidade:
+                        st.write(alt['mensagem'])
                     
-                    X = df_modelo_log[features_selecionadas].values
-                    y_log = df_modelo_log[coluna_alvo_unitario].values
-
-                    lin_reg = LinearRegression()
-                    lin_reg.fit(X, y_log)
-                    coeficientes = {feat: coef for feat, coef in zip(features_selecionadas, lin_reg.coef_)}
-                    coeficientes['intercepto'] = lin_reg.intercept_
-
-                    coef_array = np.array([lin_reg.intercept_] + list(lin_reg.coef_))
-                    p_valores_t, p_valor_f = calcular_estatisticas_regressao(X, y_log, coef_array)
-
-                    modelo = RandomForestRegressor(n_estimators=200, random_state=42)
-                    modelo.fit(X, y_log)
-                    r2 = round(modelo.score(X, y_log), 4)
-
-                    df_alvo = pd.DataFrame([valores_usuario])[features_selecionadas]
-                    previsoes_log_unitario = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
-                    
-                    previsoes_unitarios_reais = np.exp(previsoes_log_unitario)
-                    
-                    vu_medio = float(np.mean(previsoes_unitarios_reais))
-                    vu_min = float(np.percentile(previsoes_unitarios_reais, 15))
-                    vu_max = float(np.percentile(previsoes_unitarios_reais, 85))
-
-                    area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
-                    if area_avaliando <= 0:
-                        area_avaliando = 1.0
-
-                    v_medio = vu_medio * area_avaliando
-                    v_min = vu_min * area_avaliando
-                    v_max = vu_max * area_avaliando
-
-                    var_min = abs((v_min - v_medio) / v_medio) * 100
-                    var_max = abs((v_max - v_medio) / v_medio) * 100
-
-                    fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f_calc = calcular_graus_nbr_rigoroso(
-                        len(df_modelo), r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
+                    st.markdown("🛠️ **Opções de Correção Eficiente para Eliminar a Micronumerosidade:**")
+                    op_cor = st.radio(
+                        "Selecione o método de saneamento da amostra:",
+                        [
+                            "1. Agrupamento Automático (Fundir classes minoritárias na categoria majoritária)",
+                            "2. Inclusão Manual / Importar Amostras do Banco de Dados Interno",
+                            "3. Captação Automática de Amostras Complementares (Web Scraper Institucional)"
+                        ],
+                        key="radio_saneamento_micro"
                     )
-
-                    y_real_log_amostras = y_log
-                    y_pred_log_amostras = modelo.predict(X)
                     
-                    buf_ad, buf_res, buf_cook = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras, cooks_d_vals, limite_cook_val)
+                    if "1." in op_cor:
+                        if st.button("✨ Aplicar Agrupamento Automático"):
+                            for alt in alertas_micronumerosidade:
+                                feat_incriminada = alt['feature']
+                                val_deficit = alt['valor']
+                                moda_val = df_global[feat_incriminada].mode()[0] if not df_global[feat_incriminada].empty else val_deficit
+                                df_global.loc[df_global[feat_incriminada] == val_deficit, feat_incriminada] = moda_val
+                            st.session_state.df_dinamico = df_global
+                            st.success("✅ Classes minoritárias agrupadas com sucesso! Micronumerosidade eliminada.")
+                            st.rerun()
+                    elif "2." in op_cor:
+                        st.markdown("📥 **Adicionar Amostras Manuais para Suprir a Deficiência:**")
+                        with st.form("form_suplementar"):
+                            val_add_tot = st.number_input("Valor Total (R$)", value=500000.0)
+                            val_add_area = st.number_input("Área Base (m²)", value=100.0)
+                            val_add_feat = st.number_input("Valor do Atributo Deficitário", value=int(alertas_micronumerosidade[0]['valor']) if alertas_micronumerosidade else 1)
+                            btn_inserir_amostra = st.form_submit_button("Adicionar à Base")
+                            if btn_inserir_amostra:
+                                nova_linha = {
+                                    col_valor_total: val_add_tot,
+                                    col_area_base: val_add_area,
+                                    alertas_micronumerosidade[0]['feature']: val_add_feat
+                                }
+                                for f in features_selecionadas:
+                                    if f not in nova_linha:
+                                        nova_linha[f] = df_global[f].mean() if not df_global[f].empty else 1
+                                df_global = pd.concat([df_global, pd.DataFrame([nova_linha])], ignore_index=True)
+                                st.session_state.df_dinamico = df_global
+                                st.success("✅ Amostra suplementar inserida com sucesso!")
+                                st.rerun()
+                    elif "3." in op_cor:
+                        if st.button("🌐 Executar Captação Web Institucional"):
+                            with st.spinner("Buscando amostras complementares no portal imobiliário corporativo..."):
+                                amostras_extra = []
+                                for _ in range(5):
+                                    nova_amostra = {}
+                                    for col in df_global.columns:
+                                        if col == col_valor_total:
+                                            nova_amostra[col] = df_global[col].mean() * np.random.uniform(0.9, 1.1)
+                                        elif col == col_area_base:
+                                            nova_amostra[col] = df_global[col].mean() * np.random.uniform(0.95, 1.05)
+                                        elif col in features_selecionadas:
+                                            nova_amostra[col] = alertas_micronumerosidade[0]['valor']
+                                        else:
+                                            nova_amostra[col] = df_global[col].iloc[0] if len(df_global) > 0 else 1
+                                    amostras_extra.append(nova_amostra)
+                                df_global = pd.concat([df_global, pd.DataFrame(amostras_extra)], ignore_index=True)
+                                st.session_state.df_dinamico = df_global
+                                st.success("✅ 5 novas amostras capturadas e integradas via Web Institucional! Micronumerosidade sanada.")
+                                st.rerun()
+                else:
+                    st.success("🟢 **Critério de Micronumerosidade ATENDIDO:** Todas as classes/atributos em códigos alocados possuem ≥ 10% de representatividade.")
 
-                    if pontos_itens[4] == 0:
-                        st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
-                    else:
-                        st.success("✅ Equação validada com sucesso pelo motor NBR!")
+                st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliendo & Limites da Amostra (Extrapolação)")
+                
+                dados_ia = st.session_state.get('dados_extraidos_ia', {})
+                campos_inteiros = [
+                    'quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem',
+                    'estado_de_conservacao', 'conservacao', 'padrao_de_acabamento', 'acabamento', 
+                    'idade_aparente', 'idade', 'evento', 'data_do_evento', 'ano', 'pe_direito'
+                ]
+                
+                valores_usuario = {}
+                variaveis_extrapoladas = []
+                cols_inputs = st.columns(len(features_selecionadas))
+                
+                for i, feat in enumerate(features_selecionadas):
+                    with cols_inputs[i % len(cols_inputs)]:
+                        eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                         
-                        eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
-                        for feat in features_selecionadas:
-                            coef_v = coeficientes[feat]
-                            sinal_v = "+" if coef_v >= 0 else ""
-                            eq_display += f" {sinal_v} ({coef_v:,.6f} * {feat})"
-                        st.markdown(f"##### Equação do Modelo Unitário (6 Casas Decimais):")
-                        st.code(eq_display)
+                        min_amostra = df_global[feat].min() if not df_global[feat].empty else 0.0
+                        max_amostra = df_global[feat].max() if not df_global[feat].empty else 0.0
+                        
+                        if feat in st.session_state.valores_manuais:
+                            val_inicial = st.session_state.valores_manuais[feat]
+                        else:
+                            val_inicial = float(df_global[feat].mean()) if not df_global[feat].empty else 0.0
+                            for chave_ia, valor_ia in dados_ia.items():
+                                if chave_ia == feat or chave_ia in feat or feat in chave_ia:
+                                    val_inicial = valor_ia
+                                    break
+                        
+                        nome_formatado = feat.replace('_', ' ').title()
+                        
+                        if eh_inteiro:
+                            val_inicial = int(round(float(val_inicial)))
+                            val_input = st.number_input(
+                                f"{nome_formatado}", 
+                                value=val_inicial,
+                                step=1, 
+                                format="%d",
+                                key=f"input_safe_{tipologia_imovel}_{feat}"
+                            )
+                            valores_usuario[feat] = val_input
+                            st.caption(f"📊 Limites da Amostra: [{int(min_amostra)} a {int(max_amostra)}]")
+                        else:
+                            val_inicial = float(val_inicial)
+                            val_input = st.number_input(
+                                f"{nome_formatado}", 
+                                value=val_inicial,
+                                format="%.2f",
+                                key=f"input_safe_{tipologia_imovel}_{feat}"
+                            )
+                            valores_usuario[feat] = val_input
+                            st.caption(f"📊 Limites da Amostra: [{min_amostra:.2f} a {max_amostra:.2f}]")
+                        
+                        if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
+                            variaveis_extrapoladas.append(feat)
+                            st.error(f"⚠️ Alerta: '{nome_formatado}' está EXTRAPOLADO em relação à amostra!")
 
-                        r1, r2_col, r3 = st.columns(3)
-                        r1.metric("Valor Total Mínimo", f"R$ {v_min:,.2f}", f"Unitário: R$ {vu_min:,.2f}/m²")
-                        r2_col.metric("Valor Total Estimado", f"R$ {v_medio:,.2f}", f"Unitário: R$ {vu_medio:,.2f}/m²")
-                        r3.metric("Valor Total Máximo", f"R$ {v_max:,.2f}", f"Unitário: R$ {vu_max:,.2f}/m²")
-                        st.caption(f"Acurácia (R²): {r2} | Máx p-valor Regressor: {max_p_regressor*100:.2f}% | Fundamentação: {fundamentacao} ({soma_pontos} pts) | **Precisão: {precisao}**")
+                        st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
-                        pdf_bytes = gerar_laudo_pdf_ia(
-                            tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
-                            ordem_servico_input, endereco_imovel_input,
-                            informante_nome, informante_tel,
-                            {
-                                'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max,
-                                'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max,
-                                'var_min': var_min, 'var_max': var_max
-                            },
-                            r2, len(df_modelo), features_selecionadas, coeficientes, valores_usuario,
-                            variaveis_extrapoladas,
-                            fundamentacao, precisao,
-                            st.session_state.status_juridico_global,
-                            st.session_state.score_juridico_global,
-                            soma_pontos, pontos_itens,
-                            max_p_regressor, p_valor_f_calc,
-                            micronumerosidade_atendida,
-                            buf_ad, buf_res, buf_cook
+                tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
+
+                if st.button("🚀 Executar e Validar Equação pelo Motor NBR"):
+                    colunas_necessarias = list(set(features_selecionadas + [col_valor_total, col_area_base]))
+                    df_modelo = df_global[colunas_necessarias].dropna().copy()
+                    df_modelo = df_modelo[df_modelo[col_area_base] > 0]
+                    
+                    fator_escala = 1000.0 if df_modelo[col_valor_total].mean() < 5000.0 else 1.0
+                    
+                    coluna_alvo_unitario = 'valor_unitario_amostra'
+                    df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
+                    
+                    df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
+                    
+                    alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
+                    micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
+                    
+                    if len(df_modelo) < 3:
+                        st.error("Amostras insuficientes após filtragem estatística rigorosa (mínimo de 3).")
+                    else:
+                        df_modelo_log = df_modelo.copy()
+                        df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
+                        
+                        X = df_modelo_log[features_selecionadas].values
+                        y_log = df_modelo_log[coluna_alvo_unitario].values
+
+                        lin_reg = LinearRegression()
+                        lin_reg.fit(X, y_log)
+                        coeficientes = {feat: coef for feat, coef in zip(features_selecionadas, lin_reg.coef_)}
+                        coeficientes['intercepto'] = lin_reg.intercept_
+
+                        coef_array = np.array([lin_reg.intercept_] + list(lin_reg.coef_))
+                        p_valores_t, p_valor_f = calcular_estatisticas_regressao(X, y_log, coef_array)
+
+                        modelo = RandomForestRegressor(n_estimators=200, random_state=42)
+                        modelo.fit(X, y_log)
+                        r2 = round(modelo.score(X, y_log), 4)
+
+                        df_alvo = pd.DataFrame([valores_usuario])[features_selecionadas]
+                        previsoes_log_unitario = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
+                        
+                        previsoes_unitarios_reais = np.exp(previsoes_log_unitario)
+                        
+                        vu_medio = float(np.mean(previsoes_unitarios_reais))
+                        vu_min = float(np.percentile(previsoes_unitarios_reais, 15))
+                        vu_max = float(np.percentile(previsoes_unitarios_reais, 85))
+
+                        area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
+                        if area_avaliando <= 0:
+                            area_avaliando = 1.0
+
+                        v_medio = vu_medio * area_avaliando
+                        v_min = vu_min * area_avaliando
+                        v_max = vu_max * area_avaliando
+
+                        var_min = abs((v_min - v_medio) / v_medio) * 100
+                        var_max = abs((v_max - v_medio) / v_medio) * 100
+
+                        fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f_calc = calcular_graus_nbr_rigoroso(
+                            len(df_modelo), r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
                         )
-                        st.download_button(
-                            "📄 Baixar Laudo Completo em PDF (NBR 14653)",
-                            data=pdf_bytes,
-                            file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
-                            mime="application/pdf",
-                        )
-        else:
-            st.warning("⚠️ Selecione as colunas de Valor Total e Área Base, além de ao menos uma variável independente.")
+
+                        y_real_log_amostras = y_log
+                        y_pred_log_amostras = modelo.predict(X)
+                        
+                        buf_ad, buf_res, buf_cook = gerar_graficos_estatisticos(y_real_log_amostras, y_pred_log_amostras, cooks_d_vals, limite_cook_val)
+
+                        if pontos_itens[4] == 0:
+                            st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}% (superior ao limite máximo tolerado de 30%).")
+                        else:
+                            st.success("✅ Equação validada com sucesso pelo motor NBR!")
+                            
+                            eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
+                            for feat in features_selecionadas:
+                                coef_v = coeficientes[feat]
+                                sinal_v = "+" if coef_v >= 0 else ""
+                                eq_display += f" {sinal_v} ({coef_v:,.6f} * {feat})"
+                            st.markdown(f"##### Equação do Modelo Unitário (6 Casas Decimais):")
+                            st.code(eq_display)
+
+                            r1, r2_col, r3 = st.columns(3)
+                            r1.metric("Valor Total Mínimo", f"R$ {v_min:,.2f}", f"Unitário: R$ {vu_min:,.2f}/m²")
+                            r2_col.metric("Valor Total Estimado", f"R$ {v_medio:,.2f}", f"Unitário: R$ {vu_medio:,.2f}/m²")
+                            r3.metric("Valor Total Máximo", f"R$ {v_max:,.2f}", f"Unitário: R$ {vu_max:,.2f}/m²")
+                            st.caption(f"Acurácia (R²): {r2} | Máx p-valor Regressor: {max_p_regressor*100:.2f}% | Fundamentação: {fundamentacao} ({soma_pontos} pts) | **Precisão: {precisao}**")
+
+                            pdf_bytes = gerar_laudo_pdf_ia(
+                                tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
+                                ordem_servico_input, endereco_imovel_input,
+                                informante_nome, informante_tel,
+                                {
+                                    'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max,
+                                    'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max,
+                                    'var_min': var_min, 'var_max': var_max
+                                },
+                                r2, len(df_modelo), features_selecionadas, coeficientes, valores_usuario,
+                                variaveis_extrapoladas,
+                                fundamentacao, precisao,
+                                st.session_state.status_juridico_global,
+                                st.session_state.score_juridico_global,
+                                soma_pontos, pontos_itens,
+                                max_p_regressor, p_valor_f_calc,
+                                micronumerosidade_atendida,
+                                buf_ad, buf_res, buf_cook
+                            )
+                            st.download_button(
+                                "📄 Baixar Laudo Completo em PDF (NBR 14653)",
+                                data=pdf_bytes,
+                                file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
+                                mime="application/pdf",
+                            )
+            else:
+                st.warning("⚠️ Selecione as colunas de Valor Total e Área Base, além de ao menos uma variável independente.")
 
 with aba_juridico:
     st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
