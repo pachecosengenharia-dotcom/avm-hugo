@@ -330,15 +330,20 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
         min_ip_unit = estimado_unit * 0.82
         max_ip_unit = estimado_unit * 1.18
 
-        # Gráfico Total (Esquerda) - Sem notação 1e6, valores limpos em milhões ou milhares
+        # Gráfico Total (Esquerda) - Correção da escala para milhões reais (R$ Milhões)
         ax_tot.plot(areas, max_ip_tot, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
         ax_tot.plot(areas, max_ic_tot, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
         ax_tot.plot(areas, estimado_tot, color='black', linewidth=1.2, label='Estimado')
         ax_tot.plot(areas, min_ic_tot, color='#2B6CB0', linestyle='-', linewidth=1, label='Mín (IC)')
         ax_tot.plot(areas, min_ip_tot, color='#3182CE', linestyle='--', linewidth=1, label='Mín (IP)')
         
-        ax_tot.set_title("Total (R$ em Milhões)", fontsize=6)
+        ax_tot.set_title("Total (R$ Milhões)", fontsize=6)
         ax_tot.tick_params(labelsize=4)
+        
+        # Correção do formatador: divide o valor bruto por 1.000.000 para exibir em Milhões (Mi)
+        import matplotlib.ticker as ticker
+        ax_tot.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x / 1e6:.2f} Mi'))
+        ax_tot.grid(True, linestyle=':', alpha=0.5)
         
         # Formata o eixo y para exibir explicitamente em milhões (ex: 1.0 = 1 Milhão)
         import matplotlib.ticker as ticker
