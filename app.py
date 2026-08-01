@@ -680,8 +680,27 @@ with aba_avm:
                 else:
                     st.success(f"🟢 **Critério de Micronumerosidade ATENDIDO:** Total de dados na base: **{n_dados_tela} dados** (≥ 10% representatividade).")
 
+                # =====================================================================
+                # 3. ATRIBUTOS DO IMÓVEL AVALIANDO & VALIDAÇÃO DA AMOSTRA EFETIVA
+                # =====================================================================
                 st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
                 
+                # Aplica o saneamento prévio para exibir a contagem e os alertas reais que irão para o laudo
+                df_amostra_saneada = sanear_micronumerosidade_por_exclusao(df_modelo_teste, features_selecionadas)
+                alertas_micronumerosidade_tela = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
+                micronumerosidade_atendida_tela = len(alertas_micronumerosidade_tela) == 0
+                n_dados_efetivos_tela = len(df_amostra_saneada)
+
+                if not micronumerosidade_atendida_tela:
+                    st.warning(f"⚠️ **Mecanismo Inteligente de Micronumerosidade Ativado (Amostra Efetiva Utilizada: {n_dados_efetivos_tela} dados):**")
+                    for alt in alertas_micronumerosidade_tela:
+                        st.write(alt['mensagem'])
+                else:
+                    st.success(f"🟢 **Critério de Micronumerosidade ATENDIDO:** Total de dados efetivos na base: **{n_dados_efetivos_tela} dados** (≥ 10% representatividade).")
+
+                # =====================================================================
+                # ENTRADAS DE DADOS DO AVALIANDO
+                # =====================================================================
                 dados_ia = st.session_state.get('dados_extraidos_ia', {})
                 campos_inteiros = [
                     'quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem',
@@ -697,13 +716,13 @@ with aba_avm:
                     with cols_inputs[i % len(cols_inputs)]:
                         eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
                         
-                        min_amostra = df_modelo_teste[feat].min() if not df_modelo_teste[feat].empty else 0.0
-                        max_amostra = df_modelo_teste[feat].max() if not df_modelo_teste[feat].empty else 0.0
+                        min_amostra = df_amostra_saneada[feat].min() if not df_amostra_saneada[feat].empty else 0.0
+                        max_amostra = df_amostra_saneada[feat].max() if not df_amostra_saneada[feat].empty else 0.0
                         
                         if feat in st.session_state.valores_manuais:
                             val_inicial = st.session_state.valores_manuais[feat]
                         else:
-                            val_inicial = float(df_modelo_teste[feat].mean()) if not df_modelo_teste[feat].empty else 0.0
+                            val_inicial = float(df_amostra_saneada[feat].mean()) if not df_amostra_saneada[feat].empty else 0.0
                             for chave_ia, valor_ia in dados_ia.items():
                                 if chave_ia == feat or chave_ia in feat or feat in chave_ia:
                                     val_inicial = valor_ia
@@ -721,7 +740,7 @@ with aba_avm:
                                 key=f"input_safe_{tipologia_imovel}_{feat}"
                             )
                             valores_usuario[feat] = val_input
-                            st.caption(f"📊 Limites do Dado: [{int(min_amostra)} a {int(max_amostra)}]")
+                            st.caption(f"📊 Limites da Amostra: [{int(min_amostra)} a {int(max_amostra)}]")
                         else:
                             val_inicial = float(val_inicial)
                             val_input = st.number_input(
@@ -731,7 +750,7 @@ with aba_avm:
                                 key=f"input_safe_{tipologia_imovel}_{feat}"
                             )
                             valores_usuario[feat] = val_input
-                            st.caption(f"📊 Limites do Dado: [{min_amostra:.2f} a {max_amostra:.2f}]")
+                            st.caption(f"📊 Limites da Amostra: [{min_amostra:.2f} a {max_amostra:.2f}]")
                         
                         if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
                             variaveis_extrapoladas.append(feat)
