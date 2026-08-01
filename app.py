@@ -669,38 +669,21 @@ with aba_avm:
                 df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
                 df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
                 
-                alertas_micronumerosidade = verificar_micronumerosidade(df_modelo_teste, features_selecionadas)
+                # Saneamento síncrono para espelhar exatamente o laudo na tela
+                df_amostra_saneada = sanear_micronumerosidade_por_exclusao(df_modelo_teste, features_selecionadas)
+                alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
                 micronumerosidade_atendida = len(alertas_micronumerosidade) == 0
-                n_dados_tela = len(df_modelo_teste)
+                n_dados_efetivos_tela = len(df_amostra_saneada)
                 
                 if not micronumerosidade_atendida:
-                    st.warning(f"⚠️ **Mecanismo Inteligente de Micronumerosidade Ativado (Base Analisada: {n_dados_tela} dados):**")
-                    for alt in alertas_micronumerosidade:
-                        st.write(alt['mensagem'])
-                else:
-                    st.success(f"🟢 **Critério de Micronumerosidade ATENDIDO:** Total de dados na base: **{n_dados_tela} dados** (≥ 10% representatividade).")
-
-                # =====================================================================
-                # 3. ATRIBUTOS DO IMÓVEL AVALIANDO & VALIDAÇÃO DA AMOSTRA EFETIVA
-                # =====================================================================
-                st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
-                
-                # Aplica o saneamento prévio para exibir a contagem e os alertas reais que irão para o laudo
-                df_amostra_saneada = sanear_micronumerosidade_por_exclusao(df_modelo_teste, features_selecionadas)
-                alertas_micronumerosidade_tela = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
-                micronumerosidade_atendida_tela = len(alertas_micronumerosidade_tela) == 0
-                n_dados_efetivos_tela = len(df_amostra_saneada)
-
-                if not micronumerosidade_atendida_tela:
                     st.warning(f"⚠️ **Mecanismo Inteligente de Micronumerosidade Ativado (Amostra Efetiva Utilizada: {n_dados_efetivos_tela} dados):**")
-                    for alt in alertas_micronumerosidade_tela:
+                    for alt in alertas_micronumerosidade:
                         st.write(alt['mensagem'])
                 else:
                     st.success(f"🟢 **Critério de Micronumerosidade ATENDIDO:** Total de dados efetivos na base: **{n_dados_efetivos_tela} dados** (≥ 10% representatividade).")
 
-                # =====================================================================
-                # ENTRADAS DE DADOS DO AVALIANDO
-                # =====================================================================
+                st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
+                
                 dados_ia = st.session_state.get('dados_extraidos_ia', {})
                 campos_inteiros = [
                     'quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem',
@@ -770,7 +753,7 @@ with aba_avm:
                         df_temp = df_global[colunas_nec].dropna().copy()
                         df_temp = df_temp[df_temp[col_area_base] > 0]
                         st.session_state.df_saneado_micro = sanear_micronumerosidade_por_exclusao(df_temp, features_selecionadas)
-                        st.success(f"✅ Micronumerosidade processada! Amostra resultante: {len(st.session_state.df_saneado_micro)} dados.")
+                        st.success(f"✅ Micronumerosidade processada! Amostra efetiva resultante: {len(st.session_state.df_saneado_micro)} dados.")
 
                 with col_bt2:
                     if st.button("📈 2. Aplicar Filtro de Distância de Cook"):
@@ -821,6 +804,12 @@ with aba_avm:
                             coef_array = np.array([lin_reg.intercept_] + list(lin_reg.coef_))
                             p_valores_t, p_valor_f = calcular_estatisticas_regressao(X, y_log, coef_array)
 
+                            # Identifica qual regressor possui o maior p-valor e o seu respectivo nome
+                            p_regressores = p_valores_t[1:] if len(p_valores_t) > 1 else [0.05]
+                            max_p_regressor = max(p_regressores)
+                            idx_max_p = np.argmax(p_regressores) if len(p_regressores) > 0 else 0
+                            nome_variavel_critica = features_selecionadas[idx_max_p] if len(features_selecionadas) > idx_max_p else "Desconhecida"
+
                             modelo = RandomForestRegressor(n_estimators=200, random_state=42)
                             modelo.fit(X, y_log)
                             r2 = round(modelo.score(X, y_log), 4)
@@ -844,14 +833,15 @@ with aba_avm:
                             var_min = abs((v_min - v_medio) / v_medio) * 100
                             var_max = abs((v_max - v_medio) / v_medio) * 100
 
-                            fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f_calc = calcular_graus_nbr_rigoroso(
+                            fundamentacao, precisao, soma_pontos, pontos_itens, max_p_reg_val, p_valor_f_calc = calcular_graus_nbr_rigoroso(
                                 n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
                             )
 
                             buf_ad, buf_res, buf_cook = gerar_graficos_estatisticos(y_log, modelo.predict(X), cooks_d_vals, limite_cook_val)
 
+                            # Validação rigorosa com mensagem personalizada informando a variável crítica e o percentual
                             if pontos_itens[4] == 0:
-                                st.error(f"❌ EQUAÇÃO REJEITADA PELO MOTOR NBR! O maior p-valor dos regressores é {max_p_regressor*100:.2f}%.")
+                                st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%** (Variável: `{nome_variavel_critica}`).")
                             else:
                                 st.success("✅ Equação validada com sucesso pelo motor NBR!")
                                 
