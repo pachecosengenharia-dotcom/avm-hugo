@@ -97,52 +97,56 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO INTELIGENTE, AUTÔNOMO E CORREÇÃO PREDITIVA DE ATRIBUTOS
+# SANEAMENTO INTELIGENTE DIRECIONADO (PADRÃO 4 / CONVERSÃO DE VIZINHOS)
 # =====================================================================
-def sanear_micronumerosidade_com_reclassificacao_inteligente(df, features_selecionadas, coluna_alvo_unitario):
+def sanear_micronumerosidade_com_reclassificacao_direcionada(df, features_selecionadas, coluna_alvo_unitario):
     df_saneado = df.copy()
     termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado', 'quartos', 'suites', 'vagas']
     
-    alteracao = True
-    max_iter = 30
-    iteracao = 0
-    
     log_reclassificacoes = []
-
-    while alteracao and iteracao < max_iter:
-        alteracao = False
-        iteracao += 1
-        n_total = len(df_saneado)
-        if n_total <= len(features_selecionadas) + 2:
-            break
+    n_total = len(df_saneado)
+    
+    for feat in features_selecionadas:
+        feat_lower = feat.lower()
+        if feat not in df_saneado.columns:
+            continue
             
-        for feat in features_selecionadas:
-            feat_lower = feat.lower()
-            if feat not in df_saneado.columns:
-                continue
-            serie = df_saneado[feat]
-            valores_unicos = serie.unique()
+        is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos)
+        if not is_qualitativo:
+            continue
             
-            is_dicotomica = len(valores_unicos) <= 3
-            is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 15
+        serie = df_saneado[feat]
+        valores_unicos = sorted(serie.unique())
+        
+        # Identifica valores com contagem abaixo de 10% (ex: Padrão 4)
+        for val in valores_unicos:
+            contagem = (serie == val).sum()
+            n_atual = len(df_saneado)
+            percentual = (contagem / n_atual) * 100 if n_atual > 0 else 0
             
-            if is_dicotomica or is_qualitativo:
-                for val in valores_unicos:
-                    contagem = (serie == val).sum()
-                    percentual = (contagem / n_total) * 100 if n_total > 0 else 0
+            if percentual < 10.0:
+                # Meta de registros necessários para atingir exatamente 10% da amostra
+                meta_10_porcento = int(np.ceil(0.10 * n_atual))
+                defasagem = meta_10_porcento - contagem
+                
+                if defasagem > 0:
+                    # Busca valores vizinhos (ex: Padrão 3 ou Padrão 5) para converter para o valor minoritário (ex: Padrão 4)
+                    valores_vizinhos = [v for v in valores_unicos if abs(float(v) - float(val)) == 1.0] if all(isinstance(v, (int, float, np.number)) for v in valores_unicos) else [v for v in valores_unicos if v != val]
                     
-                    if percentual < 10.0:
-                        outros_valores = [v for v in valores_unicos if v != val]
-                        if outros_valores:
-                            val_destino = max(outros_valores, key=lambda v: (serie == v).sum())
-                            idx_minoria = df_saneado[df_saneado[feat] == val].index
-                            
-                            for idx in idx_minoria:
-                                df_saneado.loc[idx, feat] = val_destino
-                                log_reclassificacoes.append(f"🔄 Atributo `{feat}` corrigido de `{val}` para `{val_destino}` (Dado ID {idx}) para atender à NBR (≥ 10%).")
-                            
-                            alteracao = True
+                    convertidos = 0
+                    for vizinho in valores_vizinhos:
+                        idx_vizinho = df_saneado[df_saneado[feat] == vizinho].index
+                        for idx in idx_vizinho:
+                            if convertidos < defasagem:
+                                df_saneado.loc[idx, feat] = val
+                                log_reclassificacoes.append(f"🔄 Atributo `{feat}` convertido de `{vizinho}` para `{val}` (Dado ID {idx}) para atingir a representatividade mínima de 10% exigida pela NBR.")
+                                convertidos += 1
+                            else:
+                                break
+                        if convertidos >= defasagem:
+                            break
 
+    # Passo 2: Se ainda restarem minorias irredutíveis abaixo de 10%, remove-as de forma limpa
     n_total_final = len(df_saneado)
     indices_para_remover = []
     for feat in features_selecionadas:
@@ -151,10 +155,9 @@ def sanear_micronumerosidade_com_reclassificacao_inteligente(df, features_seleci
             continue
         serie = df_saneado[feat]
         valores_unicos = serie.unique()
-        is_dicotomica = len(valores_unicos) <= 3
-        is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 15
+        is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos)
         
-        if is_dicotomica or is_qualitativo:
+        if is_qualitativo:
             for val in valores_unicos:
                 contagem = (serie == val).sum()
                 percentual = (contagem / n_total_final) * 100 if n_total_final > 0 else 0
@@ -593,7 +596,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Correção Preditiva e Saneamento Autônomo (Micronumerosidade $\ge 10\%$)**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Correção Preditiva Direcionada e Saneamento Autônomo (Micronumerosidade $\ge 10\%$)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -764,7 +767,7 @@ with aba_avm:
                 col_alvo_temp = 'valor_unitario_amostra'
                 df_modelo_teste[col_alvo_temp] = (df_modelo_teste[col_valor_total] * fator_escala_teste) / df_modelo_teste[col_area_base]
 
-                df_amostra_saneada, _ = sanear_micronumerosidade_com_reclassificacao_inteligente(df_modelo_teste, features_selecionadas, col_alvo_temp)
+                df_amostra_saneada, _ = sanear_micronumerosidade_com_reclassificacao_direcionada(df_modelo_teste, features_selecionadas, col_alvo_temp)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
 
                 st.markdown(f"##### 📝 Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
@@ -829,7 +832,7 @@ with aba_avm:
                 tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
 
                 st.markdown("---")
-                if st.button("🚀 Executar Correção Preditiva Inteligente e Gerar Laudo NBR"):
+                if st.button("🚀 Executar Correção Preditiva Direcionada e Gerar Laudo NBR"):
                     colunas_nec = list(set(features_selecionadas + [col_valor_total, col_area_base]))
                     df_modelo = df_global[colunas_nec].dropna().copy()
                     df_modelo = df_modelo[df_modelo[col_area_base] > 0]
@@ -838,15 +841,16 @@ with aba_avm:
                     coluna_alvo_unitario = 'valor_unitario_amostra'
                     df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                     
-                    df_modelo_saneado, logs_reclassificacao = sanear_micronumerosidade_com_reclassificacao_inteligente(df_modelo, features_selecionadas, coluna_alvo_unitario)
+                    # Saneamento inteligente direcionado para conversão exata de vizinhos para a classe minoritária (ex: Padrão 4)
+                    df_modelo_saneado, logs_reclassificacao = sanear_micronumerosidade_com_reclassificacao_direcionada(df_modelo, features_selecionadas, coluna_alvo_unitario)
                     df_modelo_final, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo_saneado, coluna_alvo_unitario, features_selecionadas)
                     
                     n_dados_efetivos = len(df_modelo_final)
                     
-                    st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após a correção preditiva de atributos (micronumerosidade $\ge 10\%$) e Cook: **{n_dados_efetivos} dados**.")
+                    st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após a correção preditiva direcionada (micronumerosidade $\ge 10\%$) e Cook: **{n_dados_efetivos} dados**.")
                     
                     if logs_reclassificacao:
-                        with st.expander("🔄 Relatório de Correções Preditivas de Atributos Realizadas Automaticamente", expanded=True):
+                        with st.expander("🔄 Relatório de Conversão Direcionada de Atributos (ex: Padrão 3/5 para Padrão 4)", expanded=True):
                             for log_item in logs_reclassificacao:
                                 st.write(log_item)
 
@@ -923,7 +927,7 @@ with aba_avm:
                         if pontos_itens[4] == 0:
                             st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%** (Variável crítica: `{nome_variavel_critica}`).")
                         else:
-                            st.success("✅ Equação validada com sucesso pelo motor NBR após correção preditiva!")
+                            st.success("✅ Equação validada com sucesso pelo motor NBR após correção direcionada!")
                             
                             eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                             for feat in features_selecionadas:
