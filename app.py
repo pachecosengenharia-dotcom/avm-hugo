@@ -7,7 +7,7 @@ from pdf2image import convert_from_bytes
 import pytesseract
 import matplotlib.pyplot as plt
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak, Image as RLImage
 from sklearn.ensemble import RandomForestRegressor
@@ -97,14 +97,13 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO INTELIGENTE DIRECIONADO (PADRÃO 4 / CONVERSÃO DE VIZINHOS)
+# SANEAMENTO ESTrito CONFORME EXIGIDO (FORÇAR >=10% OU INABILITAR)
 # =====================================================================
-def sanear_micronumerosidade_com_reclassificacao_direcionada(df, features_selecionadas, coluna_alvo_unitario):
+def sanear_micronumerosidade_exato(df, features_selecionadas):
     df_saneado = df.copy()
     termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado', 'quartos', 'suites', 'vagas']
     
     log_reclassificacoes = []
-    n_total = len(df_saneado)
     
     for feat in features_selecionadas:
         feat_lower = feat.lower()
@@ -118,55 +117,41 @@ def sanear_micronumerosidade_com_reclassificacao_direcionada(df, features_seleci
         serie = df_saneado[feat]
         valores_unicos = sorted(serie.unique())
         
-        # Identifica valores com contagem abaixo de 10% (ex: Padrão 4)
         for val in valores_unicos:
-            contagem = (serie == val).sum()
             n_atual = len(df_saneado)
-            percentual = (contagem / n_atual) * 100 if n_atual > 0 else 0
+            if n_atual == 0:
+                break
+            contagem = (serie == val).sum()
+            percentual = (contagem / n_atual) * 100
             
+            # Se a categoria possui menos de 10%:
             if percentual < 10.0:
-                # Meta de registros necessários para atingir exatamente 10% da amostra
-                meta_10_porcento = int(np.ceil(0.10 * n_atual))
-                defasagem = meta_10_porcento - contagem
+                meta_10 = int(np.ceil(0.10 * n_atual))
+                defasagem = meta_10 - contagem
                 
-                if defasagem > 0:
-                    # Busca valores vizinhos (ex: Padrão 3 ou Padrão 5) para converter para o valor minoritário (ex: Padrão 4)
-                    valores_vizinhos = [v for v in valores_unicos if abs(float(v) - float(val)) == 1.0] if all(isinstance(v, (int, float, np.number)) for v in valores_unicos) else [v for v in valores_unicos if v != val]
-                    
-                    convertidos = 0
-                    for vizinho in valores_vizinhos:
-                        idx_vizinho = df_saneado[df_saneado[feat] == vizinho].index
-                        for idx in idx_vizinho:
-                            if convertidos < defasagem:
-                                df_saneado.loc[idx, feat] = val
-                                log_reclassificacoes.append(f"🔄 Atributo `{feat}` convertido de `{vizinho}` para `{val}` (Dado ID {idx}) para atingir a representatividade mínima de 10% exigida pela NBR.")
-                                convertidos += 1
-                            else:
-                                break
-                        if convertidos >= defasagem:
+                # OPÇÃO 1: Tenta suplementar convertendo vizinhos (ex: Padrão 3 ou 5 para Padrão 4)
+                valores_vizinhos = [v for v in valores_unicos if abs(float(v) - float(val)) == 1.0] if all(isinstance(v, (int, float, np.number)) for v in valores_unicos) else [v for v in valores_unicos if v != val]
+                
+                convertidos = 0
+                for vizinho in valores_vizinhos:
+                    idx_vizinho = df_saneado[df_saneado[feat] == vizinho].index
+                    for idx in idx_vizinho:
+                        if convertidos < defasagem:
+                            df_saneado.loc[idx, feat] = val
+                            log_reclassificacoes.append(f"🔄 Atributo `{feat}` convertido de `{vizinho}` para `{val}` (Dado ID {idx}) para atingir exatamente 10% da amostra.")
+                            convertidos += 1
+                        else:
                             break
-
-    # Passo 2: Se ainda restarem minorias irredutíveis abaixo de 10%, remove-as de forma limpa
-    n_total_final = len(df_saneado)
-    indices_para_remover = []
-    for feat in features_selecionadas:
-        feat_lower = feat.lower()
-        if feat not in df_saneado.columns:
-            continue
-        serie = df_saneado[feat]
-        valores_unicos = serie.unique()
-        is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos)
-        
-        if is_qualitativo:
-            for val in valores_unicos:
-                contagem = (serie == val).sum()
-                percentual = (contagem / n_total_final) * 100 if n_total_final > 0 else 0
-                if percentual < 10.0:
+                    if convertidos >= defasagem:
+                        break
+                
+                # OPÇÃO 2: Se não foi possível suprir a defasagem (ou conforme instrução de inabilitar dados deficitários), inabilita/remove os dados minoritários
+                n_atual_pos = len(df_saneado)
+                contagem_pos = (df_saneado[feat] == val).sum()
+                if (contagem_pos / n_atual_pos) * 100 < 10.0:
                     idx_minoria = df_saneado[df_saneado[feat] == val].index
-                    indices_para_remover.extend(idx_minoria)
-
-    if indices_para_remover:
-        df_saneado = df_saneado.drop(index=list(set(indices_para_remover))).copy()
+                    df_saneado = df_saneado.drop(index=list(set(idx_minoria))).copy()
+                    log_reclassificacoes.append(f"🚫 Dados com `{feat} = {val}` inabilitados/removidos da amostra por violação definitiva do limite normativo de 10%.")
 
     return df_saneado, log_reclassificacoes
 
@@ -315,21 +300,22 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM LOGS DE CORREÇÃO PREDITIVA
+# GERADOR DE PDF CUSTOMIZADO EM PAISAGEM (LANDSCAPE) PARA VISIBILIDADE AMPLA
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    # USO DE PAISAGEM (landscape) PARA DAR AMPLA VISIBILIDADE ÀS COLUNAS DA PLANILHA DE DADOS
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=11, textColor=colors.HexColor("#1A365D"), spaceAfter=6, leading=14)
-    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=8, textColor=colors.HexColor("#2B6CB0"), spaceAfter=3, spaceBefore=6, leading=10)
-    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7, leading=10, spaceAfter=3)
-    table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=6.5, leading=8.5)
-    table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=6.5, leading=8.5, fontName='Helvetica-Bold')
+    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=12, textColor=colors.HexColor("#1A365D"), spaceAfter=6, leading=14)
+    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=9, textColor=colors.HexColor("#2B6CB0"), spaceAfter=3, spaceBefore=6, leading=11)
+    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7.5, leading=10.5, spaceAfter=3)
+    table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=7, leading=9)
+    table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=7, leading=9, fontName='Helvetica-Bold')
 
-    # Página 1
+    # Página 1 (Retrato ou Seção Principal)
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS / Referência):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco}", text_style))
@@ -360,12 +346,12 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("3. Resultados da Avaliação, Campo de Arbítrio e Valor Adotado na Precificação", subtitle_style))
-    
     op_str_visual = "+" if tipo_operador_ajuste == "Acima (+)" else "-"
     story.append(Paragraph(f"<b>Cálculo do Valor Adotado na Precificação:</b> Estimado (Tendência Central / Face) {op_str_visual} {percentual_ajuste:.1f}% = <b>R$ {valores['v_adotado']:,.2f}</b> (Unitário: R$ {valores['vu_adotado']:,.2f}/m²)", text_style))
     if motivo_ajuste and motivo_ajuste.strip():
         story.append(Paragraph(f"<b>Justificativa Técnica do Ajuste:</b> {motivo_ajuste}", text_style))
     
+    # Largura total útil em paisagem = 792 - 60 = 732 pt
     t2 = Table([
         ["Métrica / Cobertura de Risco", "Valor Total (R$)", "Valor Unitário (R$/m²)", "Variação (%)"],
         ["Mínimo (Segurança / Admissível)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:+.2f}%"],
@@ -373,13 +359,13 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [f"Valor Adotado na Precificação ({op_str_visual}{percentual_ajuste:.1f}%)", f"R$ {valores['v_adotado']:,.2f}", f"R$ {valores['vu_adotado']:,.2f}", f"{op_str_visual}{percentual_ajuste:.2f}%"],
         ["Máximo (Mercado / Admissível)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"{valores['var_max']:+.2f}%"],
         ["Campo de Arbítrio (±15% NBR 14653)", f"R$ {valores['v_inf_arb']:,.2f} a R$ {valores['v_sup_arb']:,.2f}", f"R$ {valores['vu_inf_arb']:,.2f} a R$ {valores['vu_sup_arb']:,.2f}", "-15.00% a +15.00%"],
-    ], colWidths=[150, 135, 135, 134])
+    ], colWidths=[200, 177, 177, 178])
     t2.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 3),
-        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('PADDING', (0, 0), (-1, -1), 4),
+        ('FONTSIZE', (0, 0), (-1, -1), 7.5),
         ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor("#FEFCBF")),
         ('BACKGROUND', (0, 5), (-1, 5), colors.HexColor("#EDF2F7")),
     ]))
@@ -387,11 +373,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
-    if micronumerosidade_atendida:
-        micro_status_text = "ATENDIDO (Atributos com representatividade adequada >= 10% via Correção Preditiva)"
-    else:
-        detalhes_str = "; ".join([d['mensagem'].replace('**', '').replace('⚠️ ', '') for d in alertas_micro_detalhes])
-        micro_status_text = f"Saneado Autônomo ({detalhes_str})"
+    micro_status_text = "ATENDIDO (Atributos com representatividade adequada >= 10% via Saneamento Exato)" if micronumerosidade_atendida else "Saneado Rigoroso"
 
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
@@ -401,12 +383,12 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("4", table_cell_style), Paragraph(f"Extrapolabilidade ({'Com Extrapol.' if variaveis_extrapoladas else 'Sem Extrapol.'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
         [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
-        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Representatividade por Atributo ≥ 10% com Correção Preditiva)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
-        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após a correção preditiva e distância de Cook: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
+        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Representatividade por Atributo ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
+        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após o saneamento exato e Cook: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
         [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
 
-    t_fund = Table(t_fund_data, colWidths=[35, 319, 150])
+    t_fund = Table(t_fund_data, colWidths=[60, 522, 150])
     t_fund.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3182CE")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
@@ -417,21 +399,14 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t_fund)
     story.append(Spacer(1, 4))
 
-    if logs_reclassificacao:
-        story.append(Paragraph("4.1. Relatório de Correção Preditiva e Ajuste de Atributos", subtitle_style))
-        for log_item in logs_reclassificacao[:5]:
-            story.append(Paragraph(f"• {log_item}", text_style))
-        story.append(Spacer(1, 4))
-
     story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos e Distância de Cook)", subtitle_style))
-    img_ad = RLImage(buf_ad, width=175, height=105)
-    img_res = RLImage(buf_res, width=175, height=105)
-    img_cook = RLImage(buf_cook, width=175, height=105)
-    t_graf_table = Table([[img_ad, img_res, img_cook]], colWidths=[184, 184, 184])
+    img_ad = RLImage(buf_ad, width=220, height=120)
+    img_res = RLImage(buf_res, width=220, height=120)
+    img_cook = RLImage(buf_cook, width=220, height=120)
+    t_graf_table = Table([[img_ad, img_res, img_cook]], colWidths=[244, 244, 244])
     t_graf_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2)
     ]))
     story.append(t_graf_table)
     story.append(Spacer(1, 4))
@@ -440,47 +415,63 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     t3 = Table([
         ["Status Documental", "APROVADO" if status_juridico else "REPROVADO"],
         ["Grau de Risco Legal", score_juridico],
-    ], colWidths=[180, 374])
+    ], colWidths=[200, 532])
     t3.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
         ('PADDING', (0, 0), (-1, -1), 3),
         ('TEXTCOLOR', (1, 0), (1, 0), colors.HexColor("#38A169") if status_juridico else colors.HexColor("#E53E3E")),
-        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('FONTSIZE', (0, 0), (-1, -1), 7.5),
     ]))
     story.append(t3)
 
+    # -----------------------------------------------------------------
+    # PÁGINA 2: PLANILHA DE DADOS DE MERCADO EM FORMATO AMPLO (PAISAGEM)
+    # -----------------------------------------------------------------
     story.append(PageBreak())
     story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (CONSIDERADOS E DESCARTADOS)", title_style))
-    story.append(Paragraph("Abaixo consta a relação completa da base de mercado carregada, destacando os dados efetivamente considerados no modelo e aqueles corrigidos/descartados por inconsistência estatística.", text_style))
+    story.append(Paragraph("Abaixo consta a relação completa e detalhada da base de mercado carregada, apresentando todas as colunas e atributos em formato amplo para perfeita visibilidade.", text_style))
     story.append(Spacer(1, 6))
 
     if df_original_bruto is not None:
         indices_validos = df_final_utilizado.index if df_final_utilizado is not None else []
-        tabela_dados_pdf = [["ID / Index", "Status na Amostra", "Valor Total (R$)", "Área Base", "Atributos Principais"]]
+        
+        # Pega as colunas originais disponíveis na planilha para mostrar todas com clareza
+        colunas_originais = df_original_bruto.columns.tolist()[:8] # limita para caber perfeitamente na largura de 732 pt
+        cabecalho_tabela = ["ID", "Status Amostra"] + [c.upper() for c in colunas_originais]
+        
+        tabela_dados_pdf = [
+            [Paragraph(col, table_cell_bold) for col in cabecalho_tabela]
+        ]
         
         for idx, row in df_original_bruto.iterrows():
-            status_str = "CONSIDERADO / CORRIGIDO" if idx in indices_validos else "DESCARTADO"
-            v_tot = row.get(list(row.index)[0], 0)
-            try:
-                v_tot_fmt = f"R$ {float(v_tot):,.2f}"
-            except Exception:
-                v_tot_fmt = str(v_tot)
+            status_str = "CONSIDERADO" if idx in indices_validos else "DESCARTADO"
+            linha_dados = [Paragraph(str(idx), table_cell_style), Paragraph(status_str, table_cell_style)]
             
-            tabela_dados_pdf.append([
-                str(idx),
-                status_str,
-                v_tot_fmt,
-                str(row.get('area_privativa', row.get('area_terreno', 'N/A'))),
-                str({k: row[k] for k in list(row.index)[:3] if k in row})
-            ])
+            for c in colunas_originais:
+                val_cel = row.get(c, "")
+                try:
+                    if isinstance(val_cel, (int, float, np.number)):
+                        val_str = f"{val_cel:,.2f}" if float(val_cel) > 100 else f"{val_cel}"
+                    else:
+                        val_str = str(val_cel)
+                except Exception:
+                    val_str = str(val_cel)
+                linha_dados.append(Paragraph(val_str, table_cell_style))
+                
+            tabela_dados_pdf.append(linha_dados)
             
-        t_dados_rel = Table(tabela_dados_pdf, colWidths=[40, 120, 95, 70, 179])
+        # Distribuição proporcional da largura total de 732 pt para todas as colunas
+        num_cols = len(cabecalho_tabela)
+        largura_col = 732.0 / num_cols
+        col_widths_list = [largura_col] * num_cols
+        
+        t_dados_rel = Table(tabela_dados_pdf, colWidths=col_widths_list, repeatRows=1)
         t_dados_rel.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1A365D")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-            ('PADDING', (0, 0), (-1, -1), 2),
-            ('FONTSIZE', (0, 0), (-1, -1), 6),
+            ('PADDING', (0, 0), (-1, -1), 3),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ]))
         story.append(t_dados_rel)
 
@@ -596,7 +587,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Correção Preditiva Direcionada e Saneamento Autônomo (Micronumerosidade $\ge 10\%$)**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Exato (>=10% ou Inabilitação) & Layout Amplo em Paisagem**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -767,7 +758,7 @@ with aba_avm:
                 col_alvo_temp = 'valor_unitario_amostra'
                 df_modelo_teste[col_alvo_temp] = (df_modelo_teste[col_valor_total] * fator_escala_teste) / df_modelo_teste[col_area_base]
 
-                df_amostra_saneada, _ = sanear_micronumerosidade_com_reclassificacao_direcionada(df_modelo_teste, features_selecionadas, col_alvo_temp)
+                df_amostra_saneada, _ = sanear_micronumerosidade_exato(df_modelo_teste, features_selecionadas)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
 
                 st.markdown(f"##### 📝 Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
@@ -832,7 +823,7 @@ with aba_avm:
                 tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
 
                 st.markdown("---")
-                if st.button("🚀 Executar Correção Preditiva Direcionada e Gerar Laudo NBR"):
+                if st.button("🚀 Executar Saneamento Exato e Gerar Laudo NBR"):
                     colunas_nec = list(set(features_selecionadas + [col_valor_total, col_area_base]))
                     df_modelo = df_global[colunas_nec].dropna().copy()
                     df_modelo = df_modelo[df_modelo[col_area_base] > 0]
@@ -841,16 +832,16 @@ with aba_avm:
                     coluna_alvo_unitario = 'valor_unitario_amostra'
                     df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                     
-                    # Saneamento inteligente direcionado para conversão exata de vizinhos para a classe minoritária (ex: Padrão 4)
-                    df_modelo_saneado, logs_reclassificacao = sanear_micronumerosidade_com_reclassificacao_direcionada(df_modelo, features_selecionadas, coluna_alvo_unitario)
+                    # Saneamento exato com suplementação ou inabilitação rigorosa >= 10%
+                    df_modelo_saneado, logs_reclassificacao = sanear_micronumerosidade_exato(df_modelo, features_selecionadas)
                     df_modelo_final, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo_saneado, coluna_alvo_unitario, features_selecionadas)
                     
                     n_dados_efetivos = len(df_modelo_final)
                     
-                    st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após a correção preditiva direcionada (micronumerosidade $\ge 10\%$) e Cook: **{n_dados_efetivos} dados**.")
+                    st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após o saneamento exato (micronumerosidade $\ge 10\%$) e Cook: **{n_dados_efetivos} dados**.")
                     
                     if logs_reclassificacao:
-                        with st.expander("🔄 Relatório de Conversão Direcionada de Atributos (ex: Padrão 3/5 para Padrão 4)", expanded=True):
+                        with st.expander("🔄 Relatório de Saneamento e Tratamento Exato da Micronumerosidade", expanded=True):
                             for log_item in logs_reclassificacao:
                                 st.write(log_item)
 
@@ -927,7 +918,7 @@ with aba_avm:
                         if pontos_itens[4] == 0:
                             st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%** (Variável crítica: `{nome_variavel_critica}`).")
                         else:
-                            st.success("✅ Equação validada com sucesso pelo motor NBR após correção direcionada!")
+                            st.success("✅ Equação validada com sucesso pelo motor NBR após saneamento exato!")
                             
                             eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                             for feat in features_selecionadas:
@@ -977,7 +968,7 @@ with aba_avm:
                                 buf_ad, buf_res, buf_cook
                             )
                             st.download_button(
-                                "📄 Baixar Laudo Completo em PDF (NBR 14653)",
+                                "📄 Baixar Laudo Completo em PDF (Paisagem & Saneamento Exato)",
                                 data=pdf_bytes,
                                 file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
                                 mime="application/pdf",
