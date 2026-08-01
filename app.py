@@ -284,9 +284,9 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM IDENTIFICAÇÃO AUTOMÁTICA (+/- 10%)
+# GERADOR DE PDF CUSTOMIZADO COM SELEÇÃO EXPLÍCITA (+/-)
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, df_original_bruto, df_final_utilizado, percentual_ajuste, motivo_ajuste, sinal_operador_texto, buf_ad, buf_res, buf_cook):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -330,16 +330,16 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("3. Resultados da Avaliação, Campo de Arbítrio e Valor Adotado na Precificação", subtitle_style))
     
-    op_str_visual = "-" if sinal_operador_texto == -1 else "+"
-    story.append(Paragraph(f"<b>Cálculo do Valor Adotado na Precificação:</b> Estimado {op_str_visual} 10% = <b>R$ {valores['v_adotado']:,.2f}</b> (Unitário: R$ {valores['vu_adotado']:,.2f}/m²)", text_style))
-    if percentual_ajuste != 0.0 or (motivo_ajuste and motivo_ajuste.strip()):
-        story.append(Paragraph(f"<b>Justificativa de Ajuste / Texto Identificado:</b> {motivo_ajuste if motivo_ajuste else 'Não informada'}", text_style))
+    op_str_visual = "+" if tipo_operador_ajuste == "Acima (+)" else "-"
+    story.append(Paragraph(f"<b>Cálculo do Valor Adotado na Precificação:</b> Estimado (Tendência Central / Face) {op_str_visual} {percentual_ajuste:.1f}% = <b>R$ {valores['v_adotado']:,.2f}</b> (Unitário: R$ {valores['vu_adotado']:,.2f}/m²)", text_style))
+    if motivo_ajuste and motivo_ajuste.strip():
+        story.append(Paragraph(f"<b>Justificativa Técnica do Ajuste:</b> {motivo_ajuste}", text_style))
     
     t2 = Table([
         ["Métrica / Cobertura de Risco", "Valor Total (R$)", "Valor Unitário (R$/m²)", "Variação (%)"],
         ["Mínimo (Segurança / Admissível)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:+.2f}%"],
         ["Estimado (Tendência Central / Face)", f"R$ {valores['v_medio']:,.2f}", f"R$ {valores['vu_medio']:,.2f}", "0.00% (Base)"],
-        [f"Valor Adotado na Precificação ({op_str_visual}10%)", f"R$ {valores['v_adotado']:,.2f}", f"R$ {valores['vu_adotado']:,.2f}", f"{op_str_visual}10.00%"],
+        [f"Valor Adotado na Precificação ({op_str_visual}{percentual_ajuste:.1f}%)", f"R$ {valores['v_adotado']:,.2f}", f"R$ {valores['vu_adotado']:,.2f}", f"{op_str_visual}{percentual_ajuste:.2f}%"],
         ["Máximo (Mercado / Admissível)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"{valores['var_max']:+.2f}%"],
         ["Campo de Arbítrio (±15% NBR 14653)", f"R$ {valores['v_inf_arb']:,.2f} a R$ {valores['v_sup_arb']:,.2f}", f"R$ {valores['vu_inf_arb']:,.2f} a R$ {valores['vu_sup_arb']:,.2f}", "-15.00% a +15.00%"],
     ], colWidths=[150, 135, 135, 134])
@@ -603,9 +603,10 @@ if usar_todas_manuais:
     notas_manuais_input['item6_manual'] = st.sidebar.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3)
 
 st.sidebar.markdown("---")
-# ITEM 3: Ajustes e Parâmetros de Avaliação
+# ITEM 3: Ajustes e Parâmetros de Avaliação com Seleção Explícita de Sinal (+ ou -)
 st.sidebar.markdown("🎚️ **3. Ajustes e Parâmetros de Avaliação**")
-percentual_ajuste = st.sidebar.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
+tipo_operador_ajuste = st.sidebar.selectbox("Direção do Ajuste de Precificação:", ["Abaixo (-)", "Acima (+)"], index=0)
+percentual_ajuste = st.sidebar.number_input("Percentual de Depreciação / Majoração (%)", value=10.0, step=0.5, format="%.2f")
 motivo_ajuste_input = st.sidebar.text_area("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa técnica para alteração ou ajuste do valor...")
 
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
@@ -845,11 +846,10 @@ with aba_avm:
                         
                         vu_base_medio = float(np.mean(previsoes_unitarios_reais))
                         
-                        fator_correcao = 1.0 + (percentual_ajuste / 100.0)
-                        vu_medio = vu_base_medio * fator_correcao
+                        vu_medio = vu_base_medio
                         
-                        lim_inf_estatistico = np.percentile(previsoes_unitarios_reais, 10) * fator_correcao
-                        lim_sup_estatistico = np.percentile(previsoes_unitarios_reais, 90) * fator_correcao
+                        lim_inf_estatistico = np.percentile(previsoes_unitarios_reais, 10)
+                        lim_sup_estatistico = np.percentile(previsoes_unitarios_reais, 90)
                         
                         vu_inf_arbitrio = vu_medio * 0.85
                         vu_sup_arbitrio = vu_medio * 1.15
@@ -865,16 +865,11 @@ with aba_avm:
                         v_min = vu_min * area_avaliando
                         v_max = vu_max * area_avaliando
 
-                        # IDENTIFICAÇÃO AUTOMÁTICA DO TEXTO (SINAL) PARA O CÁLCULO DE +/- 10%
-                        texto_analise = motivo_ajuste_input.lower()
-                        termos_positivos = ['aumentar', 'acrescentar', 'mais', 'maior', 'adicionar', 'acima', 'positivo', 'apreciar', 'valorizar']
-                        tem_termo_positivo = any(termo in texto_analise for termo in termos_positivos)
+                        # CÁLCULO BASEADO NA SELEÇÃO EXPLÍCITA (+ ou -) DO USUÁRIO NO ITEM 3
+                        fator_multiplicador = (1.0 + (percentual_ajuste / 100.0)) if tipo_operador_ajuste == "Acima (+)" else (1.0 - (percentual_ajuste / 100.0))
                         
-                        # Se houver termos positivos explícitos, usa +10%; caso contrário (padrão decréscimo/segurança), usa -10%
-                        sinal_operador = 1 if tem_termo_positivo else -1
-                        
-                        vu_adotado = vu_medio * (1.0 + (sinal_operador * 0.10))
-                        v_adotado = v_medio * (1.0 + (sinal_operador * 0.10))
+                        vu_adotado = vu_medio * fator_multiplicador
+                        v_adotado = v_medio * fator_multiplicador
 
                         v_inf_arb = vu_inf_arbitrio * area_avaliando
                         v_sup_arb = vu_sup_arbitrio * area_avaliando
@@ -906,11 +901,11 @@ with aba_avm:
                             r2_col.metric("Estimado (Tendência Central / Face)", f"R$ {v_medio:,.2f}", "0.00% (Base)")
                             r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:+.2f}%")
 
-                            sinal_str_exibicao = "+" if sinal_operador == 1 else "-"
-                            st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}10%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
+                            sinal_str_exibicao = "+" if tipo_operador_ajuste == "Acima (+)" else "-"
+                            st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
                             st.markdown(f"**Campo de Arbítrio (±15%):** R$ {v_inf_arb:,.2f} até R$ {v_sup_arb:,.2f}")
                             if motivo_ajuste_input:
-                                st.info(f"ℹ️ **Texto Identificado no Motivo:** '{motivo_ajuste_input}' (Operador aplicado: {sinal_str_exibicao}10%)")
+                                st.info(f"ℹ️ **Justificativa Registrada:** '{motivo_ajuste_input}' (Direção: {tipo_operador_ajuste} {percentual_ajuste}%)")
 
                             pdf_bytes = gerar_laudo_pdf_ia(
                                 tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
@@ -934,9 +929,9 @@ with aba_avm:
                                 alertas_micronumerosidade_pos,
                                 df_global,
                                 df_modelo_final,
+                                tipo_operador_ajuste,
                                 percentual_ajuste,
                                 motivo_ajuste_input,
-                                sinal_operador,
                                 buf_ad, buf_res, buf_cook
                             )
                             st.download_button(
