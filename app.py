@@ -284,7 +284,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM PÁGINA INDIVIDUALIZADA DA PLANILHA E GRÁFICOS
+# GERADOR DE PDF CUSTOMIZADO COM CRITÉRIO DE MICRONUMEROSIDADE INTEGRADO
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, df_original_bruto, df_final_utilizado, motivo_ajuste, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
@@ -349,6 +349,12 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
+    if micronumerosidade_atendida:
+        micro_status_text = "ATENDIDO (Atributos com representatividade adequada)"
+    else:
+        detalhes_str = "; ".join([d['mensagem'].replace('**', '').replace('⚠️ ', '') for d in alertas_micro_detalhes])
+        micro_status_text = f"Saneado Autônomo ({detalhes_str})"
+
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
         [Paragraph("1", table_cell_style), Paragraph("Caracterização do imóvel avaliando", table_cell_style), Paragraph(str(pontos_itens[0]), table_cell_style)],
@@ -357,7 +363,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("4", table_cell_style), Paragraph(f"Extrapolabilidade ({'Com Extrapol.' if variaveis_extrapoladas else 'Sem Extrapol.'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
         [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
-        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados após os saneamentos: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
+        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Representatividade por Atributo ≥ 5%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
+        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade e cook): {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
         [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
 
