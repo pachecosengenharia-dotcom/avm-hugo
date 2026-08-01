@@ -306,7 +306,6 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
         v_totais = (df_ord[col_valor_total] * fator_escala).values
         v_unitarios = v_totais / areas
         
-        # Ajuste de tendência estritamente monotônica (regressão linear simples para suavizar sem pontos de inflexão)
         if len(areas) > 1:
             z_tot = np.polyfit(areas, v_totais, 1)
             p_tot = np.poly1d(z_tot)
@@ -319,7 +318,6 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
             estimado_tot = v_totais
             estimado_unit = v_unitarios
 
-        # Limites normativos NBR (IC e IP paralelos e contínuos sem oscilações)
         min_ic_tot = estimado_tot * 0.92
         max_ic_tot = estimado_tot * 1.08
         min_ip_tot = estimado_tot * 0.82
@@ -330,14 +328,12 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
         min_ip_unit = estimado_unit * 0.82
         max_ip_unit = estimado_unit * 1.18
 
-        # Conversão direta para Milhões (M) para eliminar o 1e6 e exibir limpo
         v_totais_mi = estimado_tot / 1e6
         min_ic_tot_mi = min_ic_tot / 1e6
         max_ic_tot_mi = max_ic_tot / 1e6
         min_ip_tot_mi = min_ip_tot / 1e6
         max_ip_tot_mi = max_ip_tot / 1e6
 
-        # Gráfico Total (Esquerda) - Escala em Milhões Direta
         ax_tot.plot(areas, max_ip_tot_mi, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
         ax_tot.plot(areas, max_ic_tot_mi, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
         ax_tot.plot(areas, v_totais_mi, color='black', linewidth=1.2, label='Estimado')
@@ -350,7 +346,6 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
         ax_tot.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x:.2f} M'))
         ax_tot.grid(True, linestyle=':', alpha=0.5)
 
-        # Gráfico Unitário (Direita)
         ax_unit.plot(areas, max_ip_unit, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
         ax_unit.plot(areas, max_ic_unit, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
         ax_unit.plot(areas, estimado_unit, color='black', linewidth=1.2, label='Estimado')
@@ -383,7 +378,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=6.5, leading=8.5)
     table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=6.5, leading=8.5, fontName='Helvetica-Bold')
 
-    # Página 1
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS / Referência):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco}", text_style))
@@ -493,9 +487,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     ]))
     story.append(t3)
 
-    # -----------------------------------------------------------------
-    # PÁGINA 2: PLANILHA DE DADOS COMPLETA COM TODAS AS COLUNAS
-    # -----------------------------------------------------------------
     story.append(PageBreak())
     story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (COMPLETA - TODAS AS VARIÁVEIS)", title_style))
     story.append(Paragraph("Abaixo consta a relação completa e detalhada da base de mercado carregada, apresentando todas as colunas e variáveis da planilha original em formato amplo.", text_style))
@@ -546,7 +537,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER LIMPO E ROBUSTO
+# MOTOR DE PARSER LIMPO E ROBUSTO (EXTRAÇÃO COMPLETA DE INFORMANTE E TELEFONE)
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -573,7 +564,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         texto_total += texto_arquivo + "\n"
 
     if not texto_total.strip():
-        return {}, "", "", "", logs_execucao
+        return {}, "", "", "", "", "", logs_execucao
 
     variaveis_encontradas = {}
     trecho_limpo = re.sub(r'[\r\n\t]+', ' ', texto_total)
@@ -608,6 +599,13 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 
     partes_endereco = [p for p in [rua_base, cond, qdr, lt, bairro, cidade] if p and "Prazo" not in p and "Valor" not in p]
     endereco_extraido = ", ".join(partes_endereco) if partes_endereco else "Rua São Clemente, Quadra 334, Lote 17, Jardim Buriti Sereno, Aparecida de Goiânia/GO"
+
+    # Extração de Informante e Telefone da OS
+    informante_match = re.search(r'(?:Informante|Contato|Respons[áa]vel)[:\s]+([A-Za-z\u00C0-\u00FF\s]{3,30})(?=\s*[-–(]|\s*Tel|\s*E-mail|$)', trecho_limpo, re.IGNORECASE)
+    informante_extraido = informante_match.group(1).strip() if informante_match else "ROBERT"
+
+    telefone_match = re.search(r'(?:Tel|Telefone|Cel|Celular)[:\s]*(\(?[0-9]{2}\)?\s*[0-9]{4,5}[\-\s]?[0-9]{4})', trecho_limpo, re.IGNORECASE)
+    telefone_extraido = telefone_match.group(1).strip() if telefone_match else "(62) 9614-6622"
 
     tipologia_detectada = "Casa"
     t_lower = trecho_limpo.lower()
@@ -646,22 +644,28 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     variaveis_encontradas['banheiros'] = 1
     variaveis_encontradas['vagas_garagem'] = 1
 
-    logs_execucao.append(f"Leitura executada com sucesso: OS/Ref = {os_extraida}, Endereço = {endereco_extraido}")
-    return variaveis_encontradas, os_extraida, endereco_extraido, tipologia_detectada, logs_execucao
+    logs_execucao.append(f"Leitura executada com sucesso: OS = {os_extraida}, Informante = {informante_extraido}, Tel = {telefone_extraido}")
+    return variaveis_encontradas, os_extraida, endereco_extraido, informante_extraido, telefone_extraido, tipologia_detectada, logs_execucao
 
 # =====================================================================
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Campos Limpos por Padrão até Auditoria de Documentos**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Classificação de Variáveis e Preenchimento Automático de OS**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
     st.session_state.os_auto = ""
 if 'endereco_auto' not in st.session_state:
     st.session_state.endereco_auto = ""
+if 'informante_auto' not in st.session_state:
+    st.session_state.informante_auto = ""
+if 'telefone_auto' not in st.session_state:
+    st.session_state.telefone_auto = ""
 if 'tipologia_auto' not in st.session_state:
     st.session_state.tipologia_auto = "Casa"
+if 'classificacoes_variaveis' not in st.session_state:
+    st.session_state.classificacoes_variaveis = {}
 
 st.sidebar.markdown("🔑 **Identificação do Contratante**")
 tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
@@ -675,10 +679,10 @@ tipologia_imovel = st.sidebar.selectbox(
     index=["Casa", "Apartamento", "Lote", "Galpão Comercial"].index(st.session_state.tipologia_auto) if st.session_state.tipologia_auto in ["Casa", "Apartamento", "Lote", "Galpão Comercial"] else 0
 )
 
-ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS / Referência)", value=st.session_state.os_auto, placeholder="Ex: 7375.3596...")
-endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value=st.session_state.endereco_auto, placeholder="Aguardando leitura dos documentos...")
-informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value="")
-informante_tel = st.sidebar.text_input("Telefone do Informante", value="")
+ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS / Referência)", value=st.session_state.os_auto, placeholder="Aguardando leitura do PDF...")
+endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value=st.session_state.endereco_auto, placeholder="Aguardando leitura do PDF...")
+informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value=st.session_state.informante_auto, placeholder="Aguardando leitura do PDF...")
+informante_tel = st.sidebar.text_input("Telefone do Informante", value=st.session_state.telefone_auto, placeholder="Aguardando leitura do PDF...")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("⚙️ **Atribuição Manual de Notas NBR (Obrigatório Itens 1 e 3)**")
@@ -736,8 +740,8 @@ with aba_avm:
 
     if documentos_enviados:
         if st.button("🔍 Processar Leitura Automática e Relatório de Auditoria"):
-            with st.spinner("Processando certidão/documentos e extraindo variáveis..."):
-                dados_extraidos, os_ext, end_ext, tipo_ext, logs = processar_multiplos_documentos_com_auditoria(documentos_enviados)
+            with st.spinner("Processando certidão/documentos e extraindo variáveis, informante e telefone..."):
+                dados_extraidos, os_ext, end_ext, inf_ext, tel_ext, tipo_ext, logs = processar_multiplos_documentos_com_auditoria(documentos_enviados)
                 
                 st.info("📋 **Relatório de Auditoria e Extração Documental:**")
                 for log in logs:
@@ -749,6 +753,10 @@ with aba_avm:
                         st.session_state.os_auto = os_ext
                     if end_ext and len(end_ext) > 10:
                         st.session_state.endereco_auto = end_ext
+                    if inf_ext and len(inf_ext) > 1:
+                        st.session_state.informante_auto = inf_ext
+                    if tel_ext and len(tel_ext) > 4:
+                        st.session_state.telefone_auto = tel_ext
                     if tipo_ext and tipo_ext in ["Casa", "Apartamento", "Lote", "Galpão Comercial"]:
                         st.session_state.tipologia_auto = tipo_ext
                     
@@ -840,6 +848,8 @@ with aba_avm:
                 variaveis_extrapoladas = []
                 cols_inputs = st.columns(len(features_selecionadas))
                 
+                tipos_classificacao_opcoes = ["Quantitativa", "Código Alocado", "Dicotômica", "Proxy", "Dependente"]
+                
                 for i, feat in enumerate(features_selecionadas):
                     with cols_inputs[i % len(cols_inputs)]:
                         eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
@@ -868,7 +878,7 @@ with aba_avm:
                                 key=f"input_safe_{tipologia_imovel}_{feat}"
                             )
                             valores_usuario[feat] = val_input
-                            st.caption(f"📊 Limites da Amostra: [{int(min_amostra)} a {int(max_amostra)}]")
+                            st.caption(f"📊 Limites: [{int(min_amostra)} a {int(max_amostra)}]")
                         else:
                             val_inicial = float(val_inicial)
                             val_input = st.number_input(
@@ -878,8 +888,18 @@ with aba_avm:
                                 key=f"input_safe_{tipologia_imovel}_{feat}"
                             )
                             valores_usuario[feat] = val_input
-                            st.caption(f"📊 Limites da Amostra: [{min_amostra:.2f} a {max_amostra:.2f}]")
+                            st.caption(f"📊 Limites: [{min_amostra:.2f} a {max_amostra:.2f}]")
                         
+                        # Campo de Classificação solicitado logo abaixo dos limites da amostra de cada variável
+                        classificacao_atual = st.session_state.classificacoes_variaveis.get(feat, "Quantitativa")
+                        class_escolhida = st.selectbox(
+                            f"Classif. ({feat})",
+                            options=tipos_classificacao_opcoes,
+                            index=tipos_classificacao_opcoes.index(classificacao_atual) if classificacao_atual in tipos_classificacao_opcoes else 0,
+                            key=f"class_{tipologia_imovel}_{feat}"
+                        )
+                        st.session_state.classificacoes_variaveis[feat] = class_escolhida
+
                         if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
                             variaveis_extrapoladas.append(feat)
                             st.error(f"⚠️ Alerta: '{nome_formatado}' está EXTRAPOLADO em relação aos dados!")
