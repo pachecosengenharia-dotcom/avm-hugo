@@ -669,18 +669,9 @@ with aba_avm:
                 df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
                 df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
                 
-                # Saneamento síncrono para espelhar exatamente o laudo na tela
+                # Apenas processa o saneamento base para os limites e extrapolação, sem exibir a mensagem fixa de "ATENDIDO"
                 df_amostra_saneada = sanear_micronumerosidade_por_exclusao(df_modelo_teste, features_selecionadas)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
-                micronumerosidade_atendida = len(alertas_micronumerosidade) == 0
-                n_dados_efetivos_tela = len(df_amostra_saneada)
-                
-                if not micronumerosidade_atendida:
-                    st.warning(f"⚠️ **Mecanismo Inteligente de Micronumerosidade Ativado (Amostra Efetiva Utilizada: {n_dados_efetivos_tela} dados):**")
-                    for alt in alertas_micronumerosidade:
-                        st.write(alt['mensagem'])
-                else:
-                    st.success(f"🟢 **Critério de Micronumerosidade ATENDIDO:** Total de dados efetivos na base: **{n_dados_efetivos_tela} dados** (≥ 10% representatividade).")
 
                 st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
                 
