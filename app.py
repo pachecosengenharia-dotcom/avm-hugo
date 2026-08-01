@@ -360,7 +360,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
         [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Representatividade por Atributo ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
-        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após o saneamento: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
+        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade e cook): {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
         [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
 
@@ -574,10 +574,6 @@ if 'valores_manuais' not in st.session_state:
     st.session_state.valores_manuais = {}
 if 'df_dinamico' not in st.session_state:
     st.session_state.df_dinamico = None
-if 'df_saneado_micro' not in st.session_state:
-    st.session_state.df_saneado_micro = None
-if 'df_saneado_cook' not in st.session_state:
-    st.session_state.df_saneado_cook = None
 
 with aba_avm:
     st.subheader(f"📁 1. Entradas de Dados: Planilha de Mercado & Múltiplos Documentos ({tipologia_imovel})")
@@ -735,150 +731,122 @@ with aba_avm:
                 tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
 
                 st.markdown("---")
-                st.subheader("🔍 3. Auditoria e Filtros Estatísticos Independentes")
-                col_bt1, col_bt2 = st.columns(2)
-
-                with col_bt1:
-                    if st.button("🧪 1. Executar Saneamento de Micronumerosidade"):
-                        colunas_nec = list(set(features_selecionadas + [col_valor_total, col_area_base]))
-                        df_temp = df_global[colunas_nec].dropna().copy()
-                        df_temp = df_temp[df_temp[col_area_base] > 0]
-                        st.session_state.df_saneado_micro = sanear_micronumerosidade_por_exclusao(df_temp, features_selecionadas)
-                        st.success("✅ Micronumerosidade processada com sucesso!")
-
-                with col_bt2:
-                    if st.button("📈 2. Aplicar Filtro de Distância de Cook"):
-                        base_para_cook = st.session_state.df_saneado_micro if st.session_state.df_saneado_micro is not None else df_global
-                        if base_para_cook is not None:
-                            fator_escala = 1000.0 if base_para_cook[col_valor_total].mean() < 5000.0 else 1.0
-                            coluna_alvo_unitario = 'valor_unitario_amostra'
-                            base_para_cook[coluna_alvo_unitario] = (base_para_cook[col_valor_total] * fator_escala) / base_para_cook[col_area_base]
-                            
-                            df_cook_filtrado, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(base_para_cook, coluna_alvo_unitario, features_selecionadas)
-                            st.session_state.df_saneado_cook = df_cook_filtrado
-                            st.success("✅ Distância de Cook aplicada com sucesso!")
-                        else:
-                            st.warning("Execute o saneamento de micronumerosidade primeiro.")
-
-                st.markdown("---")
-                if st.button("🚀 3. Validar Equação Final e Gerar Laudo PDF"):
-                    df_final = st.session_state.df_saneado_cook if st.session_state.df_saneado_cook is not None else (st.session_state.df_saneado_micro if st.session_state.df_saneado_micro is not None else df_global)
+                if st.button("🚀 Executar Saneamento Inteligente e Gerar Laudo NBR"):
+                    colunas_nec = list(set(features_selecionadas + [col_valor_total, col_area_base]))
+                    df_modelo = df_global[colunas_nec].dropna().copy()
+                    df_modelo = df_modelo[df_modelo[col_area_base] > 0]
                     
-                    if df_final is not None and len(df_final) >= 3:
-                        colunas_nec = list(set(features_selecionadas + [col_valor_total, col_area_base]))
-                        df_modelo = df_final[colunas_nec].dropna().copy()
-                        df_modelo = df_modelo[df_modelo[col_area_base] > 0]
-                        
-                        fator_escala = 1000.0 if df_modelo[col_valor_total].mean() < 5000.0 else 1.0
-                        coluna_alvo_unitario = 'valor_unitario_amostra'
-                        df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
-                        
-                        df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
-                        n_dados_efetivos = len(df_modelo)
-                        
-                        # Exibe a mensagem exata solicitada na plataforma
-                        st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após o saneamento: **{n_dados_efetivos} dados**.")
+                    fator_escala = 1000.0 if df_modelo[col_valor_total].mean() < 5000.0 else 1.0
+                    coluna_alvo_unitario = 'valor_unitario_amostra'
+                    df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
+                    
+                    # Execução automática sequencial unificada
+                    df_modelo = sanear_micronumerosidade_por_exclusao(df_modelo, features_selecionadas)
+                    df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
+                    
+                    n_dados_efetivos = len(df_modelo)
+                    
+                    # Mensagem de auditoria exatamente conforme solicitado
+                    st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade e cook): **{n_dados_efetivos} dados**.")
 
-                        alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
-                        micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
-                        
-                        if n_dados_efetivos < 3:
-                            st.error("Amostra insuficiente após a depuração estatística normativa (mínimo de 3 dados).")
-                        else:
-                            df_modelo_log = df_modelo.copy()
-                            df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
-                            
-                            X = df_modelo_log[features_selecionadas].values
-                            y_log = df_modelo_log[coluna_alvo_unitario].values
-
-                            lin_reg = LinearRegression()
-                            lin_reg.fit(X, y_log)
-                            coeficientes = {feat: coef for feat, coef in zip(features_selecionadas, lin_reg.coef_)}
-                            coeficientes['intercepto'] = lin_reg.intercept_
-
-                            coef_array = np.array([lin_reg.intercept_] + list(lin_reg.coef_))
-                            p_valores_t, p_valor_f = calcular_estatisticas_regressao(X, y_log, coef_array)
-
-                            p_regressores = p_valores_t[1:] if len(p_valores_t) > 1 else [0.05]
-                            max_p_regressor = max(p_regressores)
-                            idx_max_p = np.argmax(p_regressores) if len(p_regressores) > 0 else 0
-                            nome_variavel_critica = features_selecionadas[idx_max_p] if len(features_selecionadas) > idx_max_p else "Desconhecida"
-
-                            modelo = RandomForestRegressor(n_estimators=200, random_state=42)
-                            modelo.fit(X, y_log)
-                            r2 = round(modelo.score(X, y_log), 4)
-
-                            df_alvo = pd.DataFrame([valores_usuario])[features_selecionadas]
-                            previsoes_log_unitario = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
-                            previsoes_unitarios_reais = np.exp(previsoes_log_unitario)
-                            
-                            vu_medio = float(np.mean(previsoes_unitarios_reais))
-                            vu_min = float(np.percentile(previsoes_unitarios_reais, 15))
-                            vu_max = float(np.percentile(previsoes_unitarios_reais, 85))
-
-                            area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
-                            if area_avaliando <= 0:
-                                area_avaliando = 1.0
-
-                            v_medio = vu_medio * area_avaliando
-                            v_min = vu_min * area_avaliando
-                            v_max = vu_max * area_avaliando
-
-                            var_min = abs((v_min - v_medio) / v_medio) * 100
-                            var_max = abs((v_max - v_medio) / v_medio) * 100
-
-                            fundamentacao, precisao, soma_pontos, pontos_itens, max_p_reg_val, p_valor_f_calc = calcular_graus_nbr_rigoroso(
-                                n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
-                            )
-
-                            buf_ad, buf_res, buf_cook = gerar_graficos_estatisticos(y_log, modelo.predict(X), cooks_d_vals, limite_cook_val)
-
-                            if pontos_itens[4] == 0:
-                                st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%** (Variável crítica: `{nome_variavel_critica}`).")
-                            else:
-                                st.success("✅ Equação validada com sucesso pelo motor NBR!")
-                                
-                                eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
-                                for feat in features_selecionadas:
-                                    coef_v = coeficientes[feat]
-                                    sinal_v = "+" if coef_v >= 0 else ""
-                                    eq_display += f" {sinal_v} ({coef_v:,.6f} * {feat})"
-                                st.markdown(f"##### Equação do Modelo Unitário (6 Casas Decimais):")
-                                st.code(eq_display)
-
-                                r1, r2_col, r3 = st.columns(3)
-                                r1.metric("Valor Total Mínimo", f"R$ {v_min:,.2f}", f"Unitário: R$ {vu_min:,.2f}/m²")
-                                r2_col.metric("Valor Total Estimado", f"R$ {v_medio:,.2f}", f"Unitário: R$ {vu_medio:,.2f}/m²")
-                                r3.metric("Valor Total Máximo", f"R$ {v_max:,.2f}", f"Unitário: R$ {vu_max:,.2f}/m²")
-
-                                pdf_bytes = gerar_laudo_pdf_ia(
-                                    tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
-                                    ordem_servico_input, endereco_imovel_input,
-                                    informante_nome, informante_tel,
-                                    {
-                                        'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max,
-                                        'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max,
-                                        'var_min': var_min, 'var_max': var_max
-                                    },
-                                    r2, n_dados_efetivos, features_selecionadas, coeficientes, valores_usuario,
-                                    variaveis_extrapoladas,
-                                    fundamentacao, precisao,
-                                    st.session_state.status_juridico_global,
-                                    st.session_state.score_juridico_global,
-                                    soma_pontos, pontos_itens,
-                                    max_p_regressor, p_valor_f_calc,
-                                    micronumerosidade_atendida,
-                                    alertas_micronumerosidade_pos,
-                                    buf_ad, buf_res, buf_cook
-                                )
-                                st.download_button(
-                                    "📄 Baixar Laudo Completo em PDF (NBR 14653)",
-                                    data=pdf_bytes,
-                                    file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
-                                    mime="application/pdf",
-                                )
+                    alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
+                    micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
+                    
+                    if n_dados_efetivos < 3:
+                        st.error("Amostra insuficiente após a depuração estatística normativa (mínimo de 3 dados).")
                     else:
-                        st.error("Base insuficiente para processar o motor NBR.")
+                        df_modelo_log = df_modelo.copy()
+                        df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
+                        
+                        X = df_modelo_log[features_selecionadas].values
+                        y_log = df_modelo_log[coluna_alvo_unitario].values
+
+                        lin_reg = LinearRegression()
+                        lin_reg.fit(X, y_log)
+                        coeficientes = {feat: coef for feat, coef in zip(features_selecionadas, lin_reg.coef_)}
+                        coeficientes['intercepto'] = lin_reg.intercept_
+
+                        coef_array = np.array([lin_reg.intercept_] + list(lin_reg.coef_))
+                        p_valores_t, p_valor_f = calcular_estatisticas_regressao(X, y_log, coef_array)
+
+                        p_regressores = p_valores_t[1:] if len(p_valores_t) > 1 else [0.05]
+                        max_p_regressor = max(p_regressores)
+                        idx_max_p = np.argmax(p_regressores) if len(p_regressores) > 0 else 0
+                        nome_variavel_critica = features_selecionadas[idx_max_p] if len(features_selecionadas) > idx_max_p else "Desconhecida"
+
+                        modelo = RandomForestRegressor(n_estimators=200, random_state=42)
+                        modelo.fit(X, y_log)
+                        r2 = round(modelo.score(X, y_log), 4)
+
+                        df_alvo = pd.DataFrame([valores_usuario])[features_selecionadas]
+                        previsoes_log_unitario = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
+                        previsoes_unitarios_reais = np.exp(previsoes_log_unitario)
+                        
+                        vu_medio = float(np.mean(previsoes_unitarios_reais))
+                        vu_min = float(np.percentile(previsoes_unitarios_reais, 15))
+                        vu_max = float(np.percentile(previsoes_unitarios_reais, 85))
+
+                        area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
+                        if area_avaliando <= 0:
+                            area_avaliando = 1.0
+
+                        v_medio = vu_medio * area_avaliando
+                        v_min = vu_min * area_avaliando
+                        v_max = vu_max * area_avaliando
+
+                        var_min = abs((v_min - v_medio) / v_medio) * 100
+                        var_max = abs((v_max - v_medio) / v_medio) * 100
+
+                        fundamentacao, precisao, soma_pontos, pontos_itens, max_p_reg_val, p_valor_f_calc = calcular_graus_nbr_rigoroso(
+                            n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
+                        )
+
+                        buf_ad, buf_res, buf_cook = gerar_graficos_estatisticos(y_log, modelo.predict(X), cooks_d_vals, limite_cook_val)
+
+                        if pontos_itens[4] == 0:
+                            st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%** (Variável crítica: `{nome_variavel_critica}`).")
+                        else:
+                            st.success("✅ Equação validada com sucesso pelo motor NBR!")
+                            
+                            eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
+                            for feat in features_selecionadas:
+                                coef_v = coeficientes[feat]
+                                sinal_v = "+" if coef_v >= 0 else ""
+                                eq_display += f" {sinal_v} ({coef_v:,.6f} * {feat})"
+                            st.markdown(f"##### Equação do Modelo Unitário (6 Casas Decimais):")
+                            st.code(eq_display)
+
+                            r1, r2_col, r3 = st.columns(3)
+                            r1.metric("Valor Total Mínimo", f"R$ {v_min:,.2f}", f"Unitário: R$ {vu_min:,.2f}/m²")
+                            r2_col.metric("Valor Total Estimado", f"R$ {v_medio:,.2f}", f"Unitário: R$ {vu_medio:,.2f}/m²")
+                            r3.metric("Valor Total Máximo", f"R$ {v_max:,.2f}", f"Unitário: R$ {vu_max:,.2f}/m²")
+
+                            pdf_bytes = gerar_laudo_pdf_ia(
+                                tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
+                                ordem_servico_input, endereco_imovel_input,
+                                informante_nome, informante_tel,
+                                {
+                                    'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max,
+                                    'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max,
+                                    'var_min': var_min, 'var_max': var_max
+                                },
+                                r2, n_dados_efetivos, features_selecionadas, coeficientes, valores_usuario,
+                                variaveis_extrapoladas,
+                                fundamentacao, precisao,
+                                st.session_state.status_juridico_global,
+                                st.session_state.score_juridico_global,
+                                soma_pontos, pontos_itens,
+                                max_p_regressor, p_valor_f_calc,
+                                micronumerosidade_atendida,
+                                alertas_micronumerosidade_pos,
+                                buf_ad, buf_res, buf_cook
+                            )
+                            st.download_button(
+                                "📄 Baixar Laudo Completo em PDF (NBR 14653)",
+                                data=pdf_bytes,
+                                file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
+                                mime="application/pdf",
+                            )
 
 with aba_juridico:
     st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
