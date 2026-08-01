@@ -362,7 +362,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO EM PAISAGEM COM DUPLO GRÁFICO NBR
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook, buf_minmax):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -380,16 +380,42 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph(f"<b>Informante / Contato:</b> {informante} | <b>Telefone:</b> {telefone}", text_style))
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("1. Variáveis e Parâmetros Utilizados (Vermelho indica Extrapolação)", subtitle_style))
-    param_formatted_list = []
-    for k, v in valores_usuario.items():
-        val_str = f"{v:.2f}" if isinstance(v, float) else f"{v}"
-        if k in variaveis_extrapoladas:
-            param_formatted_list.append(f"<font color='red'><b>{k}: {val_str} (EXTRAPOLADO)</b></font>")
-        else:
-            param_formatted_list.append(f"<b>{k}:</b> {val_str}")
-    param_text = " | ".join(param_formatted_list)
-    story.append(Paragraph(param_text, text_style))
+    # Tabela detalhada de Atributos, Limites, Especificações, Classificação e Sinais solicitada
+    story.append(Paragraph("1. Atributos do Imóvel Avaliando, Especificações, Limites da Amostra e Sinais", subtitle_style))
+    
+    t_atrib_data = [
+        [Paragraph("Variável / Atributo", table_cell_bold), Paragraph("Valor Avaliando", table_cell_bold), Paragraph("Especificação Manual", table_cell_bold), Paragraph("Classificação", table_cell_bold), Paragraph("Sinal", table_cell_bold), Paragraph("Limites da Amostra", table_cell_bold)]
+    ]
+    
+    for feat in features:
+        val_feat = valores_usuario.get(feat, 0)
+        val_str = f"{val_feat:.2f}" if isinstance(val_feat, float) else f"{val_feat}"
+        if feat in variaveis_extrapoladas:
+            val_str += " (EXTRAPOLADO)"
+            
+        esp_val = especificacoes_var.get(feat, "-")
+        class_val = classificacoes_var.get(feat, "Quantitativa")
+        sinal_val = sinais_var.get(feat, "+")
+        lim_val = limites_amostra_dict.get(feat, "[ - ]")
+        
+        t_atrib_data.append([
+            Paragraph(feat, table_cell_style),
+            Paragraph(val_str, table_cell_style),
+            Paragraph(esp_val if esp_val else "-", table_cell_style),
+            Paragraph(class_val, table_cell_style),
+            Paragraph(sinal_val, table_cell_style),
+            Paragraph(lim_val, table_cell_style)
+        ])
+        
+    t_atrib = Table(t_atrib_data, colWidths=[120, 80, 150, 100, 50, 132])
+    t_atrib.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
+        ('PADDING', (0, 0), (-1, -1), 3),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
+    ]))
+    story.append(t_atrib)
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("2. Equação do Modelo Válido (Log-Linear Homogeneizado - 6 Casas Decimais)", subtitle_style))
@@ -397,8 +423,9 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     eq_str = f"<b>ln(Valor Unitário)</b> = {intercepto_val:,.6f}"
     for feat in features:
         coef = coeficientes.get(feat, 0.0)
-        sinal = "+" if coef >= 0 else ""
-        eq_str += f" {sinal} ({coef:,.6f} * {feat})"
+        sinal_coef = sinais_var.get(feat, "+")
+        sinal = "+" if coef >= 0 else "-"
+        eq_str += f" {sinal_coef} ({abs(coef):,.6f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
     story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Dados Efetivos = {n_dados} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
     story.append(Spacer(1, 4))
@@ -756,7 +783,7 @@ with aba_avm:
                         st.session_state.informante_auto = inf_ext
                     if tel_ext and len(tel_ext) > 4:
                         st.session_state.telefone_auto = tel_ext
-                    if tipo_ext and tipo_ext in ["Casa", "Apartamento", "Lote", "Galpão Comercial"]:
+                    if tipo_ext and tipologia_imovel in ["Casa", "Apartamento", "Lote", "Galpão Comercial"]:
                         st.session_state.tipologia_auto = tipo_ext
                     
                     for k, v in dados_extraidos.items():
@@ -844,6 +871,7 @@ with aba_avm:
                 ]
                 
                 valores_usuario = {}
+                limites_amostra_dict = {}
                 variaveis_extrapoladas = []
                 cols_inputs = st.columns(len(features_selecionadas))
                 
@@ -856,6 +884,11 @@ with aba_avm:
                         
                         min_amostra = df_amostra_saneada[feat].min() if not df_amostra_saneada[feat].empty else 0.0
                         max_amostra = df_amostra_saneada[feat].max() if not df_amostra_saneada[feat].empty else 0.0
+                        
+                        if eh_inteiro:
+                            limites_amostra_dict[feat] = f"[{int(min_amostra)} a {int(max_amostra)}]"
+                        else:
+                            limites_amostra_dict[feat] = f"[{min_amostra:.2f} a {max_amostra:.2f}]"
                         
                         if feat in st.session_state.valores_manuais:
                             val_inicial = st.session_state.valores_manuais[feat]
@@ -890,7 +923,7 @@ with aba_avm:
                             valores_usuario[feat] = val_input
                             st.caption(f"📊 Limites: [{min_amostra:.2f} a {max_amostra:.2f}]")
                         
-                        # 1. Campo de Especificações (Preenchimento manual pelo usuário)
+                        # 1. Campo de Especificações
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
                         esp_input = st.text_input(
                             f"Especificações ({feat})",
@@ -1040,15 +1073,15 @@ with aba_avm:
                             eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                             for feat in features_selecionadas:
                                 coef_v = coeficientes[feat]
-                                sinal_v = "+" if coef_v >= 0 else ""
-                                eq_display += f" {sinal_v} ({coef_v:,.6f} * {feat})"
+                                sinal_v = st.session_state.sinais_variaveis.get(feat, "+")
+                                eq_display += f" {sinal_v} ({abs(coef_v):,.6f} * {feat})"
                             st.markdown(f"##### Equação do Modelo Unitário (6 Casas Decimais):")
                             st.code(eq_display)
 
                             r1, r2_col, r3 = st.columns(3)
                             r1.metric("Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"{var_min:+.2f}%")
                             r2_col.metric("Estimado (Tendência Central / Face)", f"R$ {v_medio:,.2f}", "0.00% (Base)")
-                            r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:,.2f}%")
+                            r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:+.2f}%")
 
                             sinal_str_exibicao = "+" if tipo_operador_ajuste == "Acima (+)" else "-"
                             st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
@@ -1062,6 +1095,10 @@ with aba_avm:
                                 informante_nome, informante_tel,
                                 valores_dict_metricas,
                                 r2, n_dados_efetivos, features_selecionadas, coeficientes, valores_usuario,
+                                st.session_state.classificacoes_variaveis,
+                                st.session_state.especificacoes_variaveis,
+                                st.session_state.sinais_variaveis,
+                                limites_amostra_dict,
                                 variaveis_extrapoladas,
                                 fundamentacao, precisao,
                                 st.session_state.status_juridico_global,
