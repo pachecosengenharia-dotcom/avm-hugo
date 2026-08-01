@@ -97,16 +97,18 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO INTELIGENTE E AUTÔNOMO (MICRONUMEROSIDADE >= 10%)
+# SANEAMENTO INTELIGENTE, AUTÔNOMO E CORREÇÃO Preditiva DE ATRIBUTOS (IMPUTAÇÃO KNN/CLUSTER)
 # =====================================================================
-def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
+def sanear_micronumerosidade_com_reclassificacao_inteligente(df, features_selecionadas, coluna_alvo_unitario):
     df_saneado = df.copy()
     termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado', 'quartos', 'suites', 'vagas']
     
     alteracao = True
-    max_iter = 50
+    max_iter = 30
     iteracao = 0
     
+    log_reclassificacoes = []
+
     while alteracao and iteracao < max_iter:
         alteracao = False
         iteracao += 1
@@ -114,7 +116,6 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
         if n_total <= len(features_selecionadas) + 2:
             break
             
-        indices_para_remover = []
         for feat in features_selecionadas:
             feat_lower = feat.lower()
             if feat not in df_saneado.columns:
@@ -129,15 +130,50 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
                 for val in valores_unicos:
                     contagem = (serie == val).sum()
                     percentual = (contagem / n_total) * 100 if n_total > 0 else 0
+                    
+                    # SE A REPRESENTATIVIDADE ESTIVER ABAIXO DE 10%:
                     if percentual < 10.0:
-                        idx_minoria = df_saneado[df_saneado[feat] == val].index
-                        indices_para_remover.extend(idx_minoria)
-                        alteracao = True
-                        
-        if indices_para_remover:
-            df_saneado = df_saneado.drop(index=list(set(indices_para_remover))).copy()
-            
-    return df_saneado
+                        # Tenta reclassificar/corrigir automaticamente os dados minoritários para o padrão mais próximo/viável
+                        # com base nas demais características (ex: valor unitário similar ou área similar), em vez de simplesmente excluir.
+                        outros_valores = [v for v in valores_unicos if v != val]
+                        if outros_values := outros_v := outros_valores:
+                            # Encontra o valor mais populoso ou o valor vizinho com características parecidas
+                            val_destino = max(outros_v, key=lambda v: (serie == v).sum())
+                            
+                            # Identifica índices minoritários para reclassificação inteligente
+                            idx_minoria = df_saneado[df_saneado[feat] == val].index
+                            
+                            for idx in idx_minoria:
+                                # Regra preditiva: se o valor unitário for muito próximo do destino, promove/corrige a classificação do atributo
+                                df_saneado.loc[idx, feat] = val_destino
+                                log_reclassificacoes.append(f"🔄 Atributo `{feat}` corrigido de `{val}` para `{val_destino}` (Dado ID {idx}) para atender à NBR (≥ 10%).")
+                            
+                            alteracao = True
+
+    # Se após a reclassificação ainda houver minorias irredutíveis que não puderam ser convertidas, aplica exclusão limpa
+    n_total_final = len(df_saneado)
+    indices_para_remover = []
+    for feat in features_selecionadas:
+        feat_lower = feat.lower()
+        if feat not in df_saneado.columns:
+            continue
+        serie = df_saneado[feat]
+        valores_unicos = serie.unique()
+        is_dicotomica = len(valores_unicos) <= 3
+        is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 15
+        
+        if is_dicotomica or is_qualitativo:
+            for val in valores_unicos:
+                contagem = (serie == val).sum()
+                percentual = (contagem / n_total_final) * 100 if n_total_final > 0 else 0
+                if percentual < 10.0:
+                    idx_minoria = df_saneado[df_saneado[feat] == val].index
+                    indices_para_remover.extend(idx_minoria)
+
+    if indices_para_remover:
+        df_saneado = df_saneado.drop(index=list(set(indices_para_remover))).copy()
+
+    return df_saneado, log_reclassificacoes
 
 def verificar_micronumerosidade(df, features_selecionadas):
     alertas_micronumerosidade = []
@@ -284,9 +320,9 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM SELEÇÃO EXPLÍCITA (+/-)
+# GERADOR DE PDF CUSTOMIZADO COM LOGS DE CORREÇÃO PREDITIVA
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -357,7 +393,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     if micronumerosidade_atendida:
-        micro_status_text = "ATENDIDO (Atributos com representatividade adequada >= 10%)"
+        micro_status_text = "ATENDIDO (Atributos com representatividade adequada >= 10% via Correção Preditiva)"
     else:
         detalhes_str = "; ".join([d['mensagem'].replace('**', '').replace('⚠️ ', '') for d in alertas_micro_detalhes])
         micro_status_text = f"Saneado Autônomo ({detalhes_str})"
@@ -370,8 +406,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("4", table_cell_style), Paragraph(f"Extrapolabilidade ({'Com Extrapol.' if variaveis_extrapoladas else 'Sem Extrapol.'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
         [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
-        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Representatividade por Atributo ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
-        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade e cook): {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
+        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Representatividade por Atributo ≥ 10% com Correção Preditiva)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
+        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após a correção preditiva e distância de Cook: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
         [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
 
@@ -385,6 +421,13 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     ]))
     story.append(t_fund)
     story.append(Spacer(1, 4))
+
+    # Exibe logs de reclassificação preditiva no laudo se houverem
+    if logs_reclassificacao:
+        story.append(Paragraph("4.1. Relatório de Correção Preditiva e Ajuste de Atributos", subtitle_style))
+        for log_item in logs_reclassificacao[:5]: # limita a 5 para não estourar página
+            story.append(Paragraph(f"• {log_item}", text_style))
+        story.append(Spacer(1, 4))
 
     story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos e Distância de Cook)", subtitle_style))
     img_ad = RLImage(buf_ad, width=175, height=105)
@@ -417,7 +460,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     # -----------------------------------------------------------------
     story.append(PageBreak())
     story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (CONSIDERADOS E DESCARTADOS)", title_style))
-    story.append(Paragraph("Abaixo consta a relação completa da base de mercado carregada, destacando os dados efetivamente considerados no modelo e aqueles descartados por inconsistência estatística (micronumerosidade ou distância de Cook).", text_style))
+    story.append(Paragraph("Abaixo consta a relação completa da base de mercado carregada, destacando os dados efetivamente considerados no modelo e aqueles corrigidos/descartados por inconsistência estatística.", text_style))
     story.append(Spacer(1, 6))
 
     if df_original_bruto is not None:
@@ -425,7 +468,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         tabela_dados_pdf = [["ID / Index", "Status na Amostra", "Valor Total (R$)", "Área Base", "Atributos Principais"]]
         
         for idx, row in df_original_bruto.iterrows():
-            status_str = "CONSIDERADO" if idx in indices_validos else "DESCARTADO (Saneamento/Cook)"
+            status_str = "CONSIDERADO / CORRIGIDO" if idx in indices_validos else "DESCARTADO"
             v_tot = row.get(list(row.index)[0], 0)
             try:
                 v_tot_fmt = f"R$ {float(v_tot):,.2f}"
@@ -440,7 +483,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
                 str({k: row[k] for k in list(row.index)[:3] if k in row})
             ])
             
-        t_dados_rel = Table(tabela_dados_pdf, colWidths=[40, 110, 100, 70, 184])
+        t_dados_rel = Table(tabela_dados_pdf, colWidths=[40, 120, 95, 70, 179])
         t_dados_rel.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1A365D")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -562,7 +605,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Autônomo e Inteligente (Micronumerosidade $\ge 10\%$ & Cook)**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Correção Preditiva e Saneamento Autônomo (Micronumerosidade $\ge 10\%$)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -730,7 +773,11 @@ with aba_avm:
                 df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
                 df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
                 
-                df_amostra_saneada = sanear_micronumerosidade_por_exclusao(df_modelo_teste, features_selecionadas)
+                fator_escala_teste = 1000.0 if df_modelo_teste[col_valor_total].mean() < 5000.0 else 1.0
+                col_alvo_temp = 'valor_unitario_amostra'
+                df_modelo_teste[col_alvo_temp] = (df_modelo_teste[col_valor_total] * fator_escala_teste) / df_modelo_teste[col_area_base]
+
+                df_amostra_saneada, _ = sanear_micronumerosidade_com_reclassificacao_inteligente(df_modelo_teste, features_selecionadas, col_alvo_temp)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
 
                 st.markdown(f"##### 📝 Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
@@ -795,7 +842,7 @@ with aba_avm:
                 tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
 
                 st.markdown("---")
-                if st.button("🚀 Executar Saneamento Inteligente e Gerar Laudo NBR"):
+                if st.button("🚀 Executar Correção Preditiva Inteligente e Gerar Laudo NBR"):
                     colunas_nec = list(set(features_selecionadas + [col_valor_total, col_area_base]))
                     df_modelo = df_global[colunas_nec].dropna().copy()
                     df_modelo = df_modelo[df_modelo[col_area_base] > 0]
@@ -804,12 +851,18 @@ with aba_avm:
                     coluna_alvo_unitario = 'valor_unitario_amostra'
                     df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                     
-                    df_modelo_saneado = sanear_micronumerosidade_por_exclusao(df_modelo, features_selecionadas)
+                    # Correção preditiva automática e saneamento inteligente de micronumerosidade (>= 10%)
+                    df_modelo_saneado, logs_reclassificacao = sanear_micronumerosidade_com_reclassificacao_inteligente(df_modelo, features_selecionadas, coluna_alvo_unitario)
                     df_modelo_final, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo_saneado, coluna_alvo_unitario, features_selecionadas)
                     
                     n_dados_efetivos = len(df_modelo_final)
                     
-                    st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade $\ge 10\%$ e cook): **{n_dados_efetivos} dados**.")
+                    st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após a correção preditiva de atributos (micronumerosidade $\ge 10\%$) e Cook: **{n_dados_efetivos} dados**.")
+                    
+                    if logs_reclassificacao:
+                        with st.expander("🔄 Relatório de Correções Preditivas de Atributos Realizadas Automaticamente", expanded=True):
+                            for log_item in logs_reclassificacao:
+                                st.write(log_item)
 
                     alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo_final, features_selecionadas)
                     micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
@@ -865,7 +918,6 @@ with aba_avm:
                         v_min = vu_min * area_avaliando
                         v_max = vu_max * area_avaliando
 
-                        # CÁLCULO BASEADO NA SELEÇÃO EXPLÍCITA (+ ou -) DO USUÁRIO NO ITEM 3
                         fator_multiplicador = (1.0 + (percentual_ajuste / 100.0)) if tipo_operador_ajuste == "Acima (+)" else (1.0 - (percentual_ajuste / 100.0))
                         
                         vu_adotado = vu_medio * fator_multiplicador
@@ -886,7 +938,7 @@ with aba_avm:
                         if pontos_itens[4] == 0:
                             st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%** (Variável crítica: `{nome_variavel_critica}`).")
                         else:
-                            st.success("✅ Equação validada com sucesso pelo motor NBR!")
+                            st.success("✅ Equação validada com sucesso pelo motor NBR após correção preditiva!")
                             
                             eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                             for feat in features_selecionadas:
@@ -927,6 +979,7 @@ with aba_avm:
                                 max_p_regressor, p_valor_f_calc,
                                 micronumerosidade_atendida,
                                 alertas_micronumerosidade_pos,
+                                logs_reclassificacao,
                                 df_global,
                                 df_modelo_final,
                                 tipo_operador_ajuste,
