@@ -573,10 +573,6 @@ if 'valores_manuais' not in st.session_state:
     st.session_state.valores_manuais = {}
 if 'df_dinamico' not in st.session_state:
     st.session_state.df_dinamico = None
-if 'df_saneado_micro' not in st.session_state:
-    st.session_state.df_saneado_micro = None
-if 'df_saneado_cook' not in st.session_state:
-    st.session_state.df_saneado_cook = None
 
 with aba_avm:
     st.subheader(f"📁 1. Entradas de Dados: Planilha de Mercado & Múltiplos Documentos ({tipologia_imovel})")
@@ -669,7 +665,6 @@ with aba_avm:
                 df_modelo_teste = df_global[colunas_necessarias].dropna().copy()
                 df_modelo_teste = df_modelo_teste[df_modelo_teste[col_area_base] > 0]
                 
-                # Apenas processa o saneamento base para os limites e extrapolação, sem exibir a mensagem fixa de "ATENDIDO"
                 df_amostra_saneada = sanear_micronumerosidade_por_exclusao(df_modelo_teste, features_selecionadas)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
 
@@ -733,32 +728,6 @@ with aba_avm:
                         st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
                 tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
-
-                st.markdown("---")
-                st.subheader("🔍 3. Auditoria e Filtros Estatísticos Independentes")
-                col_bt1, col_bt2 = st.columns(2)
-
-                with col_bt1:
-                    if st.button("🧪 1. Executar Saneamento de Micronumerosidade"):
-                        colunas_nec = list(set(features_selecionadas + [col_valor_total, col_area_base]))
-                        df_temp = df_global[colunas_nec].dropna().copy()
-                        df_temp = df_temp[df_temp[col_area_base] > 0]
-                        st.session_state.df_saneado_micro = sanear_micronumerosidade_por_exclusao(df_temp, features_selecionadas)
-                        st.success(f"✅ Micronumerosidade processada! Amostra efetiva resultante: {len(st.session_state.df_saneado_micro)} dados.")
-
-                with col_bt2:
-                    if st.button("📈 2. Aplicar Filtro de Distância de Cook"):
-                        base_para_cook = st.session_state.df_saneado_micro if st.session_state.df_saneado_micro is not None else df_global
-                        if base_para_cook is not None:
-                            fator_escala = 1000.0 if base_para_cook[col_valor_total].mean() < 5000.0 else 1.0
-                            coluna_alvo_unitario = 'valor_unitario_amostra'
-                            base_para_cook[coluna_alvo_unitario] = (base_para_cook[col_valor_total] * fator_escala) / base_para_cook[col_area_base]
-                            
-                            df_cook_filtrado, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(base_para_cook, coluna_alvo_unitario, features_selecionadas)
-                            st.session_state.df_saneado_cook = df_cook_filtrado
-                            st.success(f"✅ Distância de Cook aplicada! Amostra final validada: {len(df_cook_filtrado)} dados.")
-                        else:
-                            st.warning("Execute o saneamento de micronumerosidade primeiro.")
 
                 st.markdown("---")
                 if st.button("🚀 Executar Motor NBR Inteligente e Gerar Laudo"):
@@ -872,8 +841,6 @@ with aba_avm:
                                 file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
                                 mime="application/pdf",
                             )
-                    else:
-                        st.error("Base insuficiente para processar o motor NBR.")
 
 with aba_juridico:
     st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
