@@ -246,7 +246,7 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
 # =====================================================================
-# GERADOR DOS GRÁFICOS NBR (ESTILO SISDEA COM LINHAS CONTÍNUAS MONOTÔNICAS - SEM PONTOS DE INFLEXÃO ANÔMALOS)
+# GERADOR DOS GRÁFICOS NBR (ESTILO SISDEA COM ESCALA DIRETA EM MILHÕES)
 # =====================================================================
 def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df_modelo_final, col_area_base, col_valor_total, fator_escala):
     residuos_log = y_real_log - y_pred_log
@@ -297,7 +297,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     buf_cook.seek(0)
     plt.close(fig)
 
-    # 4. Gráficos de Máximos e Mínimos exatos (Estilo SisDEA com Linhas Contínuas Rigorosas NBR 14653)
+    # 4. Gráficos de Máximos e Mínimos exatos (Estilo SisDEA com Escala Numérica em Milhões)
     fig, (ax_tot, ax_unit) = plt.subplots(1, 2, figsize=(4.5, 2.0))
     
     if df_modelo_final is not None and col_area_base in df_modelo_final.columns and col_valor_total in df_modelo_final.columns:
@@ -330,27 +330,27 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
         min_ip_unit = estimado_unit * 0.82
         max_ip_unit = estimado_unit * 1.18
 
-        # Gráfico Total (Esquerda) - Correção da escala para milhões reais (R$ Milhões)
-        ax_tot.plot(areas, max_ip_tot, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
-        ax_tot.plot(areas, max_ic_tot, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
-        ax_tot.plot(areas, estimado_tot, color='black', linewidth=1.2, label='Estimado')
-        ax_tot.plot(areas, min_ic_tot, color='#2B6CB0', linestyle='-', linewidth=1, label='Mín (IC)')
-        ax_tot.plot(areas, min_ip_tot, color='#3182CE', linestyle='--', linewidth=1, label='Mín (IP)')
-        
+        # Conversão direta para Milhões (M) para eliminar o 1e6 e exibir limpo
+        v_totais_mi = estimado_tot / 1e6
+        min_ic_tot_mi = min_ic_tot / 1e6
+        max_ic_tot_mi = max_ic_tot / 1e6
+        min_ip_tot_mi = min_ip_tot / 1e6
+        max_ip_tot_mi = max_ip_tot / 1e6
+
+        # Gráfico Total (Esquerda) - Escala em Milhões Direta
+        ax_tot.plot(areas, max_ip_tot_mi, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
+        ax_tot.plot(areas, max_ic_tot_mi, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
+        ax_tot.plot(areas, v_totais_mi, color='black', linewidth=1.2, label='Estimado')
+        ax_tot.plot(areas, min_ic_tot_mi, color='#2B6CB0', linestyle='-', linewidth=1, label='Mín (IC)')
+        ax_tot.plot(areas, min_ip_tot_mi, color='#3182CE', linestyle='--', linewidth=1, label='Mín (IP)')
         ax_tot.set_title("Total (R$ Milhões)", fontsize=6)
         ax_tot.tick_params(labelsize=4)
         
-        # Correção do formatador: divide o valor bruto por 1.000.000 para exibir em Milhões (Mi)
         import matplotlib.ticker as ticker
-        ax_tot.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x / 1e6:.2f} Mi'))
-        ax_tot.grid(True, linestyle=':', alpha=0.5)
-        
-        # Formata o eixo y para exibir explicitamente em milhões (ex: 1.0 = 1 Milhão)
-        import matplotlib.ticker as ticker
-        ax_tot.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x*1e-6:.2f} Mi'))
+        ax_tot.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x:.2f} M'))
         ax_tot.grid(True, linestyle=':', alpha=0.5)
 
-        # Gráfico Unitário (Direita) - Estilo SisDEA IDêntico
+        # Gráfico Unitário (Direita)
         ax_unit.plot(areas, max_ip_unit, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
         ax_unit.plot(areas, max_ic_unit, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
         ax_unit.plot(areas, estimado_unit, color='black', linewidth=1.2, label='Estimado')
@@ -466,7 +466,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t_fund)
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos, Cook e Curvas NBR Estilo SisDEA sem Inflexões)", subtitle_style))
+    story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos, Cook e Curvas NBR Estilo SisDEA Sem Inflexões)", subtitle_style))
     img_ad = RLImage(buf_ad, width=170, height=100)
     img_res = RLImage(buf_res, width=170, height=100)
     img_cook = RLImage(buf_cook, width=170, height=100)
@@ -653,7 +653,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Gráficos Estilo SisDEA (Linhas Monotônicas sem Pontos de Inflexão)**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Gráficos Estilo SisDEA com Escala Numérica em Milhões**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -1039,7 +1039,7 @@ with aba_avm:
                                 buf_ad, buf_res, buf_cook, buf_minmax
                             )
                             st.download_button(
-                                "📄 Baixar Laudo Completo em PDF (Com Gráficos Estilo SisDEA Sem Inflexões)",
+                                "📄 Baixar Laudo Completo em PDF (Com Gráficos Estilo SisDEA Sem Inflexões e Escala Limpa)",
                                 data=pdf_bytes,
                                 file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
                                 mime="application/pdf",
