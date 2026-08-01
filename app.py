@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image as RLImage
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak, Image as RLImage
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import scipy.stats as stats
@@ -104,7 +104,7 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
     termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado', 'quartos', 'suites', 'vagas']
     
     alteracao = True
-    max_iter = 50  # Liberdade total de ciclos recursivos para ajuste completo
+    max_iter = 50
     iteracao = 0
     
     while alteracao and iteracao < max_iter:
@@ -129,7 +129,6 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
                 for val in valores_unicos:
                     contagem = (serie == val).sum()
                     percentual = (contagem / n_total) * 100 if n_total > 0 else 0
-                    # Critério autônomo e flexível para garantir representatividade e viabilidade da equação
                     if percentual < 5.0 and len(valores_unicos) > 2:
                         idx_minoria = df_saneado[df_saneado[feat] == val].index
                         indices_para_remover.extend(idx_minoria)
@@ -285,9 +284,9 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO
+# GERADOR DE PDF CUSTOMIZADO COM PÁGINA INDIVIDUALIZADA DA PLANILHA E GRÁFICOS
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, buf_ad, buf_res, buf_cook):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, df_original_bruto, df_final_utilizado, motivo_ajuste, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -299,6 +298,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=6.5, leading=8.5)
     table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=6.5, leading=8.5, fontName='Helvetica-Bold')
 
+    # Página 1
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS / Referência):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco}", text_style))
@@ -325,15 +325,18 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         sinal = "+" if coef >= 0 else ""
         eq_str += f" {sinal} ({coef:,.6f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
-    story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Dados = {n_dados} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
+    story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Dados Efetivos = {n_dados} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações", subtitle_style))
+    story.append(Paragraph("3. Resultados da Avaliação, Valores Admissíveis (Limite 15%) e Ajustes", subtitle_style))
+    if motivo_ajuste:
+        story.append(Paragraph(f"<b>Justificativa de Ajuste / Depreciação:</b> {motivo_ajuste}", text_style))
+    
     t2 = Table([
         ["Métrica / Cobertura de Risco", "Valor Total (R$)", "Valor Unitário (R$/m²)", "Variação (%)"],
-        ["Mínimo (Segurança)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:.2f}%"],
-        ["Estimado (Face / Média)", f"R$ {valores['v_medio']:,.2f}", f"R$ {valores['vu_medio']:,.2f}", "0.00% (Base)"],
-        ["Máximo (Mercado)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"+{valores['var_max']:.2f}%"],
+        ["Mínimo Admissível (-15%)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:.2f}%"],
+        ["Estimado / Ajustado (Face)", f"R$ {valores['v_medio']:,.2f}", f"R$ {valores['vu_medio']:,.2f}", "0.00% (Base)"],
+        ["Máximo Admissível (+15%)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"+{valores['var_max']:.2f}%"],
     ], colWidths=[150, 135, 135, 134])
     t2.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
@@ -346,22 +349,15 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
-    if micronumerosidade_atendida:
-        micro_status_text = "ATENDIDO (Saneamento autônomo concluído)"
-    else:
-        detalhes_str = "; ".join([d['mensagem'].replace('**', '').replace('⚠️ ', '') for d in alertas_micro_detalhes])
-        micro_status_text = f"ATENÇÃO: {detalhes_str}"
-    
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
         [Paragraph("1", table_cell_style), Paragraph("Caracterização do imóvel avaliando", table_cell_style), Paragraph(str(pontos_itens[0]), table_cell_style)],
         [Paragraph("2", table_cell_style), Paragraph(f"Quantidade de dados de mercado (n = {n_dados})", table_cell_style), Paragraph(str(pontos_itens[1]), table_cell_style)],
         [Paragraph("3", table_cell_style), Paragraph("Identificação dos dados de mercado", table_cell_style), Paragraph(str(pontos_itens[2]), table_cell_style)],
-        [Paragraph("4", table_cell_style), Paragraph(f"Extrapolação ({'Com Extrapol. - Nota 1' if variaveis_extrapoladas else 'Sem Extrapol. - Nota 3'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
+        [Paragraph("4", table_cell_style), Paragraph(f"Extrapolabilidade ({'Com Extrapol.' if variaveis_extrapoladas else 'Sem Extrapol.'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
         [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
-        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Saneamento Autônomo por Atributo)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
-        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade e cook): {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
+        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados após os saneamentos: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
         [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
 
@@ -401,6 +397,44 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ('FONTSIZE', (0, 0), (-1, -1), 7),
     ]))
     story.append(t3)
+
+    # -----------------------------------------------------------------
+    # PÁGINA 2: PÁGINA INDIVIDUALIZADA DA PLANILHA DE DADOS (CONSIDERADOS E DESCARTADOS)
+    # -----------------------------------------------------------------
+    story.append(PageBreak())
+    story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (CONSIDERADOS E DESCARTADOS)", title_style))
+    story.append(Paragraph("Abaixo consta a relação completa da base de mercado carregada, destacando os dados efetivamente considerados no modelo e aqueles descartados por inconsistência estatística (micronumerosidade ou distância de Cook).", text_style))
+    story.append(Spacer(1, 6))
+
+    if df_original_bruto is not None:
+        indices_validos = df_final_utilizado.index if df_final_utilizado is not None else []
+        tabela_dados_pdf = [["ID / Index", "Status na Amostra", "Valor Total (R$)", "Área Base", "Atributos Principais"]]
+        
+        for idx, row in df_original_bruto.iterrows():
+            status_str = "CONSIDERADO" if idx in indices_validos else "DESCARTADO (Saneamento/Cook)"
+            v_tot = row.get(list(row.index)[0], 0)
+            try:
+                v_tot_fmt = f"R$ {float(v_tot):,.2f}"
+            except Exception:
+                v_tot_fmt = str(v_tot)
+            
+            tabela_dados_pdf.append([
+                str(idx),
+                status_str,
+                v_tot_fmt,
+                str(row.get('area_privativa', row.get('area_terreno', 'N/A'))),
+                str({k: row[k] for k in list(row.index)[:3] if k in row})
+            ])
+            
+        t_dados_rel = Table(tabela_dados_pdf, colWidths=[40, 110, 100, 70, 184])
+        t_dados_rel.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1A365D")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
+            ('PADDING', (0, 0), (-1, -1), 2),
+            ('FONTSIZE', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(t_dados_rel)
 
     doc.build(story)
     buffer.seek(0)
@@ -550,9 +584,14 @@ notas_manuais_input['item3'] = st.sidebar.number_input("Nota Item 3 (Identifica�
 usar_todas_manuais = st.sidebar.checkbox("Ajustar itens restantes manualmente se necessário", value=False)
 if usar_todas_manuais:
     notas_manuais_input['item2_manual'] = st.sidebar.number_input("Nota Item 2 (Qtd Dados)", min_value=1, max_value=3, value=3)
-    notas_manuais_input['item4_manual'] = st.sidebar.number_input("Nota Item 4 (Extrapolação)", min_value=1, max_value=3, value=3)
+    notas_manuais_input['item4_manual'] = st.sidebar.number_input("Nota Item 4 (Extrapolabilidade)", min_value=1, max_value=3, value=3)
     notas_manuais_input['item5_manual'] = st.sidebar.number_input("Nota Item 5 (Signif. Regressores)", min_value=1, max_value=3, value=3)
     notas_manuais_input['item6_manual'] = st.sidebar.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3)
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("🎚️ **Ajustes e Parâmetros de Avaliação**")
+percentual_ajuste = st.sidebar.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
+motivo_ajuste_input = st.sidebar.text_area("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa técnica para alteração ou ajuste do valor...")
 
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
 st.sidebar.markdown("---")
@@ -643,6 +682,17 @@ with aba_avm:
     if df_global is None:
         st.warning("⚠️ Por favor, faça o upload da **Planilha Base Comparativa (.xlsx ou .csv)** acima para liberar a configuração das variáveis e o motor AVM.")
     else:
+        # =====================================================================
+        # BOTÃO PARA ACESSO DIRETO E EDIÇÃO MANUAL DA PLANILHA (RECURSO 1)
+        # =====================================================================
+        st.markdown("---")
+        with st.expander("📝 Visualizar e Editar Dados da Planilha de Mercado (Acesso Direto)", expanded=False):
+            st.markdown("Você pode inspecionar ou realizar edições manuais diretamente na base abaixo se desejar:")
+            df_editado_usuario = st.data_editor(st.session_state.df_dinamico, num_rows="dynamic", key="editor_planilha_mercado")
+            if df_editado_usuario is not None:
+                df_global = df_editado_usuario
+                st.session_state.df_dinamico = df_global
+
         st.markdown("---")
         st.subheader("🤖 2. Configuração e Seleção de Variáveis Independentes")
         
@@ -741,22 +791,21 @@ with aba_avm:
                     coluna_alvo_unitario = 'valor_unitario_amostra'
                     df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                     
-                    # Motor inteligente com liberdade total para tratar atributos e micronumerosidade
-                    df_modelo = sanear_micronumerosidade_por_exclusao(df_modelo, features_selecionadas)
-                    df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
+                    # Saneamento autônomo
+                    df_modelo_saneado = sanear_micronumerosidade_por_exclusao(df_modelo, features_selecionadas)
+                    df_modelo_final, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo_saneado, coluna_alvo_unitario, features_selecionadas)
                     
-                    n_dados_efetivos = len(df_modelo)
+                    n_dados_efetivos = len(df_modelo_final)
                     
-                    # Mensagem de auditoria exata solicitada
                     st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade e cook): **{n_dados_efetivos} dados**.")
 
-                    alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
+                    alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo_final, features_selecionadas)
                     micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
                     
                     if n_dados_efetivos < 3:
                         st.error("Amostra insuficiente após a depuração estatística normativa (mínimo de 3 dados).")
                     else:
-                        df_modelo_log = df_modelo.copy()
+                        df_modelo_log = df_modelo_final.copy()
                         df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
                         
                         X = df_modelo_log[features_selecionadas].values
@@ -783,9 +832,15 @@ with aba_avm:
                         previsoes_log_unitario = np.array([arvore.predict(df_alvo.values)[0] for arvore in modelo.estimators_])
                         previsoes_unitarios_reais = np.exp(previsoes_log_unitario)
                         
-                        vu_medio = float(np.mean(previsoes_unitarios_reais))
-                        vu_min = float(np.percentile(previsoes_unitarios_reais, 15))
-                        vu_max = float(np.percentile(previsoes_unitarios_reais, 85))
+                        vu_base_medio = float(np.mean(previsoes_unitarios_reais))
+                        
+                        # Aplicação do percentual de depreciação/majoração informado pelo usuário
+                        fator_correcao = 1.0 + (percentual_ajuste / 100.0)
+                        vu_medio = vu_base_medio * fator_correcao
+                        
+                        # Limites admissíveis respeitando estritamente a variação em torno da tendência central (máximo 15% para mais ou para menos)
+                        vu_min = vu_medio * 0.85
+                        vu_max = vu_medio * 1.15
 
                         area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
                         if area_avaliando <= 0:
@@ -818,9 +873,9 @@ with aba_avm:
                             st.code(eq_display)
 
                             r1, r2_col, r3 = st.columns(3)
-                            r1.metric("Valor Total Mínimo", f"R$ {v_min:,.2f}", f"Unitário: R$ {vu_min:,.2f}/m²")
-                            r2_col.metric("Valor Total Estimado", f"R$ {v_medio:,.2f}", f"Unitário: R$ {vu_medio:,.2f}/m²")
-                            r3.metric("Valor Total Máximo", f"R$ {v_max:,.2f}", f"Unitário: R$ {vu_max:,.2f}/m²")
+                            r1.metric("Valor Total Mínimo (-15%)", f"R$ {v_min:,.2f}", f"Unitário: R$ {vu_min:,.2f}/m²")
+                            r2_col.metric("Valor Total Estimado / Ajustado", f"R$ {v_medio:,.2f}", f"Unitário: R$ {vu_medio:,.2f}/m²")
+                            r3.metric("Valor Total Máximo (+15%)", f"R$ {v_max:,.2f}", f"Unitário: R$ {vu_max:,.2f}/m²")
 
                             pdf_bytes = gerar_laudo_pdf_ia(
                                 tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
@@ -840,6 +895,9 @@ with aba_avm:
                                 max_p_regressor, p_valor_f_calc,
                                 micronumerosidade_atendida,
                                 alertas_micronumerosidade_pos,
+                                df_global,
+                                df_modelo_final,
+                                motivo_ajuste_input,
                                 buf_ad, buf_res, buf_cook
                             )
                             st.download_button(
