@@ -246,11 +246,12 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
 # =====================================================================
-# GERADOR DOS GRÁFICOS NBR
+# GERADOR DOS GRÁFICOS NBR (INCLUINDO MÁXIMOS E MÍNIMOS)
 # =====================================================================
-def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
+def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, valores_metricas):
     residuos_log = y_real_log - y_pred_log
     
+    # 1. Gráfico de Aderência
     fig, ax = plt.subplots(figsize=(2.5, 2.0))
     ax.scatter(y_real_log, y_pred_log, color='#2B6CB0', s=14)
     min_val = min(min(y_real_log), min(y_pred_log))
@@ -266,6 +267,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     buf_aderencia.seek(0)
     plt.close(fig)
 
+    # 2. Gráfico de Resíduos Homocedásticos
     fig, ax = plt.subplots(figsize=(2.5, 2.0))
     ax.scatter(y_pred_log, residuos_log, color='#38A169', s=14)
     ax.axhline(0, color='black', linestyle='-', linewidth=1)
@@ -279,6 +281,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     buf_residuos.seek(0)
     plt.close(fig)
 
+    # 3. Gráfico de Distância de Cook
     fig, ax = plt.subplots(figsize=(2.5, 2.0))
     if len(cooks_d) > 0:
         indices = np.arange(len(cooks_d))
@@ -294,12 +297,29 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     buf_cook.seek(0)
     plt.close(fig)
 
-    return buf_aderencia, buf_residuos, buf_cook
+    # 4. Gráfico de Máximos, Mínimos e Tendência Central (Novo Gráfico Solicitado)
+    fig, ax = plt.subplots(figsize=(2.5, 2.0))
+    categorias = ['Mínimo', 'Estimado', 'Adotado', 'Máximo']
+    valores_graf = [valores_metricas['v_min'], valores_metricas['v_medio'], valores_metricas['v_adotado'], valores_metricas['v_max']]
+    cores_barras = ['#3182CE', '#2B6CB0', '#ECC94B', '#38A169']
+    
+    ax.bar(categorias, [v / 1000.0 for v in valores_graf], color=cores_barras, width=0.6)
+    ax.set_title("Faixa de Valores (R$ k)", fontsize=7)
+    ax.set_ylabel("R$ (milhares)", fontsize=6)
+    ax.tick_params(labelsize=5)
+    plt.xticks(rotation=15)
+    plt.tight_layout()
+    buf_minmax = io.BytesIO()
+    plt.savefig(buf_minmax, format='png', dpi=150)
+    buf_minmax.seek(0)
+    plt.close(fig)
+
+    return buf_aderencia, buf_residuos, buf_cook, buf_minmax
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO EM PAISAGEM COM TEXTO 'REPRESENTATIVIDADE ATENDIDA' E TODAS AS COLUNAS DA PLANILHA
+# GERADOR DE PDF CUSTOMIZADO EM PAISAGEM COM GRÁFICOS DE MÁXIMOS E MÍNIMOS
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -368,7 +388,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
-    # TEXTO SOLICITADO PELO USUÁRIO: REPRESENTATIVIDADE ATENDIDA
     micro_status_text = "REPRESENTATIVIDADE ATENDIDA (Saneamento Exato Aplicado)"
 
     t_fund_data = [
@@ -395,11 +414,13 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t_fund)
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos e Distância de Cook)", subtitle_style))
-    img_ad = RLImage(buf_ad, width=220, height=120)
-    img_res = RLImage(buf_res, width=220, height=120)
-    img_cook = RLImage(buf_cook, width=220, height=120)
-    t_graf_table = Table([[img_ad, img_res, img_cook]], colWidths=[244, 244, 244])
+    story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos, Cook e Gráfico de Máximos e Mínimos)", subtitle_style))
+    img_ad = RLImage(buf_ad, width=170, height=100)
+    img_res = RLImage(buf_res, width=170, height=100)
+    img_cook = RLImage(buf_cook, width=170, height=100)
+    img_minmax = RLImage(buf_minmax, width=170, height=100)
+    
+    t_graf_table = Table([[img_ad, img_res, img_cook, img_minmax]], colWidths=[183, 183, 183, 183])
     t_graf_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -421,7 +442,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t3)
 
     # -----------------------------------------------------------------
-    # PÁGINA 2: PLANILHA DE DADOS COMPLETA COM TODAS AS COLUNAS DA BASE
+    # PÁGINA 2: PLANILHA DE DADOS COMPLETA COM TODAS AS COLUNAS
     # -----------------------------------------------------------------
     story.append(PageBreak())
     story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (COMPLETA - TODAS AS VARIÁVEIS)", title_style))
@@ -430,8 +451,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     if df_original_bruto is not None:
         indices_validos = df_final_utilizado.index if df_final_utilizado is not None else []
-        
-        # EXIBE TODAS AS COLUNAS DA PLANILHA ORIGINAL SEM CORTES
         colunas_originais = df_original_bruto.columns.tolist()
         cabecalho_tabela = ["ID", "Status Amostra"] + [str(c).upper() for c in colunas_originais]
         
@@ -456,7 +475,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
                 
             tabela_dados_pdf.append(linha_dados)
             
-        # Distribuição proporcional da largura total de 732 pt para todas as colunas da planilha
         num_cols = len(cabecalho_tabela)
         largura_col = max(35.0, 732.0 / num_cols)
         col_widths_list = [largura_col] * num_cols
@@ -583,7 +601,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Exato & Relatório de Visualização Direta na Plataforma**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Gráficos de Máximos e Mínimos & Saneamento Exato**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -833,7 +851,6 @@ with aba_avm:
                     
                     n_dados_efetivos = len(df_modelo_final)
                     
-                    # PAINEL DE VISUALIZAÇÃO INTERATIVA DO SANEAMENTO REALIZADO NA PLATAFORMA
                     st.success(f"✅ Saneamento executado com sucesso! Dados efetivos utilizados: **{n_dados_efetivos} registros**.")
                     with st.expander("🔍 **Visualizar Relatório Detalhado do Saneamento Realizado (Plataforma)**", expanded=True):
                         st.markdown("### Histórico de Ações do Motor de Saneamento:")
@@ -915,7 +932,15 @@ with aba_avm:
                             n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
                         )
 
-                        buf_ad, buf_res, buf_cook = gerar_graficos_estatisticos(y_log, modelo.predict(X), cooks_d_vals, limite_cook_val)
+                        valores_dict_metricas = {
+                            'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max, 'v_adotado': v_adotado,
+                            'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max, 'vu_adotado': vu_adotado,
+                            'var_min': var_min, 'var_max': var_max,
+                            'v_inf_arb': v_inf_arb, 'v_sup_arb': v_sup_arb,
+                            'vu_inf_arb': vu_inf_arbitrio, 'vu_sup_arb': vu_sup_arbitrio
+                        }
+
+                        buf_ad, buf_res, buf_cook, buf_minmax = gerar_graficos_estatisticos(y_log, modelo.predict(X), cooks_d_vals, limite_cook_val, valores_dict_metricas)
 
                         if pontos_itens[4] == 0:
                             st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%** (Variável crítica: `{nome_variavel_critica}`).")
@@ -943,13 +968,7 @@ with aba_avm:
                                 tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
                                 ordem_servico_input, endereco_imovel_input,
                                 informante_nome, informante_tel,
-                                {
-                                    'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max, 'v_adotado': v_adotado,
-                                    'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max, 'vu_adotado': vu_adotado,
-                                    'var_min': var_min, 'var_max': var_max,
-                                    'v_inf_arb': v_inf_arb, 'v_sup_arb': v_sup_arb,
-                                    'vu_inf_arb': vu_inf_arbitrio, 'vu_sup_arb': vu_sup_arbitrio
-                                },
+                                valores_dict_metricas,
                                 r2, n_dados_efetivos, features_selecionadas, coeficientes, valores_usuario,
                                 variaveis_extrapoladas,
                                 fundamentacao, precisao,
@@ -965,10 +984,10 @@ with aba_avm:
                                 tipo_operador_ajuste,
                                 percentual_ajuste,
                                 motivo_ajuste_input,
-                                buf_ad, buf_res, buf_cook
+                                buf_ad, buf_res, buf_cook, buf_minmax
                             )
                             st.download_button(
-                                "📄 Baixar Laudo Completo em PDF (Paisagem, Planilha Completa & Representatividade Atendida)",
+                                "📄 Baixar Laudo Completo em PDF (Com Gráfico de Máximos/Mínimos e Planilha Completa)",
                                 data=pdf_bytes,
                                 file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
                                 mime="application/pdf",
