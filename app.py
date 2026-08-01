@@ -771,6 +771,7 @@ with aba_avm:
 
                 st.markdown("---")
                 if st.button("🚀 3. Validar Equação Final e Gerar Laudo PDF"):
+                    # Captura a base que passou pelo saneamento independente ou direto da global
                     df_final = st.session_state.df_saneado_cook if st.session_state.df_saneado_cook is not None else (st.session_state.df_saneado_micro if st.session_state.df_saneado_micro is not None else df_global)
                     
                     if df_final is not None and len(df_final) >= 3:
@@ -782,14 +783,21 @@ with aba_avm:
                         coluna_alvo_unitario = 'valor_unitario_amostra'
                         df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                         
+                        # Aplica Cook e recalcula os dados efetivos
                         df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
+                        
+                        # QUANTIDADE DE DADOS EFETIVAMENTE UTILIZADA APÓS O SANEAMENTO COMPLETO
+                        n_dados_efetivos = len(df_modelo)
+                        
                         alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
                         micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
-                        n_dados_efetivos = len(df_modelo)
                         
                         if n_dados_efetivos < 3:
                             st.error("Dados insuficientes após filtragem estatística rigorosa (mínimo de 3).")
                         else:
+                            # Exibe na interface a confirmação explícita da quantidade de dados processados
+                            st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após o saneamento: **{n_dados_efetivos} dados**.")
+                            
                             df_modelo_log = df_modelo.copy()
                             df_modelo_log[coluna_alvo_unitario] = np.log(df_modelo_log[coluna_alvo_unitario])
                             
@@ -804,7 +812,6 @@ with aba_avm:
                             coef_array = np.array([lin_reg.intercept_] + list(lin_reg.coef_))
                             p_valores_t, p_valor_f = calcular_estatisticas_regressao(X, y_log, coef_array)
 
-                            # Identifica qual regressor possui o maior p-valor e o seu respectivo nome
                             p_regressores = p_valores_t[1:] if len(p_valores_t) > 1 else [0.05]
                             max_p_regressor = max(p_regressores)
                             idx_max_p = np.argmax(p_regressores) if len(p_regressores) > 0 else 0
@@ -839,7 +846,6 @@ with aba_avm:
 
                             buf_ad, buf_res, buf_cook = gerar_graficos_estatisticos(y_log, modelo.predict(X), cooks_d_vals, limite_cook_val)
 
-                            # Validação rigorosa com mensagem personalizada informando a variável crítica e o percentual
                             if pontos_itens[4] == 0:
                                 st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%** (Variável: `{nome_variavel_critica}`).")
                             else:
