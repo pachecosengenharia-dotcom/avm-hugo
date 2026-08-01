@@ -251,7 +251,6 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
 def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df_modelo_final, col_area_base, col_valor_total, fator_escala):
     residuos_log = y_real_log - y_pred_log
     
-    # 1. Gráfico de Aderência
     fig, ax = plt.subplots(figsize=(2.5, 2.0))
     ax.scatter(y_real_log, y_pred_log, color='#2B6CB0', s=14)
     min_val = min(min(y_real_log), min(y_pred_log))
@@ -267,7 +266,6 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     buf_aderencia.seek(0)
     plt.close(fig)
 
-    # 2. Gráfico de Resíduos Homocedásticos
     fig, ax = plt.subplots(figsize=(2.5, 2.0))
     ax.scatter(y_pred_log, residuos_log, color='#38A169', s=14)
     ax.axhline(0, color='black', linestyle='-', linewidth=1)
@@ -281,7 +279,6 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     buf_residuos.seek(0)
     plt.close(fig)
 
-    # 3. Gráfico de Distância de Cook
     fig, ax = plt.subplots(figsize=(2.5, 2.0))
     if len(cooks_d) > 0:
         indices = np.arange(len(cooks_d))
@@ -297,7 +294,6 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     buf_cook.seek(0)
     plt.close(fig)
 
-    # 4. Gráficos de Máximos e Mínimos exatos (Estilo SisDEA com Escala Numérica em Milhões)
     fig, (ax_tot, ax_unit) = plt.subplots(1, 2, figsize=(4.5, 2.0))
     
     if df_modelo_final is not None and col_area_base in df_modelo_final.columns and col_valor_total in df_modelo_final.columns:
@@ -537,7 +533,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER LIMPO E ROBUSTO (EXTRAÇÃO COMPLETA DE INFORMANTE E TELEFONE)
+# MOTOR DE PARSER LIMPO E ROBUSTO
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -600,7 +596,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     partes_endereco = [p for p in [rua_base, cond, qdr, lt, bairro, cidade] if p and "Prazo" not in p and "Valor" not in p]
     endereco_extraido = ", ".join(partes_endereco) if partes_endereco else "Rua São Clemente, Quadra 334, Lote 17, Jardim Buriti Sereno, Aparecida de Goiânia/GO"
 
-    # Extração de Informante e Telefone da OS
     informante_match = re.search(r'(?:Informante|Contato|Respons[áa]vel)[:\s]+([A-Za-z\u00C0-\u00FF\s]{3,30})(?=\s*[-–(]|\s*Tel|\s*E-mail|$)', trecho_limpo, re.IGNORECASE)
     informante_extraido = informante_match.group(1).strip() if informante_match else "ROBERT"
 
@@ -651,7 +646,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Classificação de Variáveis e Preenchimento Automático de OS**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Especificações Manuais e Sinal (+ / -) por Variável**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -666,6 +661,10 @@ if 'tipologia_auto' not in st.session_state:
     st.session_state.tipologia_auto = "Casa"
 if 'classificacoes_variaveis' not in st.session_state:
     st.session_state.classificacoes_variaveis = {}
+if 'especificacoes_variaveis' not in st.session_state:
+    st.session_state.especificacoes_variaveis = {}
+if 'sinais_variaveis' not in st.session_state:
+    st.session_state.sinais_variaveis = {}
 
 st.sidebar.markdown("🔑 **Identificação do Contratante**")
 tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
@@ -849,6 +848,7 @@ with aba_avm:
                 cols_inputs = st.columns(len(features_selecionadas))
                 
                 tipos_classificacao_opcoes = ["Quantitativa", "Código Alocado", "Dicotômica", "Proxy", "Dependente"]
+                sinais_opcoes = ["+", "-"]
                 
                 for i, feat in enumerate(features_selecionadas):
                     with cols_inputs[i % len(cols_inputs)]:
@@ -890,7 +890,17 @@ with aba_avm:
                             valores_usuario[feat] = val_input
                             st.caption(f"📊 Limites: [{min_amostra:.2f} a {max_amostra:.2f}]")
                         
-                        # Campo de Classificação solicitado logo abaixo dos limites da amostra de cada variável
+                        # 1. Campo de Especificações (Preenchimento manual pelo usuário)
+                        esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
+                        esp_input = st.text_input(
+                            f"Especificações ({feat})",
+                            value=esp_atual,
+                            placeholder="Descreva a especificação...",
+                            key=f"esp_{tipologia_imovel}_{feat}"
+                        )
+                        st.session_state.especificacoes_variaveis[feat] = esp_input
+
+                        # 2. Campo de Classificação
                         classificacao_atual = st.session_state.classificacoes_variaveis.get(feat, "Quantitativa")
                         class_escolhida = st.selectbox(
                             f"Classif. ({feat})",
@@ -899,6 +909,16 @@ with aba_avm:
                             key=f"class_{tipologia_imovel}_{feat}"
                         )
                         st.session_state.classificacoes_variaveis[feat] = class_escolhida
+
+                        # 3. Campo de Sinal (+ ou -)
+                        sinal_atual = st.session_state.sinais_variaveis.get(feat, "+")
+                        sinal_escolhido = st.selectbox(
+                            f"Sinal ({feat})",
+                            options=sinais_opcoes,
+                            index=sinais_opcoes.index(sinal_atual) if sinal_atual in sinais_opcoes else 0,
+                            key=f"sinal_{tipologia_imovel}_{feat}"
+                        )
+                        st.session_state.sinais_variaveis[feat] = sinal_escolhido
 
                         if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
                             variaveis_extrapoladas.append(feat)
@@ -1028,7 +1048,7 @@ with aba_avm:
                             r1, r2_col, r3 = st.columns(3)
                             r1.metric("Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"{var_min:+.2f}%")
                             r2_col.metric("Estimado (Tendência Central / Face)", f"R$ {v_medio:,.2f}", "0.00% (Base)")
-                            r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:+.2f}%")
+                            r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:,.2f}%")
 
                             sinal_str_exibicao = "+" if tipo_operador_ajuste == "Acima (+)" else "-"
                             st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
