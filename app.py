@@ -328,15 +328,15 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Dados Efetivos = {n_dados} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("3. Resultados da Avaliação, Valores Admissíveis (Limite 15%) e Ajustes", subtitle_style))
+    story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações", subtitle_style))
     if motivo_ajuste:
         story.append(Paragraph(f"<b>Justificativa de Ajuste / Depreciação:</b> {motivo_ajuste}", text_style))
     
     t2 = Table([
         ["Métrica / Cobertura de Risco", "Valor Total (R$)", "Valor Unitário (R$/m²)", "Variação (%)"],
-        ["Mínimo Admissível (-15%)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:.2f}%"],
-        ["Estimado / Ajustado (Face)", f"R$ {valores['v_medio']:,.2f}", f"R$ {valores['vu_medio']:,.2f}", "0.00% (Base)"],
-        ["Máximo Admissível (+15%)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"+{valores['var_max']:.2f}%"],
+        ["Mínimo (Segurança)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:+.2f}%"],
+        ["Estimado (Face / Média)", f"R$ {valores['v_medio']:,.2f}", f"R$ {valores['vu_medio']:,.2f}", "0.00% (Base)"],
+        ["Máximo (Mercado)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"{valores['var_max']:+.2f}%"],
     ], colWidths=[150, 135, 135, 134])
     t2.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
@@ -845,9 +845,16 @@ with aba_avm:
                         fator_correcao = 1.0 + (percentual_ajuste / 100.0)
                         vu_medio = vu_base_medio * fator_correcao
                         
-                        # Limites admissíveis respeitando estritamente a variação em torno da tendência central (máximo 15% para mais ou para menos)
-                        vu_min = vu_medio * 0.85
-                        vu_max = vu_medio * 1.15
+                        # Definição estatística e dos limites do campo de arbítrio (±15%)
+                        lim_inf_estatistico = np.percentile(previsoes_unitarios_reais, 10) * fator_correcao
+                        lim_sup_estatistico = np.percentile(previsoes_unitarios_reais, 90) * fator_correcao
+                        
+                        lim_inf_arbitrio = vu_medio * 0.85
+                        lim_sup_arbitrio = vu_medio * 1.15
+                        
+                        # Limitação simultânea (Intervalo de Valores Admissíveis conforme NBR 14653)
+                        vu_min = max(lim_inf_estatistico, lim_inf_arbitrio)
+                        vu_max = min(lim_sup_estatistico, lim_sup_arbitrio)
 
                         area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
                         if area_avaliando <= 0:
@@ -857,8 +864,8 @@ with aba_avm:
                         v_min = vu_min * area_avaliando
                         v_max = vu_max * area_avaliando
 
-                        var_min = abs((v_min - v_medio) / v_medio) * 100
-                        var_max = abs((v_max - v_medio) / v_medio) * 100
+                        var_min = ((v_min - v_medio) / v_medio) * 100
+                        var_max = ((v_max - v_medio) / v_medio) * 100
 
                         fundamentacao, precisao, soma_pontos, pontos_itens, max_p_reg_val, p_valor_f_calc = calcular_graus_nbr_rigoroso(
                             n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
@@ -880,9 +887,9 @@ with aba_avm:
                             st.code(eq_display)
 
                             r1, r2_col, r3 = st.columns(3)
-                            r1.metric("Valor Total Mínimo (-15%)", f"R$ {v_min:,.2f}", f"Unitário: R$ {vu_min:,.2f}/m²")
-                            r2_col.metric("Valor Total Estimado / Ajustado", f"R$ {v_medio:,.2f}", f"Unitário: R$ {vu_medio:,.2f}/m²")
-                            r3.metric("Valor Total Máximo (+15%)", f"R$ {v_max:,.2f}", f"Unitário: R$ {vu_max:,.2f}/m²")
+                            r1.metric("Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"{var_min:+.2f}%")
+                            r2_col.metric("Estimado (Face / Média)", f"R$ {v_medio:,.2f}", "0.00% (Base)")
+                            r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:+.2f}%")
 
                             pdf_bytes = gerar_laudo_pdf_ia(
                                 tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
