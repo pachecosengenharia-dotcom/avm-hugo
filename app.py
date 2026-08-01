@@ -653,13 +653,13 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Gráficos Estilo SisDEA com Escala Numérica em Milhões**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Campos Limpos por Padrão até Auditoria de Documentos**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
-    st.session_state.os_auto = "7375.3596.000805648/2026.01.01"
+    st.session_state.os_auto = ""
 if 'endereco_auto' not in st.session_state:
-    st.session_state.endereco_auto = "Rua São Clemente, Condomínio 'CONDOMÍNIO RESIDENCIAL RAMALHO 17', Quadra 334, Lote 17, Bairro JARDIM BURITI SERENO, APARECIDA DE GOIANIA/GO"
+    st.session_state.endereco_auto = ""
 if 'tipologia_auto' not in st.session_state:
     st.session_state.tipologia_auto = "Casa"
 
@@ -675,10 +675,10 @@ tipologia_imovel = st.sidebar.selectbox(
     index=["Casa", "Apartamento", "Lote", "Galpão Comercial"].index(st.session_state.tipologia_auto) if st.session_state.tipologia_auto in ["Casa", "Apartamento", "Lote", "Galpão Comercial"] else 0
 )
 
-ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS / Referência)", value=st.session_state.os_auto)
-endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value=st.session_state.endereco_auto)
-informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value="ROBERT")
-informante_tel = st.sidebar.text_input("Telefone do Informante", value="(62) 9614-6622")
+ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS / Referência)", value=st.session_state.os_auto, placeholder="Ex: 7375.3596...")
+endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value=st.session_state.endereco_auto, placeholder="Aguardando leitura dos documentos...")
+informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value="")
+informante_tel = st.sidebar.text_input("Telefone do Informante", value="")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("⚙️ **Atribuição Manual de Notas NBR (Obrigatório Itens 1 e 3)**")
@@ -696,8 +696,8 @@ if usar_todas_manuais:
 st.sidebar.markdown("---")
 st.sidebar.markdown("🎚️ **3. Ajustes e Parâmetros de Avaliação**")
 tipo_operador_ajuste = st.sidebar.selectbox("Direção do Ajuste de Precificação:", ["Abaixo (-)", "Acima (+)"], index=1)
-percentual_ajuste = st.sidebar.number_input("Percentual de Depreciação / Majoração (%)", value=10.0, step=0.5, format="%.2f")
-motivo_ajuste_input = st.sidebar.text_area("Motivo da alteração do valor médio calculado", value="MAJORADO PELA EXISTÊNCIA DE GERAL PRÓPRIA DE ENERGIA", placeholder="Descreva aqui a justificativa técnica para alteração ou ajuste do valor...")
+percentual_ajuste = st.sidebar.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
+motivo_ajuste_input = st.sidebar.text_area("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa técnica para alteração ou ajuste do valor...")
 
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
 st.sidebar.markdown("---")
@@ -850,7 +850,7 @@ with aba_avm:
                         if feat in st.session_state.valores_manuais:
                             val_inicial = st.session_state.valores_manuais[feat]
                         else:
-                            val_inicial = float(df_amostra_saneada[feat].mean()) if not df_amostra_saneada[feat].empty else 0.0
+                            val_inicial = 0.0
                             for chave_ia, valor_ia in dados_ia.items():
                                 if chave_ia == feat or chave_ia in feat or feat in chave_ia:
                                     val_inicial = valor_ia
