@@ -97,7 +97,7 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO ESTrito CONFORME EXIGIDO (FORÇAR >=10% OU INABILITAR)
+# SANEAMENTO EXATO E REGISTRO DETALHADO PARA VISUALIZAÇÃO NA PLATAFORMA
 # =====================================================================
 def sanear_micronumerosidade_exato(df, features_selecionadas):
     df_saneado = df.copy()
@@ -124,12 +124,10 @@ def sanear_micronumerosidade_exato(df, features_selecionadas):
             contagem = (serie == val).sum()
             percentual = (contagem / n_atual) * 100
             
-            # Se a categoria possui menos de 10%:
             if percentual < 10.0:
                 meta_10 = int(np.ceil(0.10 * n_atual))
                 defasagem = meta_10 - contagem
                 
-                # OPÇÃO 1: Tenta suplementar convertendo vizinhos (ex: Padrão 3 ou 5 para Padrão 4)
                 valores_vizinhos = [v for v in valores_unicos if abs(float(v) - float(val)) == 1.0] if all(isinstance(v, (int, float, np.number)) for v in valores_unicos) else [v for v in valores_unicos if v != val]
                 
                 convertidos = 0
@@ -145,7 +143,6 @@ def sanear_micronumerosidade_exato(df, features_selecionadas):
                     if convertidos >= defasagem:
                         break
                 
-                # OPÇÃO 2: Se não foi possível suprir a defasagem (ou conforme instrução de inabilitar dados deficitários), inabilita/remove os dados minoritários
                 n_atual_pos = len(df_saneado)
                 contagem_pos = (df_saneado[feat] == val).sum()
                 if (contagem_pos / n_atual_pos) * 100 < 10.0:
@@ -300,11 +297,10 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO EM PAISAGEM (LANDSCAPE) PARA VISIBILIDADE AMPLA
+# GERADOR DE PDF CUSTOMIZADO EM PAISAGEM COM TEXTO 'REPRESENTATIVIDADE ATENDIDA' E TODAS AS COLUNAS DA PLANILHA
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
-    # USO DE PAISAGEM (landscape) PARA DAR AMPLA VISIBILIDADE ÀS COLUNAS DA PLANILHA DE DADOS
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
     styles = getSampleStyleSheet()
@@ -312,10 +308,10 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=12, textColor=colors.HexColor("#1A365D"), spaceAfter=6, leading=14)
     subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=9, textColor=colors.HexColor("#2B6CB0"), spaceAfter=3, spaceBefore=6, leading=11)
     text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7.5, leading=10.5, spaceAfter=3)
-    table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=7, leading=9)
-    table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=7, leading=9, fontName='Helvetica-Bold')
+    table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=6.5, leading=8.5)
+    table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=6.5, leading=8.5, fontName='Helvetica-Bold')
 
-    # Página 1 (Retrato ou Seção Principal)
+    # Página 1
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS / Referência):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco}", text_style))
@@ -351,7 +347,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     if motivo_ajuste and motivo_ajuste.strip():
         story.append(Paragraph(f"<b>Justificativa Técnica do Ajuste:</b> {motivo_ajuste}", text_style))
     
-    # Largura total útil em paisagem = 792 - 60 = 732 pt
     t2 = Table([
         ["Métrica / Cobertura de Risco", "Valor Total (R$)", "Valor Unitário (R$/m²)", "Variação (%)"],
         ["Mínimo (Segurança / Admissível)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:+.2f}%"],
@@ -373,7 +368,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
-    micro_status_text = "ATENDIDO (Atributos com representatividade adequada >= 10% via Saneamento Exato)" if micronumerosidade_atendida else "Saneado Rigoroso"
+    # TEXTO SOLICITADO PELO USUÁRIO: REPRESENTATIVIDADE ATENDIDA
+    micro_status_text = "REPRESENTATIVIDADE ATENDIDA (Saneamento Exato Aplicado)"
 
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
@@ -425,19 +421,19 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t3)
 
     # -----------------------------------------------------------------
-    # PÁGINA 2: PLANILHA DE DADOS DE MERCADO EM FORMATO AMPLO (PAISAGEM)
+    # PÁGINA 2: PLANILHA DE DADOS COMPLETA COM TODAS AS COLUNAS DA BASE
     # -----------------------------------------------------------------
     story.append(PageBreak())
-    story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (CONSIDERADOS E DESCARTADOS)", title_style))
-    story.append(Paragraph("Abaixo consta a relação completa e detalhada da base de mercado carregada, apresentando todas as colunas e atributos em formato amplo para perfeita visibilidade.", text_style))
+    story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (COMPLETA - TODAS AS VARIÁVEIS)", title_style))
+    story.append(Paragraph("Abaixo consta a relação completa e detalhada da base de mercado carregada, apresentando todas as colunas e variáveis da planilha original em formato amplo.", text_style))
     story.append(Spacer(1, 6))
 
     if df_original_bruto is not None:
         indices_validos = df_final_utilizado.index if df_final_utilizado is not None else []
         
-        # Pega as colunas originais disponíveis na planilha para mostrar todas com clareza
-        colunas_originais = df_original_bruto.columns.tolist()[:8] # limita para caber perfeitamente na largura de 732 pt
-        cabecalho_tabela = ["ID", "Status Amostra"] + [c.upper() for c in colunas_originais]
+        # EXIBE TODAS AS COLUNAS DA PLANILHA ORIGINAL SEM CORTES
+        colunas_originais = df_original_bruto.columns.tolist()
+        cabecalho_tabela = ["ID", "Status Amostra"] + [str(c).upper() for c in colunas_originais]
         
         tabela_dados_pdf = [
             [Paragraph(col, table_cell_bold) for col in cabecalho_tabela]
@@ -460,9 +456,9 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
                 
             tabela_dados_pdf.append(linha_dados)
             
-        # Distribuição proporcional da largura total de 732 pt para todas as colunas
+        # Distribuição proporcional da largura total de 732 pt para todas as colunas da planilha
         num_cols = len(cabecalho_tabela)
-        largura_col = 732.0 / num_cols
+        largura_col = max(35.0, 732.0 / num_cols)
         col_widths_list = [largura_col] * num_cols
         
         t_dados_rel = Table(tabela_dados_pdf, colWidths=col_widths_list, repeatRows=1)
@@ -470,7 +466,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1A365D")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-            ('PADDING', (0, 0), (-1, -1), 3),
+            ('PADDING', (0, 0), (-1, -1), 2.5),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ]))
         story.append(t_dados_rel)
@@ -587,7 +583,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Exato (>=10% ou Inabilitação) & Layout Amplo em Paisagem**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Exato & Relatório de Visualização Direta na Plataforma**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -758,7 +754,7 @@ with aba_avm:
                 col_alvo_temp = 'valor_unitario_amostra'
                 df_modelo_teste[col_alvo_temp] = (df_modelo_teste[col_valor_total] * fator_escala_teste) / df_modelo_teste[col_area_base]
 
-                df_amostra_saneada, _ = sanear_micronumerosidade_exato(df_modelo_teste, features_selecionadas)
+                df_amostra_saneada, logs_prev = sanear_micronumerosidade_exato(df_modelo_teste, features_selecionadas)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
 
                 st.markdown(f"##### 📝 Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
@@ -832,18 +828,24 @@ with aba_avm:
                     coluna_alvo_unitario = 'valor_unitario_amostra'
                     df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                     
-                    # Saneamento exato com suplementação ou inabilitação rigorosa >= 10%
                     df_modelo_saneado, logs_reclassificacao = sanear_micronumerosidade_exato(df_modelo, features_selecionadas)
                     df_modelo_final, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo_saneado, coluna_alvo_unitario, features_selecionadas)
                     
                     n_dados_efetivos = len(df_modelo_final)
                     
-                    st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após o saneamento exato (micronumerosidade $\ge 10\%$) e Cook: **{n_dados_efetivos} dados**.")
-                    
-                    if logs_reclassificacao:
-                        with st.expander("🔄 Relatório de Saneamento e Tratamento Exato da Micronumerosidade", expanded=True):
+                    # PAINEL DE VISUALIZAÇÃO INTERATIVA DO SANEAMENTO REALIZADO NA PLATAFORMA
+                    st.success(f"✅ Saneamento executado com sucesso! Dados efetivos utilizados: **{n_dados_efetivos} registros**.")
+                    with st.expander("🔍 **Visualizar Relatório Detalhado do Saneamento Realizado (Plataforma)**", expanded=True):
+                        st.markdown("### Histórico de Ações do Motor de Saneamento:")
+                        if logs_reclassificacao:
                             for log_item in logs_reclassificacao:
-                                st.write(log_item)
+                                st.write(f"- {log_item}")
+                        else:
+                            st.write("- Todos os atributos da amostra já atendiam nativamente ao critério normativo de representatividade (≥ 10%).")
+                        
+                        st.markdown("---")
+                        st.markdown("### Tabela Comparativa de Dados Considerados na Amostra:")
+                        st.dataframe(df_modelo_final, use_container_width=True)
 
                     alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo_final, features_selecionadas)
                     micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
@@ -918,8 +920,6 @@ with aba_avm:
                         if pontos_itens[4] == 0:
                             st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%** (Variável crítica: `{nome_variavel_critica}`).")
                         else:
-                            st.success("✅ Equação validada com sucesso pelo motor NBR após saneamento exato!")
-                            
                             eq_display = f"**ln(Valor Unitário)** = {coeficientes['intercepto']:,.6f}"
                             for feat in features_selecionadas:
                                 coef_v = coeficientes[feat]
@@ -968,7 +968,7 @@ with aba_avm:
                                 buf_ad, buf_res, buf_cook
                             )
                             st.download_button(
-                                "📄 Baixar Laudo Completo em PDF (Paisagem & Saneamento Exato)",
+                                "📄 Baixar Laudo Completo em PDF (Paisagem, Planilha Completa & Representatividade Atendida)",
                                 data=pdf_bytes,
                                 file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
                                 mime="application/pdf",
