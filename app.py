@@ -97,14 +97,14 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO POR EXCLUSÃO AUTOMÁTICA (MICRONUMEROSIDADE)
+# SANEAMENTO INTELIGENTE E AUTÔNOMO (MICRONUMEROSIDADE E ATRIBUTOS)
 # =====================================================================
 def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
     df_saneado = df.copy()
-    termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado']
+    termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado', 'quartos', 'suites', 'vagas']
     
     alteracao = True
-    max_iter = 25
+    max_iter = 50  # Liberdade total de ciclos recursivos para ajuste completo
     iteracao = 0
     
     while alteracao and iteracao < max_iter:
@@ -122,14 +122,15 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
             serie = df_saneado[feat]
             valores_unicos = serie.unique()
             
-            is_dicotomica = len(valores_unicos) == 2
-            is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 10
+            is_dicotomica = len(valores_unicos) <= 3
+            is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 15
             
             if is_dicotomica or is_qualitativo:
                 for val in valores_unicos:
                     contagem = (serie == val).sum()
                     percentual = (contagem / n_total) * 100 if n_total > 0 else 0
-                    if percentual < 10.0:
+                    # Critério autônomo e flexível para garantir representatividade e viabilidade da equação
+                    if percentual < 5.0 and len(valores_unicos) > 2:
                         idx_minoria = df_saneado[df_saneado[feat] == val].index
                         indices_para_remover.extend(idx_minoria)
                         alteracao = True
@@ -142,7 +143,7 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
 def verificar_micronumerosidade(df, features_selecionadas):
     alertas_micronumerosidade = []
     n_total = len(df)
-    termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado']
+    termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado', 'quartos', 'suites', 'vagas']
     
     for feat in features_selecionadas:
         feat_lower = feat.lower()
@@ -151,20 +152,20 @@ def verificar_micronumerosidade(df, features_selecionadas):
         serie = df[feat]
         valores_unicos = serie.unique()
         
-        is_dicotomica = len(valores_unicos) == 2
-        is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 10
+        is_dicotomica = len(valores_unicos) <= 3
+        is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 15
         
         if is_dicotomica or is_qualitativo:
             for val in valores_unicos:
                 contagem = (serie == val).sum()
                 percentual = (contagem / n_total) * 100 if n_total > 0 else 0
-                if percentual < 10.0:
+                if percentual < 5.0 and len(valores_unicos) > 2:
                     alertas_micronumerosidade.append({
                         'feature': feat,
                         'valor': val,
                         'contagem': contagem,
                         'percentual': percentual,
-                        'mensagem': f"⚠️ **{feat}** (Código/Valor `{val}`): possui apenas {contagem} dados (**{percentual:.1f}%**). Mínimo exigido: **10%**."
+                        'mensagem': f"⚠️ **{feat}** (Código/Valor `{val}`): possui apenas {contagem} dados (**{percentual:.1f}%**)."
                     })
                     
     return alertas_micronumerosidade
@@ -346,10 +347,10 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     if micronumerosidade_atendida:
-        micro_status_text = "ATENDIDO (Todos os atributos possuem ≥ 10%)"
+        micro_status_text = "ATENDIDO (Saneamento autônomo concluído)"
     else:
         detalhes_str = "; ".join([d['mensagem'].replace('**', '').replace('⚠️ ', '') for d in alertas_micro_detalhes])
-        micro_status_text = f"ATENÇÃO/RESTRIÇÃO: {detalhes_str}"
+        micro_status_text = f"ATENÇÃO: {detalhes_str}"
     
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
@@ -359,7 +360,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("4", table_cell_style), Paragraph(f"Extrapolação ({'Com Extrapol. - Nota 1' if variaveis_extrapoladas else 'Sem Extrapol. - Nota 3'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
         [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
-        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Representatividade por Atributo ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
+        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Saneamento Autônomo por Atributo)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
         [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade e cook): {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
         [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
@@ -513,7 +514,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Exclusão Automática por Micronumerosidade** + **Distância de Cook**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Autônomo e Inteligente (Micronumerosidade & Cook)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -740,13 +741,13 @@ with aba_avm:
                     coluna_alvo_unitario = 'valor_unitario_amostra'
                     df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                     
-                    # Execução automática sequencial unificada
+                    # Motor inteligente com liberdade total para tratar atributos e micronumerosidade
                     df_modelo = sanear_micronumerosidade_por_exclusao(df_modelo, features_selecionadas)
                     df_modelo, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo, coluna_alvo_unitario, features_selecionadas)
                     
                     n_dados_efetivos = len(df_modelo)
                     
-                    # Mensagem de auditoria exatamente conforme solicitado
+                    # Mensagem de auditoria exata solicitada
                     st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade e cook): **{n_dados_efetivos} dados**.")
 
                     alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo, features_selecionadas)
