@@ -97,7 +97,7 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO INTELIGENTE, AUTÔNOMO E CORREÇÃO Preditiva DE ATRIBUTOS (IMPUTAÇÃO KNN/CLUSTER)
+# SANEAMENTO INTELIGENTE, AUTÔNOMO E CORREÇÃO PREDITIVA DE ATRIBUTOS
 # =====================================================================
 def sanear_micronumerosidade_com_reclassificacao_inteligente(df, features_selecionadas, coluna_alvo_unitario):
     df_saneado = df.copy()
@@ -131,26 +131,18 @@ def sanear_micronumerosidade_com_reclassificacao_inteligente(df, features_seleci
                     contagem = (serie == val).sum()
                     percentual = (contagem / n_total) * 100 if n_total > 0 else 0
                     
-                    # SE A REPRESENTATIVIDADE ESTIVER ABAIXO DE 10%:
                     if percentual < 10.0:
-                        # Tenta reclassificar/corrigir automaticamente os dados minoritários para o padrão mais próximo/viável
-                        # com base nas demais características (ex: valor unitário similar ou área similar), em vez de simplesmente excluir.
                         outros_valores = [v for v in valores_unicos if v != val]
-                        if outros_values := outros_v := outros_valores:
-                            # Encontra o valor mais populoso ou o valor vizinho com características parecidas
-                            val_destino = max(outros_v, key=lambda v: (serie == v).sum())
-                            
-                            # Identifica índices minoritários para reclassificação inteligente
+                        if outros_valores:
+                            val_destino = max(outros_valores, key=lambda v: (serie == v).sum())
                             idx_minoria = df_saneado[df_saneado[feat] == val].index
                             
                             for idx in idx_minoria:
-                                # Regra preditiva: se o valor unitário for muito próximo do destino, promove/corrige a classificação do atributo
                                 df_saneado.loc[idx, feat] = val_destino
                                 log_reclassificacoes.append(f"🔄 Atributo `{feat}` corrigido de `{val}` para `{val_destino}` (Dado ID {idx}) para atender à NBR (≥ 10%).")
                             
                             alteracao = True
 
-    # Se após a reclassificação ainda houver minorias irredutíveis que não puderam ser convertidas, aplica exclusão limpa
     n_total_final = len(df_saneado)
     indices_para_remover = []
     for feat in features_selecionadas:
@@ -422,10 +414,9 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t_fund)
     story.append(Spacer(1, 4))
 
-    # Exibe logs de reclassificação preditiva no laudo se houverem
     if logs_reclassificacao:
         story.append(Paragraph("4.1. Relatório de Correção Preditiva e Ajuste de Atributos", subtitle_style))
-        for log_item in logs_reclassificacao[:5]: # limita a 5 para não estourar página
+        for log_item in logs_reclassificacao[:5]:
             story.append(Paragraph(f"• {log_item}", text_style))
         story.append(Spacer(1, 4))
 
@@ -455,9 +446,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     ]))
     story.append(t3)
 
-    # -----------------------------------------------------------------
-    # PÁGINA 2: PÁGINA INDIVIDUALIZADA DA PLANILHA DE DADOS
-    # -----------------------------------------------------------------
     story.append(PageBreak())
     story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (CONSIDERADOS E DESCARTADOS)", title_style))
     story.append(Paragraph("Abaixo consta a relação completa da base de mercado carregada, destacando os dados efetivamente considerados no modelo e aqueles corrigidos/descartados por inconsistência estatística.", text_style))
@@ -646,11 +634,10 @@ if usar_todas_manuais:
     notas_manuais_input['item6_manual'] = st.sidebar.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3)
 
 st.sidebar.markdown("---")
-# ITEM 3: Ajustes e Parâmetros de Avaliação com Seleção Explícita de Sinal (+ ou -)
 st.sidebar.markdown("🎚️ **3. Ajustes e Parâmetros de Avaliação**")
-tipo_operador_ajuste = st.sidebar.selectbox("Direção do Ajuste de Precificação:", ["Abaixo (-)", "Acima (+)"], index=0)
+tipo_operador_ajuste = st.sidebar.selectbox("Direção do Ajuste de Precificação:", ["Abaixo (-)", "Acima (+)"], index=1)
 percentual_ajuste = st.sidebar.number_input("Percentual de Depreciação / Majoração (%)", value=10.0, step=0.5, format="%.2f")
-motivo_ajuste_input = st.sidebar.text_area("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa técnica para alteração ou ajuste do valor...")
+motivo_ajuste_input = st.sidebar.text_area("Motivo da alteração do valor médio calculado", value="MAJORADO PELA EXISTÊNCIA DE GERAL PRÓPRIA DE ENERGIA", placeholder="Descreva aqui a justificativa técnica para alteração ou ajuste do valor...")
 
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
 st.sidebar.markdown("---")
@@ -851,7 +838,6 @@ with aba_avm:
                     coluna_alvo_unitario = 'valor_unitario_amostra'
                     df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                     
-                    # Correção preditiva automática e saneamento inteligente de micronumerosidade (>= 10%)
                     df_modelo_saneado, logs_reclassificacao = sanear_micronumerosidade_com_reclassificacao_inteligente(df_modelo, features_selecionadas, coluna_alvo_unitario)
                     df_modelo_final, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo_saneado, coluna_alvo_unitario, features_selecionadas)
                     
@@ -898,7 +884,6 @@ with aba_avm:
                         previsoes_unitarios_reais = np.exp(previsoes_log_unitario)
                         
                         vu_base_medio = float(np.mean(previsoes_unitarios_reais))
-                        
                         vu_medio = vu_base_medio
                         
                         lim_inf_estatistico = np.percentile(previsoes_unitarios_reais, 10)
