@@ -129,7 +129,8 @@ def sanear_micronumerosidade_por_exclusao(df, features_selecionadas):
                 for val in valores_unicos:
                     contagem = (serie == val).sum()
                     percentual = (contagem / n_total) * 100 if n_total > 0 else 0
-                    if percentual < 5.0 and len(valores_unicos) > 2:
+                    # CORREÇÃO NORMATIVA: Representatividade mínima estrita por atributo >= 5%
+                    if percentual < 5.0:
                         idx_minoria = df_saneado[df_saneado[feat] == val].index
                         indices_para_remover.extend(idx_minoria)
                         alteracao = True
@@ -158,13 +159,14 @@ def verificar_micronumerosidade(df, features_selecionadas):
             for val in valores_unicos:
                 contagem = (serie == val).sum()
                 percentual = (contagem / n_total) * 100 if n_total > 0 else 0
-                if percentual < 5.0 and len(valores_unicos) > 2:
+                # CORREÇÃO NORMATIVA: Alerta estrito para representatividade < 5.0%
+                if percentual < 5.0:
                     alertas_micronumerosidade.append({
                         'feature': feat,
                         'valor': val,
                         'contagem': contagem,
                         'percentual': percentual,
-                        'mensagem': f"⚠️ **{feat}** (Código/Valor `{val}`): possui apenas {contagem} dados (**{percentual:.1f}%**)."
+                        'mensagem': f"⚠️ **{feat}** (Código/Valor `{val}`): possui apenas {contagem} dados (**{percentual:.1f}%** - abaixo do limite normativo de 5%)."
                     })
                     
     return alertas_micronumerosidade
@@ -284,9 +286,9 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook):
     return buf_aderencia, buf_residuos, buf_cook
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM CRITÉRIO DE MICRONUMEROSIDADE INTEGRADO
+# GERADOR DE PDF CUSTOMIZADO COM CAMPO DE ARBÍTRIO E JUSTIFICATIVA DE AJUSTE
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, df_original_bruto, df_final_utilizado, motivo_ajuste, buf_ad, buf_res, buf_cook):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, df_original_bruto, df_final_utilizado, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -305,7 +307,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph(f"<b>Informante / Contato:</b> {informante} | <b>Telefone:</b> {telefone}", text_style))
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("1. Variáveis e Parâmetros Utilizados (Vermelho indica Extrapolação)", subtitle_style))
+    story.append(Paragraph("1. Variáveis e Parâmetros Utilizados (Vermelho indica Extrapolляция)", subtitle_style))
     param_formatted_list = []
     for k, v in valores_usuario.items():
         val_str = f"{v:.2f}" if isinstance(v, float) else f"{v}"
@@ -328,15 +330,18 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Dados Efetivos = {n_dados} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("3. Resultados da Avaliação, Valores Unitários e Variações", subtitle_style))
-    if motivo_ajuste:
-        story.append(Paragraph(f"<b>Justificativa de Ajuste / Depreciação:</b> {motivo_ajuste}", text_style))
+    story.append(Paragraph("3. Resultados da Avaliação, Campo de Arbítrio e Valores Admissíveis", subtitle_style))
+    
+    # Exibição explícita do ajuste e justificativa caso utilizados
+    if percentual_ajuste != 0.0 or (motivo_ajuste and motivo_ajuste.strip()):
+        story.append(Paragraph(f"<b>Parâmetro de Ajuste Aplicado:</b> {percentual_ajuste:+.2f}% | <b>Justificativa:</b> {motivo_ajuste if motivo_ajuste else 'Não informada'}", text_style))
     
     t2 = Table([
         ["Métrica / Cobertura de Risco", "Valor Total (R$)", "Valor Unitário (R$/m²)", "Variação (%)"],
-        ["Mínimo (Segurança)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:+.2f}%"],
-        ["Estimado (Face / Média)", f"R$ {valores['v_medio']:,.2f}", f"R$ {valores['vu_medio']:,.2f}", "0.00% (Base)"],
-        ["Máximo (Mercado)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"{valores['var_max']:+.2f}%"],
+        ["Mínimo (Segurança / Admissível)", f"R$ {valores['v_min']:,.2f}", f"R$ {valores['vu_min']:,.2f}", f"{valores['var_min']:+.2f}%"],
+        ["Estimado (Tendência Central / Face)", f"R$ {valores['v_medio']:,.2f}", f"R$ {valores['vu_medio']:,.2f}", "0.00% (Base)"],
+        ["Máximo (Mercado / Admissível)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"{valores['var_max']:+.2f}%"],
+        ["Campo de Arbítrio (±15% NBR 14653)", f"R$ {valores['v_inf_arb']:,.2f} a R$ {valores['v_sup_arb']:,.2f}", f"R$ {valores['vu_inf_arb']:,.2f} a R$ {valores['vu_sup_arb']:,.2f}", "-15.00% a +15.00%"],
     ], colWidths=[150, 135, 135, 134])
     t2.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
@@ -344,13 +349,14 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
         ('PADDING', (0, 0), (-1, -1), 3),
         ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('BACKGROUND', (0, 4), (-1, 4), colors.HexColor("#EDF2F7")),
     ]))
     story.append(t2)
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     if micronumerosidade_atendida:
-        micro_status_text = "ATENDIDO (Atributos com representatividade adequada)"
+        micro_status_text = "ATENDIDO (Atributos com representatividade adequada >= 5%)"
     else:
         detalhes_str = "; ".join([d['mensagem'].replace('**', '').replace('⚠️ ', '') for d in alertas_micro_detalhes])
         micro_status_text = f"Saneado Autônomo ({detalhes_str})"
@@ -555,7 +561,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Autônomo e Inteligente (Micronumerosidade & Cook)**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Autônomo e Inteligente (Micronumerosidade $\ge 5\%$ & Cook)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -596,7 +602,8 @@ if usar_todas_manuais:
     notas_manuais_input['item6_manual'] = st.sidebar.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3)
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("🎚️ **Ajustes e Parâmetros de Avaliação**")
+# ITEM 3 SOLICITADO: Ajustes e Parâmetros de Avaliação posicionado na barra lateral / fluxo como Item 3
+st.sidebar.markdown("🎚️ **3. Ajustes e Parâmetros de Avaliação**")
 percentual_ajuste = st.sidebar.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
 motivo_ajuste_input = st.sidebar.text_area("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa técnica para alteração ou ajuste do valor...")
 
@@ -689,9 +696,6 @@ with aba_avm:
     if df_global is None:
         st.warning("⚠️ Por favor, faça o upload da **Planilha Base Comparativa (.xlsx ou .csv)** acima para liberar a configuração das variáveis e o motor AVM.")
     else:
-        # =====================================================================
-        # BOTÃO PARA ACESSO DIRETO E EDIÇÃO MANUAL DA PLANILHA (RECURSO 1)
-        # =====================================================================
         st.markdown("---")
         with st.expander("📝 Visualizar e Editar Dados da Planilha de Mercado (Acesso Direto)", expanded=False):
             st.markdown("Você pode inspecionar ou realizar edições manuais diretamente na base abaixo se desejar:")
@@ -727,7 +731,7 @@ with aba_avm:
                 df_amostra_saneada = sanear_micronumerosidade_por_exclusao(df_modelo_teste, features_selecionadas)
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
 
-                st.markdown(f"##### 📝 3. Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
+                st.markdown(f"##### 📝 Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
                 
                 dados_ia = st.session_state.get('dados_extraidos_ia', {})
                 campos_inteiros = [
@@ -798,13 +802,13 @@ with aba_avm:
                     coluna_alvo_unitario = 'valor_unitario_amostra'
                     df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                     
-                    # Saneamento autônomo
+                    # Saneamento autônomo com critério estrito de representatividade >= 5%
                     df_modelo_saneado = sanear_micronumerosidade_por_exclusao(df_modelo, features_selecionadas)
                     df_modelo_final, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo_saneado, coluna_alvo_unitario, features_selecionadas)
                     
                     n_dados_efetivos = len(df_modelo_final)
                     
-                    st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade e cook): **{n_dados_efetivos} dados**.")
+                    st.info(f"📊 **Auditoria da Amostra:** Quantidade de dados efetivamente utilizados nos cálculos após os saneamentos (micronumerosidade $\ge 5\%$ e cook): **{n_dados_efetivos} dados**.")
 
                     alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo_final, features_selecionadas)
                     micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
@@ -841,20 +845,20 @@ with aba_avm:
                         
                         vu_base_medio = float(np.mean(previsoes_unitarios_reais))
                         
-                        # Aplicação do percentual de depreciação/majoração informado pelo usuário
+                        # Aplicação do percentual de ajuste informado no Item 3
                         fator_correcao = 1.0 + (percentual_ajuste / 100.0)
                         vu_medio = vu_base_medio * fator_correcao
                         
-                        # Definição estatística e dos limites do campo de arbítrio (±15%)
+                        # Limites estatísticos e cálculo do Campo de Arbítrio (±15%)
                         lim_inf_estatistico = np.percentile(previsoes_unitarios_reais, 10) * fator_correcao
                         lim_sup_estatistico = np.percentile(previsoes_unitarios_reais, 90) * fator_correcao
                         
-                        lim_inf_arbitrio = vu_medio * 0.85
-                        lim_sup_arbitrio = vu_medio * 1.15
+                        vu_inf_arbitrio = vu_medio * 0.85
+                        vu_sup_arbitrio = vu_medio * 1.15
                         
-                        # Limitação simultânea (Intervalo de Valores Admissíveis conforme NBR 14653)
-                        vu_min = max(lim_inf_estatistico, lim_inf_arbitrio)
-                        vu_max = min(lim_sup_estatistico, lim_sup_arbitrio)
+                        # Limitação simultânea para valores admissíveis (Mínimo e Máximo)
+                        vu_min = max(lim_inf_estatistico, vu_inf_arbitrio)
+                        vu_max = min(lim_sup_estatistico, vu_sup_arbitrio)
 
                         area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
                         if area_avaliando <= 0:
@@ -863,6 +867,9 @@ with aba_avm:
                         v_medio = vu_medio * area_avaliando
                         v_min = vu_min * area_avaliando
                         v_max = vu_max * area_avaliando
+
+                        v_inf_arb = vu_inf_arbitrio * area_avaliando
+                        v_sup_arb = vu_sup_arbitrio * area_avaliando
 
                         var_min = ((v_min - v_medio) / v_medio) * 100
                         var_max = ((v_max - v_medio) / v_medio) * 100
@@ -891,6 +898,10 @@ with aba_avm:
                             r2_col.metric("Estimado (Face / Média)", f"R$ {v_medio:,.2f}", "0.00% (Base)")
                             r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:+.2f}%")
 
+                            st.markdown(f"**Campo de Arbítrio (±15%):** R$ {v_inf_arb:,.2f} até R$ {v_sup_arb:,.2f}")
+                            if percentual_ajuste != 0.0 or motivo_ajuste_input:
+                                st.info(f"ℹ️ **Ajuste Aplicado:** {percentual_ajuste:+.2f}% | **Justificativa:** {motivo_ajuste_input if motivo_ajuste_input else 'Não informada'}")
+
                             pdf_bytes = gerar_laudo_pdf_ia(
                                 tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
                                 ordem_servico_input, endereco_imovel_input,
@@ -898,7 +909,9 @@ with aba_avm:
                                 {
                                     'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max,
                                     'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max,
-                                    'var_min': var_min, 'var_max': var_max
+                                    'var_min': var_min, 'var_max': var_max,
+                                    'v_inf_arb': v_inf_arb, 'v_sup_arb': v_sup_arb,
+                                    'vu_inf_arb': vu_inf_arbitrio, 'vu_sup_arb': vu_sup_arbitrio
                                 },
                                 r2, n_dados_efetivos, features_selecionadas, coeficientes, valores_usuario,
                                 variaveis_extrapoladas,
@@ -911,6 +924,7 @@ with aba_avm:
                                 alertas_micronumerosidade_pos,
                                 df_global,
                                 df_modelo_final,
+                                percentual_ajuste,
                                 motivo_ajuste_input,
                                 buf_ad, buf_res, buf_cook
                             )
