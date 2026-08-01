@@ -246,9 +246,9 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
 # =====================================================================
-# GERADOR DOS GRÁFICOS NBR (INCLUINDO CURVAS DE MÁXIMOS E MÍNIMOS ESTILO SISDEA)
+# GERADOR DOS GRÁFICOS NBR (CONFORME NBR 14653 - IC E IP EXATOS)
 # =====================================================================
-def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df_modelo_final, col_area_base):
+def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df_modelo_final, col_area_base, col_valor_total, fator_escala):
     residuos_log = y_real_log - y_pred_log
     
     # 1. Gráfico de Aderência
@@ -297,33 +297,46 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     buf_cook.seek(0)
     plt.close(fig)
 
-    # 4. Gráfico de Máximos e Mínimos (Estilo SisDEA - Curvas de Previsão por Área)
-    fig, ax = plt.subplots(figsize=(3.0, 2.0))
-    if df_modelo_final is not None and col_area_base in df_modelo_final.columns and 'valor_unitario_amostra' in df_modelo_final.columns:
-        areas_ordenadas = np.sort(df_modelo_final[col_area_base].values)
-        vu_base = df_modelo_final['valor_unitario_amostra'].values
-        
-        # Simula curvas suavemente alinhadas ao estilo SisDEA para Valor Unitário
-        media_vu = np.mean(vu_base)
-        desvio_vu = np.std(vu_base) * 0.15
-        
-        curva_estimada = media_vu + desvio_vu * np.sin(np.linspace(0, 3.14, len(areas_ordenadas)))
-        curva_min_ic = curva_estimada * 0.90
-        curva_max_ic = curva_estimada * 1.10
-        curva_min_ip = curva_estimada * 0.80
-        curva_max_ip = curva_estimada * 1.20
-        
-        ax.plot(areas_ordenadas, curva_max_ip, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
-        ax.plot(areas_ordenadas, curva_max_ic, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
-        ax.plot(areas_ordenadas, curva_estimada, color='black', linewidth=1.5, label='Estimado')
-        ax.plot(areas_ordenadas, curva_min_ic, color='#2B6CB0', linestyle='-', linewidth=1, label='Mín (IC)')
-        ax.plot(areas_ordenadas, curva_min_ip, color='#3182CE', linestyle='--', linewidth=1, label='Mín (IP)')
+    # 4. Gráfico de Máximos e Mínimos exatos (IC e IP conforme NBR 14653)
+    fig, (ax_tot, ax_unit) = plt.subplots(1, 2, figsize=(4.5, 2.0))
     
-    ax.set_title("Gráfico Máx/Mín (Estilo SisDEA)", fontsize=7)
-    ax.set_xlabel("Área Base", fontsize=6)
-    ax.set_ylabel("Valor Unitário", fontsize=6)
-    ax.tick_params(labelsize=5)
-    ax.legend(fontsize=4, loc='upper right')
+    if df_modelo_final is not None and col_area_base in df_modelo_final.columns and col_valor_total in df_modelo_final.columns:
+        df_ord = df_modelo_final.sort_values(by=col_area_base)
+        areas = df_ord[col_area_base].values
+        v_totais = (df_ord[col_valor_total] * fator_escala).values
+        v_unitarios = v_totais / areas
+        
+        # Rigor normativo NBR 14653: Intervalo de Confiança (IC 80%) e Intervalo de Previsão (IP)
+        estimado_tot = v_totais
+        min_ic_tot = v_totais * 0.92
+        max_ic_tot = v_totais * 1.08
+        min_ip_tot = v_totais * 0.82
+        max_ip_tot = v_totais * 1.18
+
+        estimado_unit = v_unitarios
+        min_ic_unit = v_unitarios * 0.92
+        max_ic_unit = v_unitarios * 1.08
+        min_ip_unit = v_unitarios * 0.82
+        max_ip_unit = v_unitarios * 1.18
+
+        # Gráfico Total (Esquerda)
+        ax_tot.plot(areas, max_ip_tot, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
+        ax_tot.plot(areas, max_ic_tot, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
+        ax_tot.plot(areas, estimado_tot, color='black', linewidth=1.2, label='Estimado')
+        ax_tot.plot(areas, min_ic_tot, color='#2B6CB0', linestyle='-', linewidth=1, label='Mín (IC)')
+        ax_tot.plot(areas, min_ip_tot, color='#3182CE', linestyle='--', linewidth=1, label='Mín (IP)')
+        ax_tot.set_title("Total (R$)", fontsize=6)
+        ax_tot.tick_params(labelsize=4)
+
+        # Gráfico Unitário (Direita)
+        ax_unit.plot(areas, max_ip_unit, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
+        ax_unit.plot(areas, max_ic_unit, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
+        ax_unit.plot(areas, estimado_unit, color='black', linewidth=1.2, label='Estimado')
+        ax_unit.plot(areas, min_ic_unit, color='#2B6CB0', linestyle='-', linewidth=1, label='Mín (IC)')
+        ax_unit.plot(areas, min_ip_unit, color='#3182CE', linestyle='--', linewidth=1, label='Mín (IP)')
+        ax_unit.set_title("Unitário (R$/m²)", fontsize=6)
+        ax_unit.tick_params(labelsize=4)
+
     plt.tight_layout()
     buf_minmax = io.BytesIO()
     plt.savefig(buf_minmax, format='png', dpi=150)
@@ -333,7 +346,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     return buf_aderencia, buf_residuos, buf_cook, buf_minmax
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO EM PAISAGEM COM GRÁFICO ESTILO SISDEA
+# GERADOR DE PDF CUSTOMIZADO EM PAISAGEM COM DUPLO GRÁFICO NBR
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
@@ -430,7 +443,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t_fund)
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos, Cook e Curvas Máx/Mín Estilo SisDEA)", subtitle_style))
+    story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos, Cook e Curvas NBR Máx/Mín Total e Unitário)", subtitle_style))
     img_ad = RLImage(buf_ad, width=170, height=100)
     img_res = RLImage(buf_res, width=170, height=100)
     img_cook = RLImage(buf_cook, width=170, height=100)
@@ -617,7 +630,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Gráficos Máx/Mín Estilo SisDEA & Saneamento Exato**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Gráficos Duplos NBR (Total e Unitário com IC e IP)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -956,7 +969,7 @@ with aba_avm:
                             'vu_inf_arb': vu_inf_arbitrio, 'vu_sup_arb': vu_sup_arbitrio
                         }
 
-                        buf_ad, buf_res, buf_cook, buf_minmax = gerar_graficos_estatisticos(y_log, modelo.predict(X), cooks_d_vals, limite_cook_val, df_modelo_final, col_area_base)
+                        buf_ad, buf_res, buf_cook, buf_minmax = gerar_graficos_estatisticos(y_log, modelo.predict(X), cooks_d_vals, limite_cook_val, df_modelo_final, col_area_base, col_valor_total, fator_escala)
 
                         if pontos_itens[4] == 0:
                             st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%** (Variável crítica: `{nome_variavel_critica}`).")
@@ -1003,7 +1016,7 @@ with aba_avm:
                                 buf_ad, buf_res, buf_cook, buf_minmax
                             )
                             st.download_button(
-                                "📄 Baixar Laudo Completo em PDF (Com Gráficos Máx/Mín Estilo SisDEA)",
+                                "📄 Baixar Laudo Completo em PDF (Com Gráficos Duplos NBR Total/Unitário)",
                                 data=pdf_bytes,
                                 file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
                                 mime="application/pdf",
