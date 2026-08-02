@@ -957,14 +957,14 @@ with aba_avm:
                 st.subheader("4. Ajustes e Parâmetros de Avaliação")
                 col_aj1, col_aj2, col_aj3 = st.columns(3)
                 with col_aj1:
-                    tipo_operador_ajuste = st.selectbox("Direção do Ajuste de Precificação:", ["Depreciado (-)", "Majorado (+)"], index=1)
+                    tipo_operador_ajuste = st.selectbox("Direção do Ajuste de Precificação:", ["depreciado (-)", "majorado (+)"], index=1)
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
                     motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...")
 
                 st.markdown("---")
-                st.subheader("5. Atribuição Manual de Notas NBR (Obrigatório Itens 1 e 3)")
+                st.subheader("5. Atribuição Manual de Notas FENDAMENTAÇÃO-NBR (Obrigatório Itens 1 e 3)")
                 notas_manuais_input = {}
                 col_n1, col_n2 = st.columns(2)
                 with col_n1:
@@ -1069,7 +1069,6 @@ with aba_avm:
                         vu_max = min(lim_sup_estatistico, vu_sup_arbitrio)
 
                         # CÁLCULO EXATO DA AMPLITUDE DO INTERVALO DE CONFIANÇA EM PERCENTUAL (%)
-                        # Amplitude IC = ((Valor Máximo - Valor Mínimo) / Valor Estimado) * 100
                         amplitude_ic_percentual = ((vu_max - vu_min) / vu_medio) * 100
 
                         area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
@@ -1080,7 +1079,7 @@ with aba_avm:
                         v_min = vu_min * area_avaliando
                         v_max = vu_max * area_avaliando
 
-                        fator_multiplicador = (1.0 + (percentual_ajuste / 100.0)) if tipo_operador_ajuste == "Majorado (+)" else (1.0 - (percentual_ajuste / 100.0))
+                        fator_multiplicador = (1.0 + (percentual_ajuste / 100.0)) if tipo_operador_ajuste == "majorado (+)" else (1.0 - (percentual_ajuste / 100.0))
                         
                         vu_adotado = vu_medio * fator_multiplicador
                         v_adotado = v_medio * fator_multiplicador
@@ -1121,10 +1120,10 @@ with aba_avm:
                             r2_col.metric("Estimado (Tendência Central / Face)", f"R$ {v_medio:,.2f}", "0.00% (Base)")
                             r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:+.2f}%")
 
-                            sinal_str_exibicao = "+" if tipo_operador_ajuste == "Majorado (+)" else "-"
+                            sinal_str_exibicao = "+" if tipo_operador_ajuste == "majorado (+)" else "-"
                             st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
                             st.markdown(f"**Campo de Arbítrio (±15%):** R$ {v_inf_arb:,.2f} até R$ {v_sup_arb:,.2f}")
-                            st.markdown(f"**Precisão Normativa (Amplitude do IC):** {precisao} (Amplitude: {amplitude_ic_percentual:.2f}%)")
+                            st.markdown(f"**Precisão Normativa (Amplitude do IC):** {precisao} — Amplitude de {amplitude_ic_percentual:.2f}%")
                             if motivo_ajuste_input:
                                 st.info(f"ℹ️ **Justificativa Registrada:** '{motivo_ajuste_input}' (Direção: {tipo_operador_ajuste} {percentual_ajuste}%)")
 
