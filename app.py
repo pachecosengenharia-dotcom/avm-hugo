@@ -287,55 +287,55 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
 # =====================================================================
-# GERADOR DOS GRÁFICOS NBR (DIMENSIONADOS PARA COMPACTAÇÃO NA PÁGINA 1)
+# GERADOR DOS GRÁFICOS NBR (PADRÃO VISUAL PROFISSIONAL)
 # =====================================================================
 def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df_modelo_final, col_area_base, col_valor_total, fator_escala):
     residuos_log = y_real_log - y_pred_log
     
-    fig, ax = plt.subplots(figsize=(2.2, 1.4))
-    ax.scatter(y_real_log, y_pred_log, color='#2B6CB0', s=12)
+    fig, ax = plt.subplots(figsize=(2.5, 1.8))
+    ax.scatter(y_real_log, y_pred_log, color='#2B6CB0', s=14)
     min_val = min(min(y_real_log), min(y_pred_log))
     max_val = max(max(y_real_log), max(y_pred_log))
     ax.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--', linewidth=1)
-    ax.set_title("Aderência (Log Real vs Prev)", fontsize=6)
-    ax.set_xlabel("Reais (ln)", fontsize=5)
-    ax.set_ylabel("Previstos (ln)", fontsize=5)
-    ax.tick_params(labelsize=4)
+    ax.set_title("Aderência (Log Real vs Prev)", fontsize=7)
+    ax.set_xlabel("Reais (ln)", fontsize=6)
+    ax.set_ylabel("Previstos (ln)", fontsize=6)
+    ax.tick_params(labelsize=5)
     plt.tight_layout()
     buf_aderencia = io.BytesIO()
     plt.savefig(buf_aderencia, format='png', dpi=150)
     buf_aderencia.seek(0)
     plt.close(fig)
 
-    fig, ax = plt.subplots(figsize=(2.2, 1.4))
-    ax.scatter(y_pred_log, residuos_log, color='#38A169', s=12)
+    fig, ax = plt.subplots(figsize=(2.5, 1.8))
+    ax.scatter(y_pred_log, residuos_log, color='#38A169', s=14)
     ax.axhline(0, color='black', linestyle='-', linewidth=1)
-    ax.set_title("Resíduos Homocedásticos", fontsize=6)
-    ax.set_xlabel("Previstos (ln)", fontsize=5)
-    ax.set_ylabel("Resíduos (ln)", fontsize=5)
-    ax.tick_params(labelsize=4)
+    ax.set_title("Resíduos Homocedásticos", fontsize=7)
+    ax.set_xlabel("Previstos (ln)", fontsize=6)
+    ax.set_ylabel("Resíduos (ln)", fontsize=6)
+    ax.tick_params(labelsize=5)
     plt.tight_layout()
     buf_residuos = io.BytesIO()
     plt.savefig(buf_residuos, format='png', dpi=150)
     buf_residuos.seek(0)
     plt.close(fig)
 
-    fig, ax = plt.subplots(figsize=(2.2, 1.4))
+    fig, ax = plt.subplots(figsize=(2.5, 1.8))
     if len(cooks_d) > 0:
         indices = np.arange(len(cooks_d))
         ax.stem(indices, cooks_d, linefmt='#DD6B20', markerfmt='o', basefmt=" ")
         ax.axhline(limite_cook, color='red', linestyle='--', linewidth=1)
-    ax.set_title("Distância de Cook", fontsize=6)
-    ax.set_xlabel("Dado", fontsize=5)
-    ax.set_ylabel("Di", fontsize=5)
-    ax.tick_params(labelsize=4)
+    ax.set_title("Distância de Cook", fontsize=7)
+    ax.set_xlabel("Dado", fontsize=6)
+    ax.set_ylabel("Di", fontsize=6)
+    ax.tick_params(labelsize=5)
     plt.tight_layout()
     buf_cook = io.BytesIO()
     plt.savefig(buf_cook, format='png', dpi=150)
     buf_cook.seek(0)
     plt.close(fig)
 
-    fig, (ax_tot, ax_unit) = plt.subplots(1, 2, figsize=(4.0, 1.4))
+    fig, (ax_tot, ax_unit) = plt.subplots(1, 2, figsize=(4.5, 1.8))
     
     if df_modelo_final is not None and col_area_base in df_modelo_final.columns and col_valor_total in df_modelo_final.columns:
         df_ord = df_modelo_final.sort_values(by=col_area_base)
@@ -371,25 +371,25 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
         min_ip_tot_mi = min_ip_tot / 1e6
         max_ip_tot_mi = max_ip_tot / 1e6
 
-        ax_tot.plot(areas, max_ip_tot_mi, color='#DD6B20', linestyle='--', linewidth=0.8, label='Máx (IP)')
-        ax_tot.plot(areas, max_ic_tot_mi, color='#D69E2E', linestyle='-', linewidth=0.8, label='Máx (IC)')
-        ax_tot.plot(areas, v_totais_mi, color='black', linewidth=1.0, label='Estimado')
-        ax_tot.plot(areas, min_ic_tot_mi, color='#2B6CB0', linestyle='-', linewidth=0.8, label='Mín (IC)')
-        ax_tot.plot(areas, min_ip_tot_mi, color='#3182CE', linestyle='--', linewidth=0.8, label='Mín (IP)')
-        ax_tot.set_title("Total (R$ Milhões)", fontsize=5)
-        ax_tot.tick_params(labelsize=3.5)
+        ax_tot.plot(areas, max_ip_tot_mi, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
+        ax_tot.plot(areas, max_ic_tot_mi, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
+        ax_tot.plot(areas, v_totais_mi, color='black', linewidth=1.2, label='Estimado')
+        ax_tot.plot(areas, min_ic_tot_mi, color='#2B6CB0', linestyle='-', linewidth=1, label='Mín (IC)')
+        ax_tot.plot(areas, min_ip_tot_mi, color='#3182CE', linestyle='--', linewidth=1, label='Mín (IP)')
+        ax_tot.set_title("Total (R$ Milhões)", fontsize=6)
+        ax_tot.tick_params(labelsize=4)
         
         import matplotlib.ticker as ticker
         ax_tot.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x:.2f} M'))
         ax_tot.grid(True, linestyle=':', alpha=0.5)
 
-        ax_unit.plot(areas, max_ip_unit, color='#DD6B20', linestyle='--', linewidth=0.8, label='Máx (IP)')
-        ax_unit.plot(areas, max_ic_unit, color='#D69E2E', linestyle='-', linewidth=0.8, label='Máx (IC)')
-        ax_unit.plot(areas, estimado_unit, color='black', linewidth=1.0, label='Estimado')
-        ax_unit.plot(areas, min_ic_unit, color='#2B6CB0', linestyle='-', linewidth=0.8, label='Mín (IC)')
-        ax_unit.plot(areas, min_ip_unit, color='#3182CE', linestyle='--', linewidth=0.8, label='Mín (IP)')
-        ax_unit.set_title("Unitário (R$/m²)", fontsize=5)
-        ax_unit.tick_params(labelsize=3.5)
+        ax_unit.plot(areas, max_ip_unit, color='#DD6B20', linestyle='--', linewidth=1, label='Máx (IP)')
+        ax_unit.plot(areas, max_ic_unit, color='#D69E2E', linestyle='-', linewidth=1, label='Máx (IC)')
+        ax_unit.plot(areas, estimado_unit, color='black', linewidth=1.2, label='Estimado')
+        ax_unit.plot(areas, min_ic_unit, color='#2B6CB0', linestyle='-', linewidth=1, label='Mín (IC)')
+        ax_unit.plot(areas, min_ip_unit, color='#3182CE', linestyle='--', linewidth=1, label='Mín (IP)')
+        ax_unit.set_title("Unitário (R$/m²)", fontsize=6)
+        ax_unit.tick_params(labelsize=4)
         ax_unit.grid(True, linestyle=':', alpha=0.5)
 
     plt.tight_layout()
@@ -401,29 +401,28 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     return buf_aderencia, buf_residuos, buf_cook, buf_minmax
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO (COMPACTADO EXATAMENTE PARA 1 PÁGINA PRINCIPAL)
+# GERADOR DE PDF CUSTOMIZADO (DISTRIBUÍDO EM 2 PÁGINAS PERFEITAS)
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, amplitude_ic_perc, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, observacoes_gerais, incluir_planilha_dados, logo_bytes, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
-    # Margens e topMargin ajustados milimetricamente para garantir página única
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=20, leftMargin=20, topMargin=45, bottomMargin=20)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=55, bottomMargin=30)
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=10, textColor=colors.HexColor("#1A365D"), spaceAfter=3, leading=12)
-    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=8, textColor=colors.HexColor("#2B6CB0"), spaceAfter=2, spaceBefore=3, leading=9)
-    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=6.5, leading=8.5, spaceAfter=2)
-    table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=5.5, leading=7.0)
-    table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=5.5, leading=7.0, fontName='Helvetica-Bold')
+    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=11, textColor=colors.HexColor("#1A365D"), spaceAfter=4, leading=13)
+    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=8.5, textColor=colors.HexColor("#2B6CB0"), spaceAfter=3, spaceBefore=4, leading=10)
+    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7, leading=9.5, spaceAfter=2)
+    table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=6, leading=8)
+    table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=6, leading=8, fontName='Helvetica-Bold')
 
     def cabecalho_banner_canvas(canvas, document):
         canvas.saveState()
         page_width, page_height = landscape(letter)
         
         canvas.setFillColor(colors.HexColor("#F7FAFC"))
-        canvas.rect(20, page_height - 40, page_width - 40, 36, fill=1, stroke=0)
+        canvas.rect(30, page_height - 48, page_width - 60, 42, fill=1, stroke=0)
         canvas.setStrokeColor(colors.HexColor("#CBD5E0"))
         canvas.setLineWidth(0.5)
-        canvas.line(20, page_height - 40, page_width - 20, page_height - 40)
+        canvas.line(30, page_height - 48, page_width - 30, page_height - 48)
         
         if logo_bytes:
             try:
@@ -436,34 +435,35 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
                 img_clean_io.seek(0)
                 
                 img_w, img_h = pil_img.size
-                target_h = 26.0
-                target_w = (img_w / img_h) * target_h if img_h > 0 else 80.0
-                if target_w > 130.0:
-                    target_w = 130.0
+                target_h = 32.0
+                target_w = (img_w / img_h) * target_h if img_h > 0 else 100.0
+                if target_w > 150.0:
+                    target_w = 150.0
                     target_h = (img_h / img_w) * target_w
                 
                 rl_img = RLImage(img_clean_io, width=target_w, height=target_h)
-                rl_img.drawOn(canvas, 25, page_height - 35)
+                rl_img.drawOn(canvas, 36, page_height - 44)
             except Exception:
-                canvas.setFont("Helvetica-Bold", 7)
+                canvas.setFont("Helvetica-Bold", 8)
                 canvas.setFillColor(colors.HexColor("#E53E3E"))
-                canvas.drawString(25, page_height - 25, "[Erro ao renderizar Logo]")
+                canvas.drawString(38, page_height - 28, "[Erro ao renderizar Logo]")
         else:
-            canvas.setFont("Helvetica-Bold", 8)
+            canvas.setFont("Helvetica-Bold", 8.5)
             canvas.setFillColor(colors.HexColor("#2B6CB0"))
-            canvas.drawString(25, page_height - 25, "PLATAFORMA AVM — LAUDO TÉCNICO")
+            canvas.drawString(38, page_height - 28, "PLATAFORMA AVM — LAUDO TÉCNICO")
 
-        canvas.setFont("Helvetica-Bold", 7.5)
+        canvas.setFont("Helvetica-Bold", 8)
         canvas.setFillColor(colors.HexColor("#1A365D"))
-        canvas.drawRightString(page_width - 25, page_height - 25, f"LAUDO TÉCNICO AVM | OS: {ordem_servico}")
+        canvas.drawRightString(page_width - 35, page_height - 28, f"LAUDO TÉCNICO AVM | OS: {ordem_servico}")
         canvas.restoreState()
 
     story = []
 
+    # ==================== PÁGINA 1 ====================
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS / Referência):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco} | <b>Contato (OS):</b> {informante} | {telefone}", text_style))
-    story.append(Spacer(1, 2))
+    story.append(Spacer(1, 3))
 
     story.append(Paragraph("1. Atributos do Imóvel Avaliando, Especificações, Limites da Amostra e Sinais", subtitle_style))
     
@@ -491,16 +491,16 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
             Paragraph(lim_val, table_cell_style)
         ])
         
-    t_atrib = Table(t_atrib_data, colWidths=[110, 70, 180, 110, 50, 214])
+    t_atrib = Table(t_atrib_data, colWidths=[110, 80, 150, 100, 50, 222])
     t_atrib.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 2),
-        ('FONTSIZE', (0, 0), (-1, -1), 5.5),
+        ('PADDING', (0, 0), (-1, -1), 2.5),
+        ('FONTSIZE', (0, 0), (-1, -1), 6),
     ]))
     story.append(t_atrib)
-    story.append(Spacer(1, 2))
+    story.append(Spacer(1, 3))
 
     story.append(Paragraph("2. Equação do Modelo Válido (Log-Linear Homogeneizado - 6 Casas Decimais)", subtitle_style))
     intercepto_val = coeficientes.get('intercepto', 0)
@@ -510,7 +510,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         sinal_coef = sinais_var.get(feat, "+")
         eq_str += f" {sinal_coef} ({abs(coef):,.6f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
-    story.append(Spacer(1, 2))
+    story.append(Spacer(1, 3))
 
     story.append(Paragraph("3. Resultados da Avaliação, Campo de Arbítrio e Valor Adotado na Precificação", subtitle_style))
     op_str_visual = "+" if tipo_operador_ajuste == "majorado (+)" else "-"
@@ -525,18 +525,18 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [f"Valor Adotado ({op_str_visual}{percentual_ajuste:.1f}%)", f"R$ {valores['v_adotado']:,.2f}", f"R$ {valores['vu_adotado']:,.2f}", f"{op_str_visual}{percentual_ajuste:.2f}%"],
         ["Máximo (Mercado)", f"R$ {valores['v_max']:,.2f}", f"R$ {valores['vu_max']:,.2f}", f"{valores['var_max']:+.2f}%"],
         ["Campo de Arbítrio (±15%)", f"R$ {valores['v_inf_arb']:,.2f} a R$ {valores['v_sup_arb']:,.2f}", f"R$ {valores['vu_inf_arb']:,.2f} a R$ {valores['vu_sup_arb']:,.2f}", "-15% a +15%"],
-    ], colWidths=[180, 178, 178, 178])
+    ], colWidths=[180, 180, 180, 172])
     t2.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 2),
-        ('FONTSIZE', (0, 0), (-1, -1), 5.5),
+        ('PADDING', (0, 0), (-1, -1), 3),
+        ('FONTSIZE', (0, 0), (-1, -1), 6),
         ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor("#FEFCBF")),
         ('BACKGROUND', (0, 5), (-1, 5), colors.HexColor("#EDF2F7")),
     ]))
     story.append(t2)
-    story.append(Spacer(1, 2))
+    story.append(Spacer(1, 3))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     micro_status_text = "REPRESENTATIVIDADE ATENDIDA (Saneamento Aplicado)"
@@ -547,50 +547,56 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Métricas: R² = {r2} | Amplitude IC = {amplitude_ic_perc:.2f}% | Dados Efetivos = {n_dados} | Máx p-t: {max_p_regressor*100:.2f}% | p-F: {p_valor_f:.4f}", table_cell_style), Paragraph("ATENDIDO", table_cell_style)]
     ]
 
-    t_fund = Table(t_fund_data, colWidths=[60, 534, 140])
+    t_fund = Table(t_fund_data, colWidths=[60, 532, 120])
     t_fund.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3182CE")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 2),
+        ('PADDING', (0, 0), (-1, -1), 2.5),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor("#EDF2F7")),
     ]))
     story.append(t_fund)
-    story.append(Spacer(1, 2))
 
-    story.append(Paragraph("5. Gráficos Estatísticos de Validação & Esteira Jurídica (BACEN CMN 4.910)", subtitle_style))
-    img_ad = RLImage(buf_ad, width=150, height=85)
-    img_res = RLImage(buf_res, width=150, height=85)
-    img_cook = RLImage(buf_cook, width=150, height=85)
-    img_minmax = RLImage(buf_minmax, width=150, height=85)
+    # ==================== FORÇANDO A QUEBRA EXATA PARA A PÁGINA 2 ====================
+    story.append(PageBreak())
+
+    # ==================== PÁGINA 2 ====================
+    story.append(Paragraph("5. Gráficos Estatísticos de Validação & Esteira Jurídica (BACEN CMN 4.910)", title_style))
+    story.append(Spacer(1, 4))
+
+    img_ad = RLImage(buf_ad, width=170, height=105)
+    img_res = RLImage(buf_res, width=170, height=105)
+    img_cook = RLImage(buf_cook, width=170, height=105)
+    img_minmax = RLImage(buf_minmax, width=170, height=105)
     
-    t_graf_table = Table([[img_ad, img_res, img_cook, img_minmax]], colWidths=[184, 184, 184, 182])
+    t_graf_table = Table([[img_ad, img_res, img_cook, img_minmax]], colWidths=[183, 183, 183, 183])
     t_graf_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
     story.append(t_graf_table)
-    story.append(Spacer(1, 2))
+    story.append(Spacer(1, 6))
 
     t3 = Table([
         ["Status Jurídico da Matrícula:", "APROVADO" if status_juridico else "REPROVADO", "Grau de Risco Legal:", score_juridico],
-    ], colWidths=[140, 227, 130, 237])
+    ], colWidths=[150, 217, 130, 215])
     t3.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 2),
+        ('PADDING', (0, 0), (-1, -1), 3),
         ('TEXTCOLOR', (1, 0), (1, 0), colors.HexColor("#38A169") if status_juridico else colors.HexColor("#E53E3E")),
-        ('FONTSIZE', (0, 0), (-1, -1), 6),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
     ]))
     story.append(t3)
 
     if observacoes_gerais and observacoes_gerais.strip():
-        story.append(Spacer(1, 2))
-        story.append(Paragraph(f"<b>Observações Gerais:</b> {observacoes_gerais}", text_style))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("6. Observações Gerais", subtitle_style))
+        story.append(Paragraph(observacoes_gerais, text_style))
 
     if incluir_planilha_dados and df_original_bruto is not None:
         story.append(PageBreak())
-        story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (COMPLETA)", title_style))
-        story.append(Paragraph("Relação completa da base de mercado carregada.", text_style))
-        story.append(Spacer(1, 4))
+        story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (COMPLETA - TODAS AS VARIÁVEIS)", title_style))
+        story.append(Paragraph("Abaixo consta a relação completa e detalhada da base de mercado carregada, apresentando todas as colunas e variáveis da planilha original em formato amplo.", text_style))
+        story.append(Spacer(1, 6))
 
         indices_validos = df_final_utilizado.index if df_final_utilizado is not None else []
         colunas_originais = df_original_bruto.columns.tolist()
@@ -618,7 +624,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
             tabela_dados_pdf.append(linha_dados)
             
         num_cols = len(cabecalho_tabela)
-        largura_col = max(30.0, 734.0 / num_cols)
+        largura_col = max(35.0, 732.0 / num_cols)
         col_widths_list = [largura_col] * num_cols
         
         t_dados_rel = Table(tabela_dados_pdf, colWidths=col_widths_list, repeatRows=1)
@@ -626,7 +632,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1A365D")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-            ('PADDING', (0, 0), (-1, -1), 2),
+            ('PADDING', (0, 0), (-1, -1), 2.5),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ]))
         story.append(t_dados_rel)
@@ -751,7 +757,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Laudo Compactado Exatamente em 1 Página Principal**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Laudo Distribuído Perfeitamente (Página 1 de Resumo / Página 2 de Gráficos e Jurídico)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state: st.session_state.os_auto = ""
@@ -1122,7 +1128,7 @@ with aba_avm:
                             r1, r2_col, r3 = st.columns(3)
                             r1.metric("Mínimo (Segurança)", f"R$ {v_min:,.2f}", f"{var_min:+.2f}%")
                             r2_col.metric("Estimado (Tendência Central / Face)", f"R$ {v_medio:,.2f}", "0.00% (Base)")
-                            r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:,.2f}%")
+                            r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:+.2f}%")
 
                             sinal_str_exibicao = "+" if tipo_operador_ajuste == "majorado (+)" else "-"
                             st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
