@@ -964,7 +964,6 @@ with aba_avm:
                     motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...")
 
                 st.markdown("---")
-                # CORREÇÃO DO TEXTO PARA FUNDAMENTAÇÃO
                 st.subheader("5. Atribuição Manual de Notas FUNDAMENTAÇÃO-NBR (Obrigatório Itens 1 e 3)")
                 notas_manuais_input = {}
                 col_n1, col_n2 = st.columns(2)
