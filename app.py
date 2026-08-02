@@ -19,8 +19,11 @@ from PIL import Image as PILImage
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# GERENCIAMENTO DE HISTÓRICO DE DIGITAÇÃO (APENAS TEXTOS NÃO-NUMÉRICOS)
+# GERENCIAMENTO DE HISTÓRICO DE DIGITAÇÃO (PREPARADO PARA PERSISTÊNCIA / LOGIN)
 # =====================================================================
+if 'usuario_logado' not in st.session_state:
+    st.session_state.usuario_logado = "usuario_padrao_sistema"
+
 if 'historico_digitacao' not in st.session_state:
     st.session_state.historico_digitacao = {}
 
@@ -459,7 +462,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story = []
 
-    # ==================== PÁGINA 1 (INCLUINDO A TABELA DE AUDITORIA QUE SUBIU) ====================
+    # ==================== PÁGINA 1 ====================
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS / Referência):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco} | <b>Contato (OS):</b> {informante} | {telefone}", text_style))
@@ -539,8 +542,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 2))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
-    micro_status_text = "REPRESENTATIVIDADE ATENDIDA (Saneamento Aplicado)"
-
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
         [Paragraph("1 a 6", table_cell_style), Paragraph(f"Critérios NBR (Itens 1 a 6) | Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_style), Paragraph(f"{soma_pontos} PONTOS", table_cell_style)],
@@ -556,7 +557,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     ]))
     story.append(t_fund)
 
-    # ==================== FORÇANDO A QUEBRA EXATA PARA A PÁGINA 2 (GRÁFICOS E JURÍDICO) ====================
     story.append(PageBreak())
 
     # ==================== PÁGINA 2 ====================
@@ -642,7 +642,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER LIMPO E ROBUSTO
+# MOTOR DE PARSER OTIMIZADO PARA ALTA VELOCIDADE
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -652,17 +652,23 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         texto_arquivo = ""
         try:
             bytes_arq = arquivo.read()
+            # ETAPA 1: Leitura rápida e nativa do PDF (Sem OCR)
             with pdfplumber.open(io.BytesIO(bytes_arq)) as pdf:
                 for pagina in pdf.pages:
                     txt = pagina.extract_text()
                     if txt:
                         texto_arquivo += txt + "\n"
+            
+            # ETAPA 2: Acionamento condicional de OCR ultrarrápido (apenas se PDF escaneado sem texto)
             if not texto_arquivo.strip():
-                imagens = convert_from_bytes(bytes_arq)
+                imagens = convert_from_bytes(bytes_arq, dpi=150)
                 for img in imagens:
                     txt_ocr = pytesseract.image_to_string(img, lang='por')
                     texto_arquivo += txt_ocr + "\n"
-            logs_execucao.append(f"Arquivo `{arquivo.name}` lido com sucesso ({len(texto_arquivo)} caracteres).")
+                logs_execucao.append(f"Arquivo `{arquivo.name}` processado via OCR otimizado (DPI 150).")
+            else:
+                logs_execucao.append(f"Arquivo `{arquivo.name}` lido instantaneamente via texto nativo ({len(texto_arquivo)} caracteres).")
+                
         except Exception as e:
             logs_execucao.append(f"Erro ao ler o arquivo `{arquivo.name}`: {str(e)}")
             
@@ -769,7 +775,7 @@ if 'classificacoes_variaveis' not in st.session_state: st.session_state.classifi
 if 'especificacoes_variaveis' not in st.session_state: st.session_state.especificacoes_variaveis = {}
 if 'sinais_variaveis' not in st.session_state: st.session_state.sinais_variaveis = {}
 
-# MENU LATERAL ESQUERDO (MANTIDO CONFORME REQUERIDO)
+# MENU LATERAL ESQUERDO
 st.sidebar.markdown("🔑 **Identificação do Contratante**")
 tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
 plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
@@ -828,7 +834,7 @@ with aba_avm:
 
     if documentos_enviados:
         if st.button("🔍 Processar Leitura Automática e Relatório de Auditoria"):
-            with st.spinner("Processando certidão/documentos e extraindo variáveis..."):
+            with st.spinner("Processando certidão/documentos em alta velocidade..."):
                 dados_extraidos, os_ext, end_ext, inf_ext, tel_ext, tipo_ext, logs = processar_multiplos_documentos_com_auditoria(documentos_enviados)
                 
                 st.info("📋 **Relatório de Auditoria e Extração Documental:**")
