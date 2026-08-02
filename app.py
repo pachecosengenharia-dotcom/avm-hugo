@@ -97,21 +97,21 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO EXATO E REGISTRO DETALHADO PARA VISUALIZAÇÃO NA PLATAFORMA
+# SANEAMENTO EXATO RESTRITO (APENAS DICOTÔMICA, CÓDIGO ALOCADO E PROXY)
 # =====================================================================
-def sanear_micronumerosidade_exato(df, features_selecionadas):
+def sanear_micronumerosidade_exato(df, features_selecionadas, classificacoes_var):
     df_saneado = df.copy()
-    termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado', 'quartos', 'suites', 'vagas']
-    
     log_reclassificacoes = []
     
+    tipos_saneaveis = ["Dicotômica", "Código Alocado", "Proxy"]
+    
     for feat in features_selecionadas:
-        feat_lower = feat.lower()
         if feat not in df_saneado.columns:
             continue
             
-        is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos)
-        if not is_qualitativo:
+        tipo_atual = classificacoes_var.get(feat, "Quantitativa")
+        if tipo_atual not in tipos_saneaveis:
+            # Variáveis quantitativas ou dependentes NUNCA são alteradas automaticamente
             continue
             
         serie = df_saneado[feat]
@@ -136,7 +136,7 @@ def sanear_micronumerosidade_exato(df, features_selecionadas):
                     for idx in idx_vizinho:
                         if convertidos < defasagem:
                             df_saneado.loc[idx, feat] = val
-                            log_reclassificacoes.append(f"🔄 Atributo `{feat}` convertido de `{vizinho}` para `{val}` (Dado ID {idx}) para atingir exatamente 10% da amostra.")
+                            log_reclassificacoes.append(f"🔄 Atributo `{feat}` ({tipo_atual}) convertido de `{vizinho}` para `{val}` (Dado ID {idx}) para atingir exatamente 10% da amostra.")
                             convertidos += 1
                         else:
                             break
@@ -152,33 +152,32 @@ def sanear_micronumerosidade_exato(df, features_selecionadas):
 
     return df_saneado, log_reclassificacoes
 
-def verificar_micronumerosidade(df, features_selecionadas):
+def verificar_micronumerosidade(df, features_selecionadas, classificacoes_var):
     alertas_micronumerosidade = []
     n_total = len(df)
-    termos_qualitativos = ['acabamento', 'conservacao', 'padrao', 'tipologia', 'frente', 'esquina', 'topografia', 'posicao', 'situacao', 'estado', 'quartos', 'suites', 'vagas']
+    tipos_saneaveis = ["Dicotômica", "Código Alocado", "Proxy"]
     
     for feat in features_selecionadas:
-        feat_lower = feat.lower()
         if feat not in df.columns:
             continue
+        tipo_atual = classificacoes_var.get(feat, "Quantitativa")
+        if tipo_atual not in tipos_saneaveis:
+            continue
+            
         serie = df[feat]
         valores_unicos = serie.unique()
         
-        is_dicotomica = len(valores_unicos) <= 3
-        is_qualitativo = any(termo in feat_lower for termo in termos_qualitativos) and len(valores_unicos) <= 15
-        
-        if is_dicotomica or is_qualitativo:
-            for val in valores_unicos:
-                contagem = (serie == val).sum()
-                percentual = (contagem / n_total) * 100 if n_total > 0 else 0
-                if percentual < 10.0:
-                    alertas_micronumerosidade.append({
-                        'feature': feat,
-                        'valor': val,
-                        'contagem': contagem,
-                        'percentual': percentual,
-                        'mensagem': f"⚠️ **{feat}** (Código/Valor `{val}`): possui apenas {contagem} dados (**{percentual:.1f}%** - abaixo do limite normativo de 10%)."
-                    })
+        for val in valores_unicos:
+            contagem = (serie == val).sum()
+            percentual = (contagem / n_total) * 100 if n_total > 0 else 0
+            if percentual < 10.0:
+                alertas_micronumerosidade.append({
+                    'feature': feat,
+                    'valor': val,
+                    'contagem': contagem,
+                    'percentual': percentual,
+                    'mensagem': f"⚠️ **{feat}** ({tipo_atual}, Código/Valor `{val}`): possui apenas {contagem} dados (**{percentual:.1f}%** - abaixo do limite normativo de 10%)."
+                })
                     
     return alertas_micronumerosidade
 
@@ -380,7 +379,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph(f"<b>Informante / Contato:</b> {informante} | <b>Telefone:</b> {telefone}", text_style))
     story.append(Spacer(1, 4))
 
-    # Tabela detalhada de Atributos, Limites, Especificações, Classificação e Sinais solicitada
     story.append(Paragraph("1. Atributos do Imóvel Avaliando, Especificações, Limites da Amostra e Sinais", subtitle_style))
     
     t_atrib_data = [
@@ -424,7 +422,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     for feat in features:
         coef = coeficientes.get(feat, 0.0)
         sinal_coef = sinais_var.get(feat, "+")
-        sinal = "+" if coef >= 0 else "-"
         eq_str += f" {sinal_coef} ({abs(coef):,.6f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
     story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Dados Efetivos = {n_dados} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
@@ -457,7 +454,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
-    micro_status_text = "REPRESENTATIVIDADE ATENDIDA (Saneamento Exato Aplicado)"
+    micro_status_text = "REPRESENTATIVIDADE ATENDIDA (Saneamento Exato Restrito Aplicado)"
 
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
@@ -467,8 +464,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("4", table_cell_style), Paragraph(f"Extrapolabilidade ({'Com Extrapol.' if variaveis_extrapoladas else 'Sem Extrapol.'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
         [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
-        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Representatividade por Atributo ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
-        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após o saneamento exato e Cook: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
+        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Restrito a Dicotômicas, Códigos e Proxies ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
+        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após o saneamento restrito e Cook: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
         [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
 
@@ -673,7 +670,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Especificações Manuais e Sinal (+ / -) por Variável**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Restrito (Apenas Dicotômicas, Códigos e Proxies)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -858,8 +855,10 @@ with aba_avm:
                 col_alvo_temp = 'valor_unitario_amostra'
                 df_modelo_teste[col_alvo_temp] = (df_modelo_teste[col_valor_total] * fator_escala_teste) / df_modelo_teste[col_area_base]
 
-                df_amostra_saneada, logs_prev = sanear_micronumerosidade_exato(df_modelo_teste, features_selecionadas)
-                alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas)
+                # Passa as classificações informadas para o saneamento restrito (apenas dicotômica, código alocado e proxy)
+                classificacoes_atuais_dict = {f: st.session_state.classificacoes_variaveis.get(f, "Quantitativa") for f in features_selecionadas}
+                df_amostra_saneada, logs_prev = sanear_micronumerosidade_exato(df_modelo_teste, features_selecionadas, classificacoes_atuais_dict)
+                alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas, classificacoes_atuais_dict)
 
                 st.markdown(f"##### 📝 Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
                 
@@ -971,25 +970,26 @@ with aba_avm:
                     coluna_alvo_unitario = 'valor_unitario_amostra'
                     df_modelo[coluna_alvo_unitario] = (df_modelo[col_valor_total] * fator_escala) / df_modelo[col_area_base]
                     
-                    df_modelo_saneado, logs_reclassificacao = sanear_micronumerosidade_exato(df_modelo, features_selecionadas)
+                    classificacoes_finais_dict = {f: st.session_state.classificacoes_variaveis.get(f, "Quantitativa") for f in features_selecionadas}
+                    df_modelo_saneado, logs_reclassificacao = sanear_micronumerosidade_exato(df_modelo, features_selecionadas, classificacoes_finais_dict)
                     df_modelo_final, cooks_d_vals, limite_cook_val = calcular_distancia_cook_e_filtrar(df_modelo_saneado, coluna_alvo_unitario, features_selecionadas)
                     
                     n_dados_efetivos = len(df_modelo_final)
                     
-                    st.success(f"✅ Saneamento executado com sucesso! Dados efetivos utilizados: **{n_dados_efetivos} registros**.")
-                    with st.expander("🔍 **Visualizar Relatório Detalhado do Saneamento Realizado (Plataforma)**", expanded=True):
+                    st.success(f"✅ Saneamento restrito executado com sucesso! Dados efetivos utilizados: **{n_dados_efetivos} registros**.")
+                    with st.expander("🔍 **Visualizar Relatório Detalhado do Saneamento Restrito Realizado (Plataforma)**", expanded=True):
                         st.markdown("### Histórico de Ações do Motor de Saneamento:")
                         if logs_reclassificacao:
                             for log_item in logs_reclassificacao:
                                 st.write(f"- {log_item}")
                         else:
-                            st.write("- Todos os atributos da amostra já atendiam nativamente ao critério normativo de representatividade (≥ 10%).")
+                            st.write("- As variáveis elegíveis (Dicotômicas, Códigos Alocados e Proxies) já atendiam nativamente ao critério normativo de representatividade (≥ 10%). Variáveis quantitativas puras foram preservadas integralmente.")
                         
                         st.markdown("---")
                         st.markdown("### Tabela Comparativa de Dados Considerados na Amostra:")
                         st.dataframe(df_modelo_final, use_container_width=True)
 
-                    alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo_final, features_selecionadas)
+                    alertas_micronumerosidade_pos = verificar_micronumerosidade(df_modelo_final, features_selecionadas, classificacoes_finais_dict)
                     micronumerosidade_atendida = len(alertas_micronumerosidade_pos) == 0
                     
                     if n_dados_efetivos < 3:
