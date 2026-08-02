@@ -1309,18 +1309,47 @@ with aba_avm:
                             )
 
 with aba_juridico:
-    st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
+    st.subheader("📜 Esteira de Risco Jurídico da Matrícula (BACEN CMN 4.910)")
+    st.markdown("Selecione os critérios conferidos na documentação e processe a esteira para definir o risco normativo:")
+    
     j1, j2 = st.columns(2)
-    matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias)", value=True, key="chk_mat_ok")
-    sem_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora)", value=True, key="chk_sem_onus")
+    matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias) [OBRIGATÓRIO]", value=True, key="chk_mat_ok")
+    sem_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora) [OBRIGATÓRIO]", value=True, key="chk_sem_onus")
     sem_acoes = j2.checkbox("Sem ações reipersecutórias", value=True, key="chk_sem_acoes")
-    proprietario_ok = j2.checkbox("Vendedor é o proprietário registral", value=True, key="chk_prop_ok")
+    proprietario_ok = j2.checkbox("Vendedor é o proprietário registral", value=False, key="chk_prop_ok")
 
     if st.button("⚖️ Processar Análise Jurídica"):
-        aprovados = sum([matricula_ok, sem_onus, sem_acoes, proprietario_ok])
-        st.session_state.status_juridico_global = aprovados == 4
-        st.session_state.score_juridico_global = ["ALTO RISCO", "ALTO RISCO", "RISCO MODERADO", "RISCO BAIXO", "RISCO MÍNIMO"][aprovados]
-        if st.session_state.status_juridico_global:
-            st.success(f"✅ Documentação APROVADA — {st.session_state.score_juridico_global}")
+        # Regra de Obrigatoriedade Específica (Opção 2)
+        # Itens críticos obrigatórios para qualquer aceite: Matrícula Atualizada e Sem Ônus Reais
+        criticos_atendidos = matricula_ok and sem_onus
+        
+        # Contagem geral para definir o score descritivo
+        pontos_secundarios = sum([sem_acoes, proprietario_ok])
+        
+        if not criticos_atendidos:
+            # Se faltar um item crítico, o risco é inelegível / reprovado direto
+            st.session_state.status_juridico_global = False
+            st.session_state.score_juridico_global = "ALTO RISCO (Pendência em Requisito Crítico)"
         else:
-            st.error(f"❌ Documentação REPROVADA — {st.session_state.score_juridico_global}")
+            # Se os críticos estão OK, avaliamos os secundários para definir o score de risco
+            if pontos_secundarios == 2:
+                st.session_state.status_juridico_global = True
+                st.session_state.score_juridico_global = "RISCO MÍNIMO / BAIXO"
+            elif pontos_secundarios == 1:
+                st.session_state.status_juridico_global = True
+                st.session_state.score_juridico_global = "RISCO BAIXO A MODERADO"
+            else:
+                # Apenas os obrigatórios presentes, sem os secundários completos
+                st.session_state.status_juridico_global = True
+                st.session_state.score_juridico_global = "RISCO MODERADO"
+
+    # Exibição dinâmica em Tempo Real (Verde para Aprovado / Vermelho para Reprovado)
+    score_atual = st.session_state.get('score_juridico_global', 'PENDENTE')
+    status_atual = st.session_state.get('status_juridico_global', True)
+
+    if score_atual == "PENDENTE":
+        st.info("ℹ️ Status atual: Aguardando processamento da análise jurídica.")
+    elif status_atual:
+        st.success(f"✅ Documentação APROVADA — Grau de Risco Legal: **{score_atual}**")
+    else:
+        st.error(f"❌ Documentação REPROVADA — Grau de Risco Legal: **{score_atual}**")
