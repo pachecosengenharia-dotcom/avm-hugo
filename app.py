@@ -426,7 +426,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("3. Resultados da Avaliação, Campo de Arbítrio e Valor Adotado na Precificação", subtitle_style))
-    op_str_visual = "+" if tipo_operador_ajuste == "Acima (+)" else "-"
+    op_str_visual = "+" if tipo_operador_ajuste == "Majorado (+)" else "-"
     story.append(Paragraph(f"<b>Cálculo do Valor Adotado na Precificação:</b> Estimado (Tendência Central / Face) {op_str_visual} {percentual_ajuste:.1f}% = <b>R$ {valores['v_adotado']:,.2f}</b> (Unitário: R$ {valores['vu_adotado']:,.2f}/m²)", text_style))
     if motivo_ajuste and motivo_ajuste.strip():
         story.append(Paragraph(f"<b>Justificativa Técnica do Ajuste:</b> {motivo_ajuste}", text_style))
@@ -941,7 +941,7 @@ with aba_avm:
                 st.subheader("4. Ajustes e Parâmetros de Avaliação")
                 col_aj1, col_aj2, col_aj3 = st.columns(3)
                 with col_aj1:
-                    tipo_operador_ajuste = st.selectbox("Direção do Ajuste de Precificação:", ["Abaixo (-)", "Acima (+)"], index=1)
+                    tipo_operador_ajuste = st.selectbox("Direção do Ajuste de Precificação:", ["Depreciado (-)", "Majorado (+)"], index=1)
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
@@ -1050,7 +1050,7 @@ with aba_avm:
                         v_min = vu_min * area_avaliando
                         v_max = vu_max * area_avaliando
 
-                        fator_multiplicador = (1.0 + (percentual_ajuste / 100.0)) if tipo_operador_ajuste == "Acima (+)" else (1.0 - (percentual_ajuste / 100.0))
+                        fator_multiplicador = (1.0 + (percentual_ajuste / 100.0)) if tipo_operador_ajuste == "Majorado (+)" else (1.0 - (percentual_ajuste / 100.0))
                         
                         vu_adotado = vu_medio * fator_multiplicador
                         v_adotado = v_medio * fator_multiplicador
@@ -1091,7 +1091,7 @@ with aba_avm:
                             r2_col.metric("Estimado (Tendência Central / Face)", f"R$ {v_medio:,.2f}", "0.00% (Base)")
                             r3.metric("Máximo (Mercado)", f"R$ {v_max:,.2f}", f"{var_max:+.2f}%")
 
-                            sinal_str_exibicao = "+" if tipo_operador_ajuste == "Acima (+)" else "-"
+                            sinal_str_exibicao = "+" if tipo_operador_ajuste == "Majorado (+)" else "-"
                             st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
                             st.markdown(f"**Campo de Arbítrio (±15%):** R$ {v_inf_arb:,.2f} até R$ {v_sup_arb:,.2f}")
                             if motivo_ajuste_input:
