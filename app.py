@@ -184,11 +184,8 @@ def verificar_micronumerosidade(df, features_selecionadas, classificacoes_var):
 # AVALIAÇÃO NORMATIVA RIGOROSA CONFORME TABELA NBR 14653-2
 # =====================================================================
 def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f, tem_extrapolacao=False, notas_manuais=None):
-    # Notas manuais padrão para Itens 1 e 3 configuradas pelo usuário na tela principal
     p_item1 = notas_manuais.get('item1', 2) if notas_manuais else 2
     
-    # Item 2: Quantidade de dados pós-restrições (n)
-    # Grau III: n >= 30 | Grau II: 12 <= n < 30 | Grau I: n < 12
     if n_dados >= 30:
         p_item2 = 3
     elif n_dados >= 12:
@@ -197,12 +194,8 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
         p_item2 = 1
         
     p_item3 = notas_manuais.get('item3', 2) if notas_manuais else 2
-    
-    # Item 4: Extrapolabilidade (Sem extrapolação = Grau III [3] | Com extrapolação = Grau I [1])
     p_item4 = 1 if tem_extrapolacao else 3
     
-    # Item 5: Significância dos regressores (p-valor do teste t)
-    # Grau III: todos <= 10% | Grau II: todos <= 20% | Grau I: todos <= 30%
     max_p_regressor = max(p_valores_t[1:]) if len(p_valores_t) > 1 else 0.05
     if max_p_regressor <= 0.10:
         p_item5 = 3
@@ -213,8 +206,6 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     else:
         p_item5 = 0
         
-    # Item 6: Significância do modelo (p-valor do teste F de Snedecor)
-    # Grau III: p <= 0.01 | Grau II: p <= 0.05 | Grau I: p > 0.05
     if p_valor_f <= 0.01:
         p_item6 = 3
     elif p_valor_f <= 0.05:
@@ -235,10 +226,6 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     pontos_itens = [p_item1, p_item2, p_item3, p_item4, p_item5, p_item6]
     soma_pontos = sum(pontos_itens)
 
-    # Regras NBR para enquadramento de Fundamentação:
-    # Grau III: Soma >= 16, n >= 30, R² >= 0.70, sem extrapolação, p_item5 > 0
-    # Grau II: Soma >= 10, n >= 12, p_item5 > 0
-    # Grau I: Demais casos
     if soma_pontos >= 16 and n_dados >= 30 and r2 >= 0.70 and not tem_extrapolacao and p_item5 > 0:
         fundamentacao = "Grau III"
     elif soma_pontos >= 10 and n_dados >= 12 and p_item5 > 0:
@@ -246,7 +233,6 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     else:
         fundamentacao = "Inválido / Grau I"
 
-    # Precisão baseada no coeficiente de determinação (R²)
     if r2 >= 0.70:
         precisao = "Grau III"
     elif r2 >= 0.50:
@@ -854,37 +840,7 @@ with aba_avm:
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas, classificacoes_atuais_dict)
 
                 st.markdown("---")
-                st.subheader("⚙️ Atribuição Manual de Notas NBR (Obrigatório Itens 1 e 3)")
-                notas_manuais_input = {}
-                col_n1, col_n2 = st.columns(2)
-                with col_n1:
-                    notas_manuais_input['item1'] = st.number_input("Nota Item 1 (Caracterização do Imóvel)", min_value=1, max_value=3, value=2)
-                with col_n2:
-                    notas_manuais_input['item3'] = st.number_input("Nota Item 3 (Identificação dos Dados)", min_value=1, max_value=3, value=1)
-
-                usar_todas_manuais = st.checkbox("Ajustar itens restantes manualmente se necessário", value=False)
-                if usar_todas_manuais:
-                    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-                    with col_m1:
-                        notas_manuais_input['item2_manual'] = st.number_input("Nota Item 2 (Qtd Dados)", min_value=1, max_value=3, value=3)
-                    with col_m2:
-                        notas_manuais_input['item4_manual'] = st.number_input("Nota Item 4 (Extrapolabilidade)", min_value=1, max_value=3, value=3)
-                    with col_m3:
-                        notas_manuais_input['item5_manual'] = st.number_input("Nota Item 5 (Signif. Regressores)", min_value=1, max_value=3, value=3)
-                    with col_m4:
-                        notas_manuais_input['item6_manual'] = st.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3)
-
-                st.markdown("---")
-                st.subheader("🎚️ Ajustes e Parâmetros de Avaliação")
-                col_aj1, col_aj2, col_aj3 = st.columns(3)
-                with col_aj1:
-                    tipo_operador_ajuste = st.selectbox("Direção do Ajuste de Precificação:", ["Abaixo (-)", "Acima (+)"], index=1)
-                with col_aj2:
-                    percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
-                with col_aj3:
-                    motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...")
-
-                st.markdown(f"##### 📝 Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
+                st.subheader("3. Atributos do Imóvel Avaliando & Limites do Dado (Extrapolados)")
                 
                 dados_ia = st.session_state.get('dados_extraidos_ia', {})
                 campos_inteiros = [
@@ -946,7 +902,6 @@ with aba_avm:
                             valores_usuario[feat] = val_input
                             st.caption(f"📊 Limites: [{min_amostra:.2f} a {max_amostra:.2f}]")
                         
-                        # 1. Campo de Especificações
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
                         esp_input = st.text_input(
                             f"Especificações ({feat})",
@@ -956,7 +911,6 @@ with aba_avm:
                         )
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
-                        # 2. Campo de Classificação
                         classificacao_atual = st.session_state.classificacoes_variaveis.get(feat, "Quantitativa")
                         class_escolhida = st.selectbox(
                             f"Classif. ({feat})",
@@ -966,7 +920,6 @@ with aba_avm:
                         )
                         st.session_state.classificacoes_variaveis[feat] = class_escolhida
 
-                        # 3. Campo de Sinal (+ ou -)
                         sinal_atual = st.session_state.sinais_variaveis.get(feat, "+")
                         sinal_escolhido = st.selectbox(
                             f"Sinal ({feat})",
@@ -983,6 +936,37 @@ with aba_avm:
                         st.session_state.valores_manuais[feat] = valores_usuario[feat]
 
                 tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
+
+                st.markdown("---")
+                st.subheader("4. Ajustes e Parâmetros de Avaliação")
+                col_aj1, col_aj2, col_aj3 = st.columns(3)
+                with col_aj1:
+                    tipo_operador_ajuste = st.selectbox("Direção do Ajuste de Precificação:", ["Abaixo (-)", "Acima (+)"], index=1)
+                with col_aj2:
+                    percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
+                with col_aj3:
+                    motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...")
+
+                st.markdown("---")
+                st.subheader("5. Atribuição Manual de Notas NBR (Obrigatório Itens 1 e 3)")
+                notas_manuais_input = {}
+                col_n1, col_n2 = st.columns(2)
+                with col_n1:
+                    notas_manuais_input['item1'] = st.number_input("Nota Item 1 (Caracterização do Imóvel)", min_value=1, max_value=3, value=2)
+                with col_n2:
+                    notas_manuais_input['item3'] = st.number_input("Nota Item 3 (Identificação dos Dados)", min_value=1, max_value=3, value=1)
+
+                usar_todas_manuais = st.checkbox("Ajustar itens restantes manualmente se necessário", value=False)
+                if usar_todas_manuais:
+                    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                    with col_m1:
+                        notas_manuais_input['item2_manual'] = st.number_input("Nota Item 2 (Qtd Dados)", min_value=1, max_value=3, value=3)
+                    with col_m2:
+                        notas_manuais_input['item4_manual'] = st.number_input("Nota Item 4 (Extrapolabilidade)", min_value=1, max_value=3, value=3)
+                    with col_m3:
+                        notas_manuais_input['item5_manual'] = st.number_input("Nota Item 5 (Signif. Regressores)", min_value=1, max_value=3, value=3)
+                    with col_m4:
+                        notas_manuais_input['item6_manual'] = st.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3)
 
                 st.markdown("---")
                 if st.button("🚀 Executar Saneamento Exato e Gerar Laudo NBR"):
