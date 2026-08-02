@@ -408,11 +408,11 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=55, bottomMargin=30)
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=11, textColor=colors.HexColor("#1A365D"), spaceAfter=4, leading=13)
-    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=8.5, textColor=colors.HexColor("#2B6CB0"), spaceAfter=3, spaceBefore=4, leading=10)
-    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7, leading=9.5, spaceAfter=2)
-    table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=6, leading=8)
-    table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=6, leading=8, fontName='Helvetica-Bold')
+    title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=10, textColor=colors.HexColor("#1A365D"), spaceAfter=3, leading=12)
+    subtitle_style = ParagraphStyle('T2', parent=styles['Heading2'], fontSize=8, textColor=colors.HexColor("#2B6CB0"), spaceAfter=2, spaceBefore=3, leading=9)
+    text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=6.5, leading=8.5, spaceAfter=2)
+    table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=5.5, leading=7.5)
+    table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=5.5, leading=7.5, fontName='Helvetica-Bold')
 
     def cabecalho_banner_canvas(canvas, document):
         canvas.saveState()
@@ -459,11 +459,11 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story = []
 
-    # ==================== PÁGINA 1 ====================
+    # ==================== PÁGINA 1 (INCLUINDO A TABELA DE AUDITORIA QUE SUBIU) ====================
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS / Referência):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco} | <b>Contato (OS):</b> {informante} | {telefone}", text_style))
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
     story.append(Paragraph("1. Atributos do Imóvel Avaliando, Especificações, Limites da Amostra e Sinais", subtitle_style))
     
@@ -496,11 +496,11 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 2.5),
-        ('FONTSIZE', (0, 0), (-1, -1), 6),
+        ('PADDING', (0, 0), (-1, -1), 2),
+        ('FONTSIZE', (0, 0), (-1, -1), 5.5),
     ]))
     story.append(t_atrib)
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
     story.append(Paragraph("2. Equação do Modelo Válido (Log-Linear Homogeneizado - 6 Casas Decimais)", subtitle_style))
     intercepto_val = coeficientes.get('intercepto', 0)
@@ -510,7 +510,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         sinal_coef = sinais_var.get(feat, "+")
         eq_str += f" {sinal_coef} ({abs(coef):,.6f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
     story.append(Paragraph("3. Resultados da Avaliação, Campo de Arbítrio e Valor Adotado na Precificação", subtitle_style))
     op_str_visual = "+" if tipo_operador_ajuste == "majorado (+)" else "-"
@@ -530,13 +530,13 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 3),
-        ('FONTSIZE', (0, 0), (-1, -1), 6),
+        ('PADDING', (0, 0), (-1, -1), 2),
+        ('FONTSIZE', (0, 0), (-1, -1), 5.5),
         ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor("#FEFCBF")),
         ('BACKGROUND', (0, 5), (-1, 5), colors.HexColor("#EDF2F7")),
     ]))
     story.append(t2)
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 2))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     micro_status_text = "REPRESENTATIVIDADE ATENDIDA (Saneamento Aplicado)"
@@ -551,12 +551,12 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     t_fund.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3182CE")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 2.5),
+        ('PADDING', (0, 0), (-1, -1), 2),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor("#EDF2F7")),
     ]))
     story.append(t_fund)
 
-    # ==================== FORÇANDO A QUEBRA EXATA PARA A PÁGINA 2 ====================
+    # ==================== FORÇANDO A QUEBRA EXATA PARA A PÁGINA 2 (GRÁFICOS E JURÍDICO) ====================
     story.append(PageBreak())
 
     # ==================== PÁGINA 2 ====================
@@ -757,7 +757,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Laudo Distribuído Perfeitamente (Página 1 de Resumo / Página 2 de Gráficos e Jurídico)**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Laudo Distribuído Perfeitamente (Página 1 com Auditoria Integrada / Página 2 de Gráficos e Jurídico)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state: st.session_state.os_auto = ""
