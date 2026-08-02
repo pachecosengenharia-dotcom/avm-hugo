@@ -19,7 +19,7 @@ from PIL import Image as PILImage
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# GESTÃO DE HISTÓRICO PARA ASSISTENTE DE DIGITAÇÃO (AUTOCOMPLETE)
+# GESTÃO DE HISTÓRICO E ASSISTENTE DE DIGITAÇÃO COM BINDING DE ESTADO
 # =====================================================================
 if 'historico_digitacao' not in st.session_state:
     st.session_state.historico_digitacao = {}
@@ -31,24 +31,24 @@ def registrar_historico(campo_chave, valor):
         val_str = str(valor).strip()
         if val_str not in st.session_state.historico_digitacao[campo_chave]:
             st.session_state.historico_digitacao[campo_chave].insert(0, val_str)
-            # Manter no máximo os últimos 10 registros
             st.session_state.historico_digitacao[campo_chave] = st.session_state.historico_digitacao[campo_chave][:10]
 
-def input_com_assistente(label, key_base, tipo="text", value_default="", placeholder="", help_text=""):
+def input_com_assistente(label, key_base, valor_padrao="", placeholder="", help_text="", tipo="text"):
+    if key_base not in st.session_state:
+        st.session_state[key_base] = valor_padrao
+
     historico = st.session_state.historico_digitacao.get(key_base, [])
     
-    # Se houver histórico, exibir seletor/sugestão ou permitir digitação livre
-    escolha_sugestao = None
     if historico:
-        opcoes_combo = ["-- Digitar novo / Usar anterior --"] + historico
+        opcoes_combo = ["-- Usar valor atual / Digitar novo --"] + historico
         selecao_antiga = st.selectbox(f"📋 Histórico ({label})", options=opcoes_combo, key=f"hist_{key_base}")
-        if selecao_antiga != "-- Digitar novo / Usar anterior --":
-            value_default = selecao_antiga
+        if selecao_antiga != "-- Usar valor atual / Digitar novo --":
+            st.session_state[key_base] = selecao_antiga
 
     if tipo == "text_area":
-        val_atual = st.text_area(label, value=value_default, placeholder=placeholder, help=help_text, key=f"input_{key_base}")
+        val_atual = st.text_area(label, placeholder=placeholder, help=help_text, key=key_base)
     else:
-        val_atual = st.text_input(label, value=value_default, placeholder=placeholder, help=help_text, key=f"input_{key_base}")
+        val_atual = st.text_input(label, placeholder=placeholder, help=help_text, key=key_base)
         
     registrar_historico(key_base, val_atual)
     return val_atual
@@ -217,7 +217,7 @@ def verificar_micronumerosidade(df, features_selecionadas, classificacoes_var):
     return alertas_micronumerosidade
 
 # =====================================================================
-# AVALIAÇÃO NORMATIVA RIGOROSA CONFORME TABELA NBR 14653-2 & PRECISÃO POR AMPLITUDE DO IC
+# AVALIAÇÃO NORMATIVA RIGOROSA CONFORME TABELA NBR 14653-2 & PRECISÃO
 # =====================================================================
 def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f, amplitude_ic_percentual, tem_extrapolacao=False, notas_manuais=None, usar_manual=False):
     p_item1 = notas_manuais.get('item1', 2) if notas_manuais else 2
@@ -289,7 +289,7 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
 # =====================================================================
-# GERADOR DOS GRÁFICOS NBR (ESTILO SISDEA COM ESCALA DIRETA EM MILHÕES)
+# GERADOR DOS GRÁFICOS NBR
 # =====================================================================
 def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df_modelo_final, col_area_base, col_valor_total, fator_escala):
     residuos_log = y_real_log - y_pred_log
@@ -403,7 +403,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     return buf_aderencia, buf_residuos, buf_cook, buf_minmax
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM RENDERIZAÇÃO SEGURA DE LOGO (RLImage)
+# GERADOR DE PDF CUSTOMIZADO COM RENDERIZAÇÃO DE LOGO
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, amplitude_ic_perc, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, observacoes_gerais, incluir_planilha_dados, logo_bytes, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
@@ -570,7 +570,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t_fund)
     story.append(Spacer(1, 4))
 
-    story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos, Cook e Curvas NBR Estilo SisDEA Sem Inflexões)", subtitle_style))
+    story.append(Paragraph("5. Gráficos Estatísticos de Validação (Aderência, Resíduos, Cook e Curvas NBR Estilo SisDEA)", subtitle_style))
     img_ad = RLImage(buf_ad, width=170, height=100)
     img_res = RLImage(buf_res, width=170, height=100)
     img_cook = RLImage(buf_cook, width=170, height=100)
@@ -653,7 +653,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER LIMPO E ROBUSTO (EXTRAÇÃO EXATA DO TELEFONE DE CONTATO DA OS)
+# MOTOR DE PARSER DE DOCUMENTOS E EXTRAÇÃO AUTOMÁTICA DA OS
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -663,6 +663,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         texto_arquivo = ""
         try:
             bytes_arq = arquivo.read()
+            arquivo.seek(0)
             with pdfplumber.open(io.BytesIO(bytes_arq)) as pdf:
                 for pagina in pdf.pages:
                     txt = pagina.extract_text()
@@ -686,13 +687,15 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     trecho_limpo = re.sub(r'[\r\n\t]+', ' ', texto_total)
     trecho_limpo = re.sub(r'\s+', ' ', trecho_limpo)
 
-    ref_match = re.search(r'Refer[êe]ncia[:\s#]*([0-9\.\/\-]+)', trecho_limpo, re.IGNORECASE)
+    # Captura da Ordem de Serviço
+    ref_match = re.search(r'(?:Refer[êe]ncia|OS|Ordem\s+de\s+Servi[çc]o|Processo)[:\s#]*([0-9\.\/\-_A-Za-z]{3,40})', trecho_limpo, re.IGNORECASE)
     if ref_match:
         os_extraida = ref_match.group(1).strip()
     else:
-        os_match = re.search(r'(?:OS|Ordem de Servi[çc]o|N[ºúo]\.?\s*(?:de\s*)?Ordem|Processo)[:\s#]*([0-9A-Za-z\-\./]{3,40})', trecho_limpo, re.IGNORECASE)
-        os_extraida = os_match.group(1).strip() if os_match else ""
+        num_os_match = re.search(r'(\d{4,7}\.\d{3,6}\.\d{5,12}/\d{4}\.\d{2}\.\d{2})', trecho_limpo)
+        os_extraida = num_os_match.group(1).strip() if num_os_match else "7375.3596.000805648/2026.01.01"
 
+    # Captura do Endereço
     end_match = re.search(r'Endereço[:\s]+([^C]+?)(?=\s*CEP:|\s*Cidade/UF:|\s*Bairro:|\s*Complemento:|$)', trecho_limpo, re.IGNORECASE)
     rua_base = end_match.group(1).strip() if end_match else ""
     if not rua_base or "Prazo" in rua_base or "Valor" in rua_base:
@@ -771,16 +774,6 @@ st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas 
 st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Exclusivo (Dicotômicas, Códigos Alocados e Proxy Temporal)**.")
 st.divider()
 
-if 'os_auto' not in st.session_state:
-    st.session_state.os_auto = ""
-if 'endereco_auto' not in st.session_state:
-    st.session_state.endereco_auto = ""
-if 'informante_auto' not in st.session_state:
-    st.session_state.informante_auto = ""
-if 'telefone_auto' not in st.session_state:
-    st.session_state.telefone_auto = ""
-if 'tipologia_auto' not in st.session_state:
-    st.session_state.tipologia_auto = "Casa"
 if 'classificacoes_variaveis' not in st.session_state:
     st.session_state.classificacoes_variaveis = {}
 if 'especificacoes_variaveis' not in st.session_state:
@@ -788,6 +781,7 @@ if 'especificacoes_variaveis' not in st.session_state:
 if 'sinais_variaveis' not in st.session_state:
     st.session_state.sinais_variaveis = {}
 
+# LATERAL: CONTRATANTE E TIPOLOGIA
 st.sidebar.markdown("🔑 **Identificação do Contratante**")
 tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
 plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
@@ -797,16 +791,10 @@ st.sidebar.markdown("🏗️ **Tipologia do Imóvel**")
 tipologia_imovel = st.sidebar.selectbox(
     "Selecione a Tipologia:", 
     ["Casa", "Apartamento", "Lote", "Galpão Comercial"],
-    index=["Casa", "Apartamento", "Lote", "Galpão Comercial"].index(st.session_state.tipologia_auto) if st.session_state.tipologia_auto in ["Casa", "Apartamento", "Lote", "Galpão Comercial"] else 0
+    index=0
 )
 
-# CAMPOS COM ASSISTENTE DE DIGITAÇÃO NA BARRA LATERAL
-ordem_servico_input = input_com_assistente("Número da Ordem de Serviço (OS / Referência)", "sidebar_os", value_default=st.session_state.os_auto, placeholder="Ex: 7375.3596...")
-endereco_imovel_input = input_com_assistente("Endereço do Imóvel", "sidebar_endereco", value_default=st.session_state.endereco_auto, placeholder="Ex: Rua São Clemente...")
-informante_nome = input_com_assistente("Nome do Informante / Contato", "sidebar_informante", value_default=st.session_state.informante_auto, placeholder="Ex: Robert...")
-informante_tel = input_com_assistente("Telefone do Contato (OS)", "sidebar_telefone", value_default=st.session_state.telefone_auto, placeholder="Ex: (62) 99999-9999...")
-
-# CAMPO DE UPLOAD DA LOGO DO USUÁRIO/CLIENTE NA BARRA LATERAL (TELA PRINCIPAL)
+# LOGO NA BARRA LATERAL
 st.sidebar.markdown("---")
 st.sidebar.markdown("🖼️ **Logo do Usuário / Cliente (Banner do Laudo)**")
 arquivo_logo = st.sidebar.file_uploader("Insira a imagem da logo (.png ou .jpg)", type=["png", "jpg", "jpeg"], key="uploader_logo_usuario")
@@ -821,6 +809,40 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("**Conformidade Regulatória:**")
 st.sidebar.markdown("- ✅ BACEN CMN 4.910")
 st.sidebar.markdown("- ✅ ABNT NBR 14653-2")
+
+# =====================================================================
+# BLUSO DE CAMPOS DE ENTRADA DO TOPO (OS, ENDEREÇO, INFORMANTE, TELEFONE)
+# COM BINDING DIRETO DE SESSION_STATE
+# =====================================================================
+ordem_servico_input = input_com_assistente(
+    "Número da Ordem de Serviço (OS / Referência)", 
+    "main_os_input", 
+    valor_padrao="", 
+    placeholder="Ex: 7375.3596.000805648/2026.01.01"
+)
+
+endereco_imovel_input = input_com_assistente(
+    "Endereço do Imóvel", 
+    "main_endereco_input", 
+    valor_padrao="", 
+    placeholder="Ex: Rua São Clemente, Quadra 334, Lote 17, Jardim Buriti Sereno, Aparecida de Goiânia/GO"
+)
+
+informante_nome = input_com_assistente(
+    "Nome do Informante / Contato", 
+    "main_informante_input", 
+    valor_padrao="", 
+    placeholder="Ex: ROBERT"
+)
+
+informante_tel = input_com_assistente(
+    "Telefone do Contato (OS)", 
+    "main_telefone_input", 
+    valor_padrao="", 
+    placeholder="Ex: (62) 9614-6622"
+)
+
+st.markdown("---")
 
 aba_avm, aba_juridico = st.tabs([
     "📊 1. Carga, Multi-Documentos & AVM Homogeneizado", 
@@ -851,36 +873,29 @@ with aba_avm:
         if documentos_enviados:
             st.markdown(f"🟢 **{len(documentos_enviados)} documento(s) anexado(s)!**")
 
+    # BOTÃO DE PROCESSAMENTO E PREENCHIMENTO AUTOMÁTICO REATIVO
     if documentos_enviados:
         if st.button("🔍 Processar Leitura Automática e Relatório de Auditoria"):
-            with st.spinner("Processando certidão/documentos e extraindo variáveis, informante e telefone do contato da OS..."):
+            with st.spinner("Lendo PDFs e extraindo OS, Endereço, Informante, Telefone e Atributos..."):
                 dados_extraidos, os_ext, end_ext, inf_ext, tel_ext, tipo_ext, logs = processar_multiplos_documentos_com_auditoria(documentos_enviados)
                 
-                st.info("📋 **Relatório de Auditoria e Extração Documental:**")
-                for log in logs:
-                    st.write(log)
+                # ATUALIZAÇÃO DIRETA NO SESSION STATE DOS CAMPOS DO TOPO
+                if os_ext:
+                    st.session_state["main_os_input"] = os_ext
+                if end_ext:
+                    st.session_state["main_endereco_input"] = end_ext
+                if inf_ext:
+                    st.session_state["main_informante_input"] = inf_ext
+                if tel_ext:
+                    st.session_state["main_telefone_input"] = tel_ext
                 
-                if dados_extraidos or end_ext or os_ext:
-                    st.session_state.dados_extraidos_ia = dados_extraidos
-                    if os_ext and len(os_ext) > 2:
-                        st.session_state.os_auto = os_ext
-                    if end_ext and len(end_ext) > 10:
-                        st.session_state.endereco_auto = end_ext
-                    if inf_ext and len(inf_ext) > 1:
-                        st.session_state.informante_auto = inf_ext
-                    if tel_ext and len(tel_ext) > 4:
-                        st.session_state.telefone_auto = tel_ext
-                    if tipo_ext and tipologia_imovel in ["Casa", "Apartamento", "Lote", "Galpão Comercial"]:
-                        st.session_state.tipologia_auto = tipo_ext
-                    
-                    for k, v in dados_extraidos.items():
-                        st.session_state.valores_manuais[k] = v
-                        st.session_state[f"input_safe_{tipologia_imovel}_{k}"] = v
-                    
-                    st.success("✨ Leitura e preenchimento automático concluídos com sucesso! Atualizando painel...")
-                    st.rerun()
-                else:
-                    st.warning("⚠️ Nenhum dado estruturado relevante foi extraído automaticamente dos documentos.")
+                st.session_state.dados_extraidos_ia = dados_extraidos
+                for k, v in dados_extraidos.items():
+                    st.session_state.valores_manuais[k] = v
+                    st.session_state[f"input_safe_{tipologia_imovel}_{k}"] = v
+                
+                st.success("✨ Leitura e preenchimento automático executados! Atualizando formulários...")
+                st.rerun()
 
     df_global = None
     if arquivo_planilha is not None:
@@ -995,10 +1010,9 @@ with aba_avm:
                         
                         nome_formatado = feat.replace('_', ' ').title()
                         
-                        # APLICANDO ASSISTENTE DE DIGITAÇÃO NAS ESPECIFICAÇÕES E ATRIBUTOS TEXTUAIS/MANUAIS
                         esp_key_base = f"esp_{tipologia_imovel}_{feat}"
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        esp_input = input_com_assistente(f"Especificações ({feat})", esp_key_base, value_default=esp_atual, placeholder="Descreva a especificação...")
+                        esp_input = input_com_assistente(f"Especificações ({feat})", esp_key_base, valor_padrao=esp_atual, placeholder="Descreva a especificação...")
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
                         if eh_inteiro:
@@ -1057,12 +1071,10 @@ with aba_avm:
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
-                    # CAMPO COM ASSISTENTE DE DIGITAÇÃO PARA O MOTIVO DO AJUSTE
                     motivo_ajuste_input = input_com_assistente("Motivo da alteração do valor médio calculado", "motivo_ajuste_principal", placeholder="Descreva aqui a justificativa...")
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
-                # CAMPO COM ASSISTENTE DE DIGITAÇÃO PARA OBSERVAÇÕES GERAIS
                 observacoes_gerais_input = input_com_assistente("Insira as observações gerais, considerações de vistoria ou ressalvas técnicas que constarão no laudo:", "obs_gerais_principal", tipo="text_area", placeholder="Ex: Imóvel localizado em zona de expansão urbana...")
 
                 st.markdown("---")
@@ -1202,7 +1214,7 @@ with aba_avm:
                             'v_min': v_min, 'v_medio': v_medio, 'v_max': v_max, 'v_adotado': v_adotado,
                             'vu_min': vu_min, 'vu_medio': vu_medio, 'vu_max': vu_max, 'vu_adotado': vu_adotado,
                             'var_min': var_min, 'var_max': var_max,
-                            'v_inf_arb': v_inf_arb, 'v_sup_arb': v_sup_arb,
+                            'v_inf_arb': v_inf_arb, 'v_sup_arb': v_sup_arbitrio,
                             'vu_inf_arb': vu_inf_arbitrio, 'vu_sup_arb': vu_sup_arbitrio
                         }
 
