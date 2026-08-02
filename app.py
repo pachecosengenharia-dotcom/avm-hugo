@@ -652,14 +652,12 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         texto_arquivo = ""
         try:
             bytes_arq = arquivo.read()
-            # ETAPA 1: Leitura rápida e nativa do PDF (Sem OCR)
             with pdfplumber.open(io.BytesIO(bytes_arq)) as pdf:
                 for pagina in pdf.pages:
                     txt = pagina.extract_text()
                     if txt:
                         texto_arquivo += txt + "\n"
             
-            # ETAPA 2: Acionamento condicional de OCR ultrarrápido (apenas se PDF escaneado sem texto)
             if not texto_arquivo.strip():
                 imagens = convert_from_bytes(bytes_arq, dpi=150)
                 for img in imagens:
@@ -961,8 +959,8 @@ with aba_avm:
                         st.caption(f"📊 Limites: {limites_amostra_dict[feat]}")
                         
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        # Assistente de digitação garantido para o campo de Especificações de cada variável individualmente
-                        esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{feat}", esp_atual, placeholder="Descreva a especificação...")
+                        # Correção aplicada: chave estritamente única combinando a tipologia e a feature para evitar conflitos nas colunas seguintes
+                        esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Descreva a especificação...")
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
                         classificacao_atual = st.session_state.classificacoes_variaveis.get(feat, "Quantitativa")
