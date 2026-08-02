@@ -1130,9 +1130,10 @@ with aba_avm:
                             st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
                             st.markdown(f"**Campo de Arbítrio (±15%):** R$ {v_inf_arb:,.2f} até R$ {v_sup_arb:,.2f}")
                             
-                            # EXIBIÇÃO DIRETAMENTE NA TELA PRINCIPAL: GRAU DE PRECISÃO + PERCENTUAL DE AMPLITUDE E LOGO ABAIXO O GRAU DE FUNDAMENTAÇÃO ATINGIDO
+                            # EXIBIÇÃO DIRETAMENTE NA TELA PRINCIPAL: GRAU DE PRECISÃO + PERCENTUAL DE AMPLITUDE, GRAU DE FUNDAMENTAÇÃO ATINGIDO E ABAIXO AS MÉTRICAS DE R²
                             st.markdown(f"**Grau de Precisão Normativa:** `{precisao}` — Amplitude do Intervalo de Confiança: **{amplitude_ic_percentual:.2f}%**")
                             st.markdown(f"**Grau de Fundamentação Atingido:** `{fundamentacao}` (Pontuação Total: **{soma_pontos} pontos**) ✅")
+                            st.markdown(f"**Métricas: R² = {r2}** | Amplitude IC = {amplitude_ic_percentual:.2f}% | Dados Efetivos = {n_dados_efetivos} | **Máx p-t Regressores:** {max_p_regressor*100:.2f}% | **p-F Modelo:** {p_valor_f_calc:.4f}")
                             
                             if motivo_ajuste_input:
                                 st.info(f"ℹ️ **Justificativa Registrada:** '{motivo_ajuste_input}' (Direção: {tipo_operador_ajuste} {percentual_ajuste}%)")
