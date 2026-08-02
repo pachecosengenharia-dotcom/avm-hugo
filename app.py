@@ -19,14 +19,102 @@ from PIL import Image as PILImage
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# GERENCIAMENTO DE HISTÓRICO DE DIGITAÇÃO (PERSISTENTE / LOGIN PRONTO)
+# GERENCIAMENTO DE BANCO DE DADOS DE USUÁRIOS E AUTENTICAÇÃO
 # =====================================================================
-if 'usuario_logado' not in st.session_state:
-    st.session_state.usuario_logado = "usuario_padrao_sistema"
+if 'usuarios_cadastrados' not in st.session_state:
+    # Usuário padrão predefinido para testes imediatos
+    st.session_state.usuarios_cadastrados = {
+        "admin@avm.com": {
+            "senha": "123",
+            "nome": "Administrador AVM",
+            "plano": "🟢 ENTERPRISE (R$ 289/mês)"
+        }
+    }
+
+if 'autenticado' not in st.session_state:
+    st.session_state.autenticado = False
+
+if 'usuario_atual' not in st.session_state:
+    st.session_state.usuario_atual = None
+
+if 'plano_usuario_atual' not in st.session_state:
+    st.session_state.plano_usuario_atual = "🟢 ENTERPRISE (R$ 289/mês)"
 
 if 'historico_digitacao' not in st.session_state:
     st.session_state.historico_digitacao = {}
 
+# =====================================================================
+# TELA DE LOGIN E CADASTRO (AUTENTICAÇÃO OBRIGATÓRIA)
+# =====================================================================
+def tela_autenticacao():
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    
+    with col2:
+        st.markdown("<h2 style='text-align: center;'>🏢 Plataforma AVM SaaS</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: gray;'>Motor de Equações Válidas NBR & Controle de Crédito</p>", unsafe_allow_html=True)
+        
+        aba_login, aba_cadastro = st.tabs(["🔑 Entrar no Sistema", "📝 Criar Nova Conta"])
+        
+        with aba_login:
+            st.markdown("### Acessar Plataforma")
+            email_login = st.text_input("E-mail de Acesso", key="login_email")
+            senha_login = st.text_input("Senha", type="password", key="login_senha")
+            
+            if st.button("🔓 Entrar", use_container_width=True):
+                if email_login in st.session_state.usuarios_cadastrados:
+                    if st.session_state.usuarios_cadastrados[email_login]["senha"] == senha_login:
+                        st.session_state.autenticado = True
+                        st.session_state.usuario_atual = email_login
+                        st.session_state.plano_usuario_atual = st.session_state.usuarios_cadastrados[email_login]["plano"]
+                        st.success("Login realizado com sucesso! Carregando painel...")
+                        st.rerun()
+                    else:
+                        st.error("Senha incorreta.")
+                else:
+                    st.error("E-mail não cadastrado na plataforma.")
+                    
+        with aba_cadastro:
+            st.markdown("### Criar Conta & Escolher Plano")
+            novo_nome = st.text_input("Nome Completo / Empresa", key="cad_nome")
+            novo_email = st.text_input("E-mail Corporativo", key="cad_email")
+            nova_senha = st.text_input("Crie uma Senha", type="password", key="cad_senha")
+            
+            st.markdown("#### 📦 Escolha o seu Plano de Acesso:")
+            escolha_plano = st.radio(
+                "Planos disponíveis:",
+                [
+                    "⏱️ Teste de 7 Dias (Grátis - Conheça a Plataforma)",
+                    "🟢 ENTERPRISE (Mensal com custo de R$ 289/mês)"
+                ],
+                key="cad_plano_escolha"
+            )
+            
+            if st.button("🚀 Cadastrar e Acessar", use_container_width=True):
+                if not novo_email or not nova_senha or not novo_nome:
+                    st.warning("Por favor, preencha todos os campos obrigatórios.")
+                elif novo_email in st.session_state.usuarios_cadastrados:
+                    st.error("Este e-mail já está cadastrado. Faça login na aba ao lado.")
+                else:
+                    st.session_state.usuarios_cadastrados[novo_email] = {
+                        "senha": nova_senha,
+                        "nome": novo_nome,
+                        "plano": escolha_plano
+                    }
+                    st.session_state.autenticado = True
+                    st.session_state.usuario_atual = novo_email
+                    st.session_state.plano_usuario_atual = escolha_plano
+                    st.success("Conta criada com sucesso! Bem-vindo(a) à plataforma.")
+                    st.rerun()
+
+# Se o usuário não estiver autenticado, exibe apenas a tela de login/cadastro e interrompe a execução
+if not st.session_state.autenticado:
+    tela_autenticacao()
+    st.stop()
+
+# =====================================================================
+# FUNÇÕES DE HISTÓRICO E ASSISTENTE DE DIGITAÇÃO
+# =====================================================================
 def registrar_historico(campo_chave, valor):
     if valor and isinstance(valor, str) and valor.strip():
         if campo_chave not in st.session_state.historico_digitacao:
@@ -758,7 +846,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     return variaveis_encontradas, os_extraida, endereco_extraido, informante_extraido, telefone_extraido, tipologia_detectada, logs_execucao
 
 # =====================================================================
-# INTERFACE PRINCIPAL DO PAINEL SAAS
+# INTERFACE PRINCIPAL DO PAINEL SAAS (PÓS-LOGIN)
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
 st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Laudo Distribuído Perfeitamente (Página 1 com Auditoria Integrada / Página 2 de Gráficos e Jurídico)**.")
@@ -773,10 +861,17 @@ if 'classificacoes_variaveis' not in st.session_state: st.session_state.classifi
 if 'especificacoes_variaveis' not in st.session_state: st.session_state.especificacoes_variaveis = {}
 if 'sinais_variaveis' not in st.session_state: st.session_state.sinais_variaveis = {}
 
-# MENU LATERAL ESQUERDO
-st.sidebar.markdown("🔑 **Identificação do Contratante**")
-tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
-plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
+# MENU LATERAL ESQUERDO (COM IDENTIFICAÇÃO DO USUÁRIO LOGADO)
+st.sidebar.markdown(f"👤 **Usuário Logado:** `{st.session_state.usuario_atual}`")
+st.sidebar.markdown(f"📦 **Plano Ativo:** `{st.session_state.plano_usuario_atual}`")
+
+if st.sidebar.button("🚪 Sair / Logout", use_container_width=True):
+    st.session_state.autenticado = False
+    st.session_state.usuario_atual = None
+    st.rerun()
+
+st.sidebar.markdown("---")
+tenant_selecionado = st.sidebar.selectbox("Cliente Institucional / Tomador", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"])
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("🏗️ **Tipologia do Imóvel**")
@@ -799,8 +894,6 @@ if arquivo_logo is not None:
     logo_bytes_global = arquivo_logo.read()
     st.sidebar.image(logo_bytes_global, caption="Logo Carregada", width=150)
 
-st.sidebar.markdown("---")
-st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Conformidade Regulatória:**")
 st.sidebar.markdown("- ✅ BACEN CMN 4.910")
@@ -959,7 +1052,7 @@ with aba_avm:
                         st.caption(f"📊 Limites: {limites_amostra_dict[feat]}")
                         
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        # Correção aplicada: chave estritamente única combinando a tipologia e a feature para evitar conflitos nas colunas seguintes
+                        # Assistente de digitação garantido para o campo de Especificações de cada variável individualmente com chave exclusiva
                         esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Descreva a especificação...")
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
