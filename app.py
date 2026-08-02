@@ -241,10 +241,6 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     else:
         fundamentacao = "Inválido / Abaixo do Grau I"
 
-    # AVALIAÇÃO DE PRECISÃO BASEADA EXATAMENTE NA AMPLITUDE DO INTERVALO DE CONFIANÇA (%):
-    # Grau III: Amplitude <= 30%
-    # Grau II: Amplitude <= 40%
-    # Grau I: Amplitude <= 50% (ou superior)
     if amplitude_ic_percentual <= 30.0:
         precisao = "Grau III"
     elif amplitude_ic_percentual <= 40.0:
@@ -373,7 +369,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO EM PAISAGEM COM DUPLO GRÁFICO NBR
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, amplitude_ic_perc, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook, buf_minmax):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, amplitude_ic_perc, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, observacoes_gerais, incluir_planilha_dados, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -518,13 +514,19 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ('FONTSIZE', (0, 0), (-1, -1), 7.5),
     ]))
     story.append(t3)
+    story.append(Spacer(1, 4))
 
-    story.append(PageBreak())
-    story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (COMPLETA - TODAS AS VARIÁVEIS)", title_style))
-    story.append(Paragraph("Abaixo consta a relação completa e detalhada da base de mercado carregada, apresentando todas as colunas e variáveis da planilha original em formato amplo.", text_style))
-    story.append(Spacer(1, 6))
+    if observacoes_gerais and observacoes_gerais.strip():
+        story.append(Paragraph("7. Observações Gerais", subtitle_style))
+        story.append(Paragraph(observacoes_gerais, text_style))
+        story.append(Spacer(1, 4))
 
-    if df_original_bruto is not None:
+    if incluir_planilha_dados and df_original_bruto is not None:
+        story.append(PageBreak())
+        story.append(Paragraph("ANEXO: PLANILHA DE DADOS DE MERCADO (COMPLETA - TODAS AS VARIÁVEIS)", title_style))
+        story.append(Paragraph("Abaixo consta a relação completa e detalhada da base de mercado carregada, apresentando todas as colunas e variáveis da planilha original em formato amplo.", text_style))
+        story.append(Spacer(1, 6))
+
         indices_validos = df_final_utilizado.index if df_final_utilizado is not None else []
         colunas_originais = df_original_bruto.columns.tolist()
         cabecalho_tabela = ["ID", "Status Amostra"] + [str(c).upper() for c in colunas_originais]
@@ -835,7 +837,6 @@ with aba_avm:
             with c2:
                 col_area_base = st.selectbox("Coluna de Área Base (ex: area_privativa ou area_terreno):", [c for c in colunas_numericas if 'area' in c] + colunas_numericas)
 
-            # EXCLUSÃO DA VARIÁVEL valor_unitario_m2 (E SIMILARES) DA LISTA DE VARIÁVEIS INDEPENDENTES DO MODELO
             termos_exclusao_alvo = ['valor_unitario', 'valor_unitario_m2', 'v_unitario', 'vu']
             features_disponiveis = [
                 c for c in colunas_numericas 
@@ -970,7 +971,17 @@ with aba_avm:
                     motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...")
 
                 st.markdown("---")
-                st.subheader("5. Atribuição Manual de Notas FUNDAMENTAÇÃO-NBR (Obrigatório Itens 1 e 3)")
+                # CAMPO DE PREENCHIMENTO MANUAL PARA OBSERVAÇÕES GERAIS NA TELA PRINCIPAL
+                st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
+                observacoes_gerais_input = st.text_area(
+                    "Insira as observações gerais, considerações de vistoria ou ressalvas técnicas que constarão no laudo:",
+                    value="",
+                    placeholder="Ex: Imóvel localizado em zona de expansão urbana, vistoriado externamente...",
+                    key="obs_gerais_manual_principal"
+                )
+
+                st.markdown("---")
+                st.subheader("6. Atribuição Manual de Notas FUNDAMENTAÇÃO-NBR (Obrigatório Itens 1 e 3)")
                 notas_manuais_input = {}
                 col_n1, col_n2 = st.columns(2)
                 with col_n1:
@@ -999,6 +1010,10 @@ with aba_avm:
                     notas_manuais_input['item5_manual'] = st.number_input("Nota Item 5 (Signif. Regressores)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais)
                 with col_m4:
                     notas_manuais_input['item6_manual'] = st.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais)
+
+                st.markdown("---")
+                # OPÇÃO DE GERAR LAUDO COM OU SEM A PLANILHA DE DADOS
+                incluir_planilha_pdf = st.checkbox("Incluir Planilha de Dados de Mercado (Anexo) na geração do PDF", value=True, key="chk_incluir_planilha_pdf")
 
                 st.markdown("---")
                 if st.button("🚀 Executar Saneamento Exato e Gerar Laudo NBR"):
@@ -1074,7 +1089,6 @@ with aba_avm:
                         vu_min = max(lim_inf_estatistico, vu_inf_arbitrio)
                         vu_max = min(lim_sup_estatistico, vu_sup_arbitrio)
 
-                        # CÁLCULO EXATO DA AMPLITUDE DO INTERVALO DE CONFIANÇA EM PERCENTUAL (%)
                         amplitude_ic_percentual = ((vu_max - vu_min) / vu_medio) * 100
 
                         area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
@@ -1130,7 +1144,6 @@ with aba_avm:
                             st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
                             st.markdown(f"**Campo de Arbítrio (±15%):** R$ {v_inf_arb:,.2f} até R$ {v_sup_arb:,.2f}")
                             
-                            # EXIBIÇÃO DIRETAMENTE NA TELA PRINCIPAL: GRAU DE PRECISÃO + PERCENTUAL DE AMPLITUDE, GRAU DE FUNDAMENTAÇÃO ATINGIDO E ABAIXO AS MÉTRICAS DE R²
                             st.markdown(f"**Grau de Precisão Normativa:** `{precisao}` — Amplitude do Intervalo de Confiança: **{amplitude_ic_percentual:.2f}%**")
                             st.markdown(f"**Grau de Fundamentação Atingido:** `{fundamentacao}` (Pontuação Total: **{soma_pontos} pontos**) ✅")
                             st.markdown(f"**Métricas: R² = {r2}** | Amplitude IC = {amplitude_ic_percentual:.2f}% | Dados Efetivos = {n_dados_efetivos} | **Máx p-t Regressores:** {max_p_regressor*100:.2f}% | **p-F Modelo:** {p_valor_f_calc:.4f}")
@@ -1162,6 +1175,8 @@ with aba_avm:
                                 tipo_operador_ajuste,
                                 percentual_ajuste,
                                 motivo_ajuste_input,
+                                observacoes_gerais_input,
+                                incluir_planilha_pdf,
                                 buf_ad, buf_res, buf_cook, buf_minmax
                             )
                             st.download_button(
