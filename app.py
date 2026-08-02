@@ -14,6 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 import scipy.stats as stats
 import streamlit as st
+from PIL import Image as PILImage
 
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
@@ -367,12 +368,11 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     return buf_aderencia, buf_residuos, buf_cook, buf_minmax
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO EM PAISAGEM COM DUPLO GRÁFICO NBR
+# GERADOR DE PDF CUSTOMIZADO COM BANNER DE LOGO EM TODAS AS PÁGINAS
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, amplitude_ic_perc, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, observacoes_gerais, incluir_planilha_dados, buf_ad, buf_res, buf_cook, buf_minmax):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, amplitude_ic_perc, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, observacoes_gerais, incluir_planilha_dados, logo_bytes, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-    story = []
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=45, bottomMargin=30)
     styles = getSampleStyleSheet()
     
     title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=12, textColor=colors.HexColor("#1A365D"), spaceAfter=6, leading=14)
@@ -380,6 +380,31 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     text_style = ParagraphStyle('T3', parent=styles['Normal'], fontSize=7.5, leading=10.5, spaceAfter=3)
     table_cell_style = ParagraphStyle('TC', parent=styles['Normal'], fontSize=6.5, leading=8.5)
     table_cell_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontSize=6.5, leading=8.5, fontName='Helvetica-Bold')
+
+    def cabecalho_banner_canvas(canvas, document):
+        canvas.saveState()
+        # Desenhar banner de topo (fundo sutil ou linha separadora)
+        canvas.setFillColor(colors.HexColor("#F7FAFC"))
+        canvas.rect(30, landscape(letter)[1] - 40, landscape(letter)[0] - 60, 32, fill=1, stroke=0)
+        canvas.setStrokeColor(colors.HexColor("#CBD5E0"))
+        canvas.setLineWidth(0.5)
+        canvas.line(30, landscape(letter)[1] - 40, landscape(letter)[0] - 30, landscape(letter)[1] - 40)
+        
+        if logo_bytes:
+            try:
+                img_stream = io.BytesIO(logo_bytes)
+                # Inserir a imagem da logo como banner superior esquerdo
+                canvas.drawImage(img_stream, 35, landscape(letter)[1] - 38, width=110, height=26, preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        
+        # Texto à direita no banner superior
+        canvas.setFont("Helvetica-Bold", 7.5)
+        canvas.setFillColor(colors.HexColor("#1A365D"))
+        canvas.drawRightString(landscape(letter)[0] - 35, landscape(letter)[1] - 25, f"LAUDO TÉCNICO AVM | OS: {ordem_servico}")
+        canvas.restoreState()
+
+    story = []
 
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS / Referência):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
@@ -569,7 +594,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         ]))
         story.append(t_dados_rel)
 
-    doc.build(story)
+    doc.build(story, onFirstPage=cabecalho_banner_canvas, onLaterPages=cabecalho_banner_canvas)
     buffer.seek(0)
     return buffer.getvalue()
 
@@ -725,6 +750,15 @@ ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS / 
 endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value=st.session_state.endereco_auto, placeholder="Aguardando leitura do PDF...")
 informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value=st.session_state.informante_auto, placeholder="Aguardando leitura do PDF...")
 informante_tel = st.sidebar.text_input("Telefone do Contato (OS)", value=st.session_state.telefone_auto, placeholder="Aguardando leitura do PDF...")
+
+# CAMPO DE UPLOAD DA LOGO DO USUÁRIO/CLIENTE NA BARRA LATERAL (TELA PRINCIPAL)
+st.sidebar.markdown("---")
+st.sidebar.markdown("🖼️ **Logo do Usuário / Cliente (Banner do Laudo)**")
+arquivo_logo = st.sidebar.file_uploader("Insira a imagem da logo (.png ou .jpg)", type=["png", "jpg", "jpeg"], key="uploader_logo_usuario")
+logo_bytes_global = None
+if arquivo_logo is not None:
+    logo_bytes_global = arquivo_logo.read()
+    st.sidebar.image(logo_bytes_global, caption="Logo Carregada", width=150)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
@@ -1178,10 +1212,11 @@ with aba_avm:
                                 motivo_ajuste_input,
                                 observacoes_gerais_input,
                                 incluir_planilha_pdf,
+                                logo_bytes_global,
                                 buf_ad, buf_res, buf_cook, buf_minmax
                             )
                             st.download_button(
-                                "📄 Baixar Laudo Completo em PDF (Com Gráficos Estilo SisDEA Sem Inflexões e Escala Limpa)",
+                                "📄 Baixar Laudo Completo em PDF (Com Banner de Logo e Paginação Ajustada)",
                                 data=pdf_bytes,
                                 file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
                                 mime="application/pdf",
