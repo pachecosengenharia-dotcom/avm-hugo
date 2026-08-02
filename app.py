@@ -368,7 +368,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     return buf_aderencia, buf_residuos, buf_cook, buf_minmax
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM LOGO RECENTRADA E FLUXO SEGURO
+# GERADOR DE PDF CUSTOMIZADO COM RENDERIZAÇÃO SEGURA DE LOGO (RLImage)
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, amplitude_ic_perc, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, observacoes_gerais, incluir_planilha_dados, logo_bytes, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
@@ -393,30 +393,33 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         canvas.setLineWidth(0.5)
         canvas.line(30, page_height - 55, page_width - 30, page_height - 55)
         
-        # Desenhar a logo se os bytes estiverem presentes
+        # Desenhar a logo de forma robusta utilizando RLImage interna do ReportLab se disponível
         if logo_bytes:
             try:
                 img_io = io.BytesIO(logo_bytes)
                 pil_img = PILImage.open(img_io)
-                img_w, img_h = pil_img.size
+                pil_img = pil_img.convert('RGBA')
                 
-                # Proporção fixa de altura para caber perfeitamente no banner (altura de 38 pontos)
-                target_h = 38.0
+                # Converter para PNG em memória compatível com ReportLab
+                img_clean_io = io.BytesIO()
+                pil_img.save(img_clean_io, format='PNG')
+                img_clean_io.seek(0)
+                
+                img_w, img_h = pil_img.size
+                target_h = 36.0
                 target_w = (img_w / img_h) * target_h if img_h > 0 else 100.0
-                if target_w > 180.0:  # Limite máximo de largura da logo
-                    target_w = 180.0
+                if target_w > 160.0:
+                    target_w = 160.0
                     target_h = (img_h / img_w) * target_w
                 
-                img_io.seek(0)
-                # Posicionado no canto superior esquerdo (x=38, centralizado verticalmente na faixa)
-                canvas.drawImage(img_io, 38, page_height - 50, width=target_w, height=target_h, preserveAspectRatio=True, mask='auto')
-            except Exception as e:
-                # Fallback caso ocorra algum erro na renderização da imagem PIL
+                rl_img = RLImage(img_clean_io, width=target_w, height=target_h)
+                # Posicionar a imagem no canvas na parte superior esquerda
+                rl_img.drawOn(canvas, 36, page_height - 50)
+            except Exception:
                 canvas.setFont("Helvetica-Bold", 8)
                 canvas.setFillColor(colors.HexColor("#E53E3E"))
-                canvas.drawString(38, page_height - 32, "[Erro ao carregar Logo]")
+                canvas.drawString(38, page_height - 32, "[Erro ao renderizar Logo]")
         else:
-            # Texto institucional caso nenhuma logo seja enviada
             canvas.setFont("Helvetica-Bold", 9)
             canvas.setFillColor(colors.HexColor("#2B6CB0"))
             canvas.drawString(38, page_height - 32, "PLATAFORMA AVM — LAUDO TÉCNICO")
