@@ -19,75 +19,54 @@ from PIL import Image as PILImage
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# INICIALIZAÇÃO DE HISTÓRICO DE DIGITAÇÃO (ASSISTENTE / MEMÓRIA PERSISTENTE)
+# INICIALIZAÇÃO DE HISTÓRICO DE DIGITAÇÃO PARA CAMPOS MANUAIS DO CORPO
 # =====================================================================
 if 'historico_digitacao' not in st.session_state:
     st.session_state.historico_digitacao = {
-        'os': [],
-        'endereco': [],
-        'informante': [],
-        'telefone': [],
         'especificacoes': {},
-        'valores_feat': {},
-        'ajustes': [],
         'motivos': [],
         'observacoes': []
     }
 
-def registrar_historico(categoria, valor):
-    if valor and isinstance(valor, str) and valor.strip():
-        val_limpo = valor.strip()
-        if categoria == 'especificacoes' or categoria == 'valores_feat':
-            # categoria aqui recebe uma tupla/chave composta (feat, tipo)
-            feat_key, sub_tipo = categoria
-            if feat_key not in st.session_state.historico_digitacao[sub_tipo]:
-                st.session_state.historico_digitacao[sub_tipo][feat_key] = []
-            if val_limpo not in st.session_state.historico_digitacao[sub_tipo][feat_key]:
-                st.session_state.historico_digitacao[sub_tipo][feat_key].insert(0, val_limpo)
-                if len(st.session_state.historico_digitacao[sub_tipo][feat_key]) > 10:
-                    st.session_state.historico_digitacao[sub_tipo][feat_key].pop()
-        else:
-            if val_limpo not in st.session_state.historico_digitacao[categoria]:
-                st.session_state.historico_digitacao[categoria].insert(0, val_limpo)
-                if len(st.session_state.historico_digitacao[categoria]) > 10:
-                    st.session_state.historico_digitacao[categoria].pop()
-
-def campo_com_assistente(label, key_nome, categoria_hist, valor_atual="", tipo_input="text", sub_feat=None, placeholder=""):
+def campo_manual_com_historico(label, key_name, categoria_hist, valor_atual="", tipo_input="text", sub_feat=None, placeholder=""):
     """
-    Renderiza um campo digitável com assistente de digitação integrado (selectbox ou selectbox combinada)
-    resgatando as digitações anteriores salvas no session_state, inclusive após atualização da página.
+    Assistente de digitação integrado para os campos manuais do corpo da plataforma,
+    resgatando digitações anteriores realizadas e mantendo a persistência após atualização da página.
     """
     if sub_feat:
-        hist_lista = st.session_state.historico_digitacao.get(categoria_hist, {}).get(sub_feat, [])
+        if categoria_hist not in st.session_state.historico_digitacao:
+            st.session_state.historico_digitacao[categoria_hist] = {}
+        if sub_feat not in st.session_state.historico_digitacao[categoria_hist]:
+            st.session_state.historico_digitacao[categoria_hist][sub_feat] = []
+        hist_lista = st.session_state.historico_digitacao[categoria_hist][sub_feat]
     else:
-        hist_lista = st.session_state.historico_digitacao.get(categoria_hist, [])
-    
-    opcoes_disponiveis = [""] + hist_lista
-    
-    st.markdown(f"**{label}**")
-    col_campo, col_hist = st.columns([4, 1])
-    
-    with col_campo:
-        if tipo_input == "text":
-            val_out = st.text_input(label, value=valor_atual, placeholder=placeholder, label_visibility="collapsed", key=f"input_{key_nome}")
-        elif tipo_input == "area":
-            val_out = st.text_area(label, value=valor_atual, placeholder=placeholder, label_visibility="collapsed", key=f"input_{key_nome}")
-        else:
-            val_out = st.text_input(label, value=str(valor_atual), placeholder=placeholder, label_visibility="collapsed", key=f"input_{key_nome}")
-            
-    with col_hist:
-        if opcoes_disponiveis and len(opcoes_disponiveis) > 1:
-            escolha_antiga = st.selectbox("🕒", options=opcoes_disponiveis, key=f"hist_sel_{key_nome}", label_visibility="collapsed")
-            if escolha_antiga and escolha_antiga != "":
-                val_out = escolha_antiga
-    
-    # Salvar no histórico assim que houver conteúdo
-    if val_out:
+        if categoria_hist not in st.session_state.historico_digitacao:
+            st.session_state.historico_digitacao[categoria_hist] = []
+        hist_lista = st.session_state.historico_digitacao[categoria_hist]
+
+    if hist_lista:
+        escolha_antiga = st.selectbox(f"🕒 Digitações anteriores ({label})", options=[""] + hist_lista, key=f"sel_hist_{key_name}")
+        if escolha_antiga and escolha_antiga != "":
+            valor_atual = escolha_antiga
+
+    if tipo_input == "area":
+        val_out = st.text_area(label, value=valor_atual, placeholder=placeholder, key=f"input_{key_name}")
+    else:
+        val_out = st.text_input(label, value=str(valor_atual), placeholder=placeholder, key=f"input_{key_name}")
+
+    if val_out and isinstance(val_out, str) and val_out.strip():
+        val_limpo = val_out.strip()
         if sub_feat:
-            registrar_historico((sub_feat, categoria_hist), str(val_out))
+            if val_limpo not in st.session_state.historico_digitacao[categoria_hist][sub_feat]:
+                st.session_state.historico_digitacao[categoria_hist][sub_feat].insert(0, val_limpo)
+                if len(st.session_state.historico_digitacao[categoria_hist][sub_feat]) > 10:
+                    st.session_state.historico_digitacao[categoria_hist][sub_feat].pop()
         else:
-            registrar_historico(categoria_hist, str(val_out))
-            
+            if val_limpo not in st.session_state.historico_digitacao[categoria_hist]:
+                st.session_state.historico_digitacao[categoria_hist].insert(0, val_limpo)
+                if len(st.session_state.historico_digitacao[categoria_hist]) > 10:
+                    st.session_state.historico_digitacao[categoria_hist].pop()
+
     return val_out
 
 # =====================================================================
@@ -837,13 +816,13 @@ tipologia_imovel = st.sidebar.selectbox(
     index=["Casa", "Apartamento", "Lote", "Galpão Comercial"].index(st.session_state.tipologia_auto) if st.session_state.tipologia_auto in ["Casa", "Apartamento", "Lote", "Galpão Comercial"] else 0
 )
 
-# CAMPOS DIGITÁVEIS MANUALMENTE NA BARRA LATERAL COM ASSISTENTE DE DIGITAÇÃO INTEGRADO
-ordem_servico_input = campo_com_assistente("Número da Ordem de Serviço (OS / Referência)", "os_servico", "os", valor_atual=st.session_state.os_auto, placeholder="Digite ou selecione OS...")
-endereco_imovel_input = campo_com_assistente("Endereço do Imóvel", "endereco_imovel", "endereco", valor_atual=st.session_state.endereco_auto, placeholder="Digite ou selecione Endereço...")
-informante_nome = campo_com_assistente("Nome do Informante / Contato", "informante_nome", "informante", valor_atual=st.session_state.informante_auto, placeholder="Digite ou selecione Informante...")
-informante_tel = campo_com_assistente("Telefone do Contato (OS)", "informante_tel", "telefone", valor_atual=st.session_state.telefone_auto, placeholder="Digite ou selecione Telefone...")
+# CAMPOS DA BARRA LATERAL RESTAURADOS AO FORMATO ORIGINAL (SEM DESCONFIGURAR O MENU)
+ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS / Referência)", value=st.session_state.os_auto, placeholder="Aguardando leitura do PDF...")
+endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value=st.session_state.endereco_auto, placeholder="Aguardando leitura do PDF...")
+informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value=st.session_state.informante_auto, placeholder="Aguardando leitura do PDF...")
+informante_tel = st.sidebar.text_input("Telefone do Contato (OS)", value=st.session_state.telefone_auto, placeholder="Aguardando leitura do PDF...")
 
-# CAMPO DE UPLOAD DA LOGO DO USUÁRIO/CLIENTE NA BARRA LATERAL (TELA PRINCIPAL)
+# CAMPO DE UPLOAD DA LOGO DO USUÁRIO/CLIENTE NA BARRA LATERAL
 st.sidebar.markdown("---")
 st.sidebar.markdown("🖼️ **Logo do Usuário / Cliente (Banner do Laudo)**")
 arquivo_logo = st.sidebar.file_uploader("Insira a imagem da logo (.png ou .jpg)", type=["png", "jpg", "jpeg"], key="uploader_logo_usuario")
@@ -901,16 +880,12 @@ with aba_avm:
                     st.session_state.dados_extraidos_ia = dados_extraidos
                     if os_ext and len(os_ext) > 2:
                         st.session_state.os_auto = os_ext
-                        registrar_historico('os', os_ext)
                     if end_ext and len(end_ext) > 10:
                         st.session_state.endereco_auto = end_ext
-                        registrar_historico('endereco', end_ext)
                     if inf_ext and len(inf_ext) > 1:
                         st.session_state.informante_auto = inf_ext
-                        registrar_historico('informante', inf_ext)
                     if tel_ext and len(tel_ext) > 4:
                         st.session_state.telefone_auto = tel_ext
-                        registrar_historico('telefone', tel_ext)
                     if tipo_ext and tipologia_imovel in ["Casa", "Apartamento", "Lote", "Galpão Comercial"]:
                         st.session_state.tipologia_auto = tipo_ext
                     
@@ -1058,9 +1033,9 @@ with aba_avm:
                             valores_usuario[feat] = val_input
                             st.caption(f"📊 Limites: [{min_amostra:.2f} a {max_amostra:.2f}]")
                         
-                        # CAMPO DE ESPECIFICAÇÕES COM ASSISTENTE DE DIGITAÇÃO INTEGRADO
+                        # CAMPO DE ESPECIFICAÇÕES NO CORPO COM ASSISTENTE DE HISTÓRICO
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        esp_input = campo_com_assistente(
+                        esp_input = campo_manual_com_historico(
                             f"Especificações ({feat})",
                             f"esp_{tipologia_imovel}_{feat}",
                             "especificacoes",
@@ -1105,8 +1080,8 @@ with aba_avm:
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
-                    # CAMPO DE MOTIVO DE AJUSTE COM ASSISTENTE DE DIGITAÇÃO INTEGRADO
-                    motivo_ajuste_input = campo_com_assistente(
+                    # CAMPO DE MOTIVO COM ASSISTENTE DE HISTÓRICO
+                    motivo_ajuste_input = campo_manual_com_historico(
                         "Motivo da alteração do valor médio calculado",
                         "motivo_ajuste_input",
                         "motivos",
@@ -1117,8 +1092,8 @@ with aba_avm:
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
-                # CAMPO DE OBSERVAÇÕES GERAIS COM ASSISTENTE DE DIGITAÇÃO INTEGRADO
-                observacoes_gerais_input = campo_com_assistente(
+                # CAMPO DE OBSERVAÇÕES GERAIS COM ASSISTENTE DE HISTÓRICO
+                observacoes_gerais_input = campo_manual_com_historico(
                     "Insira as observações gerais, considerações de vistoria ou ressalvas técnicas que constarão no laudo:",
                     "obs_gerais_manual_principal",
                     "observacoes",
