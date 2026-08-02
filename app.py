@@ -440,7 +440,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("3. Resultados da Avaliação, Campo de Arbítrio e Valor Adotado na Precificação", subtitle_style))
-    op_str_visual = "+" if tipo_operador_ajuste == "Majorado (+)" else "-"
+    op_str_visual = "+" if tipo_operador_ajuste == "majorado (+)" else "-"
     story.append(Paragraph(f"<b>Cálculo do Valor Adotado na Precificação:</b> Estimado (Tendência Central / Face) {op_str_visual} {percentual_ajuste:.1f}% = <b>R$ {valores['v_adotado']:,.2f}</b> (Unitário: R$ {valores['vu_adotado']:,.2f}/m²)", text_style))
     if motivo_ajuste and motivo_ajuste.strip():
         story.append(Paragraph(f"<b>Justificativa Técnica do Ajuste:</b> {motivo_ajuste}", text_style))
@@ -478,7 +478,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
         [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Exclusivo para Dicotômicas, Códigos e Proxy Temporal ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
         [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após o saneamento exclusivo e Cook: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
-        [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao} (Amplitude IC: {amplitude_ic_perc:.2f}%)", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
+        [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao} — Amplitude de {amplitude_ic_perc:.2f}%", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
 
     t_fund = Table(t_fund_data, colWidths=[60, 522, 150])
@@ -964,7 +964,8 @@ with aba_avm:
                     motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...")
 
                 st.markdown("---")
-                st.subheader("5. Atribuição Manual de Notas FENDAMENTAÇÃO-NBR (Obrigatório Itens 1 e 3)")
+                # CORREÇÃO DO TEXTO PARA FUNDAMENTAÇÃO
+                st.subheader("5. Atribuição Manual de Notas FUNDAMENTAÇÃO-NBR (Obrigatório Itens 1 e 3)")
                 notas_manuais_input = {}
                 col_n1, col_n2 = st.columns(2)
                 with col_n1:
@@ -1123,7 +1124,10 @@ with aba_avm:
                             sinal_str_exibicao = "+" if tipo_operador_ajuste == "majorado (+)" else "-"
                             st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
                             st.markdown(f"**Campo de Arbítrio (±15%):** R$ {v_inf_arb:,.2f} até R$ {v_sup_arb:,.2f}")
-                            st.markdown(f"**Precisão Normativa (Amplitude do IC):** {precisao} — Amplitude de {amplitude_ic_percentual:.2f}%")
+                            
+                            # INCLUSÃO DO GRAU DE PRECISÃO COM O RESPECTIVO PERCENTUAL DE AMPLITUDE DIRETAMENTE NA TELA PRINCIPAL (ITEM 5)
+                            st.markdown(f"**Grau de Precisão Normativa:** `{precisao}` — Amplitude do Intervalo de Confiança: **{amplitude_ic_percentual:.2f}%**")
+                            
                             if motivo_ajuste_input:
                                 st.info(f"ℹ️ **Justificativa Registrada:** '{motivo_ajuste_input}' (Direção: {tipo_operador_ajuste} {percentual_ajuste}%)")
 
