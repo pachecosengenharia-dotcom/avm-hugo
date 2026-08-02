@@ -23,7 +23,6 @@ st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válida
 # GERENCIAMENTO DE BANCO DE DADOS DE USUÁRIOS E AUTENTICAÇÃO
 # =====================================================================
 if 'usuarios_cadastrados' not in st.session_state:
-    # Usuário padrão de teste criado com data simulada no passado para testar o bloqueio do 8º dia se necessário, ou data atual
     st.session_state.usuarios_cadastrados = {
         "admin@avm.com": {
             "senha": "123",
@@ -35,7 +34,7 @@ if 'usuarios_cadastrados' not in st.session_state:
             "senha": "123",
             "nome": "Usuário Teste",
             "plano": "⏱️ Teste de 7 Dias (Grátis)",
-            "data_cadastro": datetime.now() - timedelta(days=8)  # Simula usuário no 8º dia para validação do bloqueio
+            "data_cadastro": datetime.now() - timedelta(days=8)  # Simula 8º dia para validação do bloqueio
         }
     }
 
@@ -125,7 +124,6 @@ data_cadastro_usuario = dados_usuario_logado.get("data_cadastro", datetime.now()
 dias_decorridos = (datetime.now() - data_cadastro_usuario).days
 teste_expirado = ("Teste" in plano_atual_str) and (dias_decorridos >= 7)
 
-# Se o teste expirou (8º dia ou mais), exibe a tela de bloqueio e cobrança automática
 if teste_expirado:
     st.sidebar.markdown(f"👤 **Usuário:** `{st.session_state.usuario_atual}`")
     st.sidebar.markdown("🔴 **Status:** `TESTE EXPIRADO (BLOQUEADO)`")
@@ -150,7 +148,7 @@ if teste_expirado:
     st.stop()
 
 # =====================================================================
-# FUNÇÕES DE HISTÓRICO E ASSISTENTE DE DIGITAÇÃO
+# FUNÇÕES DE HISTÓRICO E ASSISTENTE DE DIGITAÇÃO NATIVO
 # =====================================================================
 def registrar_historico(campo_chave, valor):
     if valor and isinstance(valor, str) and valor.strip():
@@ -158,7 +156,7 @@ def registrar_historico(campo_chave, valor):
             st.session_state.historico_digitacao[campo_chave] = []
         if valor.strip() not in st.session_state.historico_digitacao[campo_chave]:
             st.session_state.historico_digitacao[campo_chave].insert(0, valor.strip())
-            st.session_state.historico_digitacao[campo_chave] = st.session_state.historico_digitacao[campo_chave][:10]
+            st.session_state.historico_digitacao[campo_chave] = st.session_state.historico_digitacao[campo_chave][:15]
 
 def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None):
     historico = st.session_state.historico_digitacao.get(campo_chave, [])
@@ -670,7 +668,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
         [Paragraph("1 a 6", table_cell_style), Paragraph(f"Critérios NBR (Itens 1 a 6) | Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_style), Paragraph(f"{soma_pontos} PONTOS", table_cell_style)],
-        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Métricas: R² = {r2} | Amplitude IC = {amplitude_ic_perc:.2f}% | Dados Efetivos = {n_dados} | Máx p-t: {max_p_regressor*100:.2f}% | p-F: {p_valor_f:.4f}", table_cell_style), Paragraph("ATENDIDO", table_cell_style)]
+        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Métricas: R² = {r2} | Amplitude IC = {amplitude_ic_perc:.2f}% | Dados Efetivos = {n_dados} | Máx p-t: {max_p_regressor*100:.2f}% | p-F: {p_valor_f:.4f}", table_cell_style), Paragraph("ATENDIDO", table_cell_bold)]
     ]
 
     t_fund = Table(t_fund_data, colWidths=[60, 532, 120])
@@ -898,11 +896,10 @@ if 'classificacoes_variaveis' not in st.session_state: st.session_state.classifi
 if 'especificacoes_variaveis' not in st.session_state: st.session_state.especificacoes_variaveis = {}
 if 'sinais_variaveis' not in st.session_state: st.session_state.sinais_variaveis = {}
 
-# MENU LATERAL ESQUERDO (COM IDENTIFICAÇÃO E OPÇÃO DE MUDANÇA DE PLANO ANTES DOS 7 DIAS)
+# MENU LATERAL ESQUERDO
 st.sidebar.markdown(f"👤 **Usuário Logado:** `{st.session_state.usuario_atual}`")
 st.sidebar.markdown(f"📦 **Plano Ativo:** `{plano_atual_str}`")
 
-# Se o usuário estiver no plano de teste, permite fazer o upgrade antecipado a qualquer momento
 if "Teste" in plano_atual_str:
     dias_restantes = max(0, 7 - dias_decorridos)
     st.sidebar.info(f"⏳ **{dias_restantes} dia(s) restante(s)** do seu teste gratuito.")
@@ -1063,7 +1060,7 @@ with aba_avm:
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas, classificacoes_atuais_dict)
 
                 st.markdown("---")
-                st.subheader("3. Atributos do Imóvel Avaliando & Limites do Dado")
+                st.subheader("3. Atributos do Imóvel Avaliando & Limites do Dado (Com Assistente de Histórico Nativo)")
                 
                 dados_ia = st.session_state.get('dados_extraidos_ia', {})
                 campos_inteiros = ['quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem', 'estado_de_conservacao', 'conservacao', 'padrao_de_acabamento', 'acabamento', 'idade_aparente', 'idade', 'evento', 'data_do_evento', 'ano', 'pe_direito']
@@ -1099,6 +1096,7 @@ with aba_avm:
                         st.caption(f"📊 Limites: {limites_amostra_dict[feat]}")
                         
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
+                        # Assistente de sugestões e histórico travado nativamente de forma idêntica para TODAS as variáveis
                         esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Descreva a especificação...")
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
