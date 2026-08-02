@@ -461,6 +461,9 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t2)
     story.append(Spacer(1, 4))
 
+    # FORÇAR QUEBRA DE PÁGINA PARA QUE O ITEM 4 COMEÇE EXATAMENTE NA PÁGINA 2
+    story.append(PageBreak())
+
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     micro_status_text = "REPRESENTATIVIDADE ATENDIDA (Saneamento Exclusivo Aplicado)"
 
@@ -971,7 +974,6 @@ with aba_avm:
                     motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...")
 
                 st.markdown("---")
-                # CAMPO DE PREENCHIMENTO MANUAL PARA OBSERVAÇÕES GERAIS NA TELA PRINCIPAL
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
                 observacoes_gerais_input = st.text_area(
                     "Insira as observações gerais, considerações de vistoria ou ressalvas técnicas que constarão no laudo:",
@@ -1012,7 +1014,6 @@ with aba_avm:
                     notas_manuais_input['item6_manual'] = st.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais)
 
                 st.markdown("---")
-                # OPÇÃO DE GERAR LAUDO COM OU SEM A PLANILHA DE DADOS
                 incluir_planilha_pdf = st.checkbox("Incluir Planilha de Dados de Mercado (Anexo) na geração do PDF", value=True, key="chk_incluir_planilha_pdf")
 
                 st.markdown("---")
