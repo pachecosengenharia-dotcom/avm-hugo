@@ -652,17 +652,25 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
         texto_arquivo = ""
         try:
             bytes_arq = arquivo.read()
+            # 1. Tenta extrair diretamente o texto via pdfplumber (extremamente rápido)
             with pdfplumber.open(io.BytesIO(bytes_arq)) as pdf:
                 for pagina in pdf.pages:
                     txt = pagina.extract_text()
                     if txt:
                         texto_arquivo += txt + "\n"
+            
+            # 2. SÓ executa o OCR se o PDF for escaneado (sem texto selecionável)
             if not texto_arquivo.strip():
-                imagens = convert_from_bytes(bytes_arq)
+                # Reduz o DPI para 150 para acelerar o processamento das imagens
+                imagens = convert_from_bytes(bytes_arq, dpi=150)
                 for img in imagens:
+                    # Configuração otimizada do tesseract (pode usar config rpn/oem se necessário)
                     txt_ocr = pytesseract.image_to_string(img, lang='por')
                     texto_arquivo += txt_ocr + "\n"
-            logs_execucao.append(f"Arquivo `{arquivo.name}` lido com sucesso ({len(texto_arquivo)} caracteres).")
+                logs_execucao.append(f"Arquivo `{arquivo.name}` processado via OCR (Ajustado para alta velocidade).")
+            else:
+                logs_execucao.append(f"Arquivo `{arquivo.name}` lido instantaneamente via texto nativo ({len(texto_arquivo)} caracteres).")
+                
         except Exception as e:
             logs_execucao.append(f"Erro ao ler o arquivo `{arquivo.name}`: {str(e)}")
             
@@ -670,6 +678,8 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 
     if not texto_total.strip():
         return {}, "", "", "", "", "", logs_execucao
+
+    # ... (o restante da função continua igual com as expressões regulares)
 
     variaveis_encontradas = {}
     trecho_limpo = re.sub(r'[\r\n\t]+', ' ', texto_total)
