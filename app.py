@@ -183,7 +183,7 @@ def verificar_micronumerosidade(df, features_selecionadas, classificacoes_var):
 # =====================================================================
 # AVALIAÇÃO NORMATIVA RIGOROSA CONFORME TABELA NBR 14653-2 (EXATA DA IMAGEM)
 # =====================================================================
-def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f, tem_extrapolacao=False, notas_manuais=None):
+def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f, tem_extrapolacao=False, notas_manuais=None, usar_manual=False):
     p_item1 = notas_manuais.get('item1', 2) if notas_manuais else 2
     
     if n_dados >= 30:
@@ -194,7 +194,12 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
         p_item2 = 1
         
     p_item3 = notas_manuais.get('item3', 2) if notas_manuais else 2
-    p_item4 = 1 if tem_extrapolacao else 3
+    
+    # ATUALIZAÇÃO AUTOMÁTICA DO ITEM 4 CONFORME EXTRAPOLAÇÃO SE NÃO FOR FORÇADO MANUALMENTE
+    if usar_manual and notas_manuais and 'item4_manual' in notas_manuais:
+        p_item4 = notas_manuais['item4_manual']
+    else:
+        p_item4 = 1 if tem_extrapolacao else 3
     
     max_p_regressor = max(p_valores_t[1:]) if len(p_valores_t) > 1 else 0.05
     if max_p_regressor <= 0.10:
@@ -213,11 +218,9 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     else:
         p_item6 = 1
 
-    if notas_manuais:
+    if notas_manuais and usar_manual:
         if 'item2_manual' in notas_manuais:
             p_item2 = notas_manuais['item2_manual']
-        if 'item4_manual' in notas_manuais:
-            p_item4 = notas_manuais['item4_manual']
         if 'item5_manual' in notas_manuais:
             p_item5 = notas_manuais['item5_manual']
         if 'item6_manual' in notas_manuais:
@@ -226,11 +229,6 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     pontos_itens = [p_item1, p_item2, p_item3, p_item4, p_item5, p_item6]
     soma_pontos = sum(pontos_itens)
 
-    # REGRAS EXATAS DA IMAGEM OFICIAL DE FUNDAMENTAÇÃO NBR 14653:
-    # Grau III: Pontos >= 16 E Itens obrigatórios (2, 4, 5 e 6 no Grau III [=3], demais no mínimo Grau II [>=2])
-    # Grau II: Pontos >= 10 E Itens obrigatórios (2, 4, 5 e 6 no mínimo Grau II [>=2], demais no mínimo Grau I [>=1])
-    # Grau I: Pontos >= 6 E Todos no mínimo no grau I [>=1]
-    
     atende_obrigatorios_grau3 = (p_item2 == 3 and p_item4 == 3 and p_item5 == 3 and p_item6 == 3) and all(p >= 2 for p in pontos_itens)
     atende_obrigatorios_grau2 = (p_item2 >= 2 and p_item4 >= 2 and p_item5 >= 2 and p_item6 >= 2) and all(p >= 1 for p in pontos_itens)
     atende_obrigatorios_grau1 = all(p >= 1 for p in pontos_itens)
@@ -244,7 +242,6 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     else:
         fundamentacao = "Inválido / Abaixo do Grau I"
 
-    # Precisão baseada no coeficiente de determinação (R²)
     if r2 >= 0.70:
         precisao = "Grau III"
     elif r2 >= 0.50:
@@ -633,7 +630,6 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     informante_match = re.search(r'(?:Informante|Contato|Respons[áa]vel)[:\s]+([A-Za-z\u00C0-\u00FF\s]{3,30})(?=\s*[-–(]|\s*Tel|\s*E-mail|$)', trecho_limpo, re.IGNORECASE)
     informante_extraido = informante_match.group(1).strip() if informante_match else "ROBERT"
 
-    # CAPTURA EXATA DO TELEFONE ASSOCIADO DIRETAMENTE AO CONTATO DA ORDEM DE SERVIÇO
     telefone_match = re.search(r'(?:Contato|Informante|Telefone\s+do\s+Contato|Tel\s+Contato)[:\s\w\-]*?(\(?[0-9]{2}\)?\s*[0-9]{4,5}[\-\s]?[0-9]{4})', trecho_limpo, re.IGNORECASE)
     if not telefone_match:
         telefone_match = re.search(r'(?:Tel|Telefone|Cel|Celular)[:\s]*(\(?[0-9]{2}\)?\s*[0-9]{4,5}[\-\s]?[0-9]{4})', trecho_limpo, re.IGNORECASE)
@@ -972,16 +968,28 @@ with aba_avm:
                     notas_manuais_input['item3'] = st.number_input("Nota Item 3 (Identificação dos Dados)", min_value=1, max_value=3, value=1)
 
                 usar_todas_manuais = st.checkbox("Ajustar itens restantes manualmente se necessário", value=False)
-                if usar_todas_manuais:
-                    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-                    with col_m1:
-                        notas_manuais_input['item2_manual'] = st.number_input("Nota Item 2 (Qtd Dados)", min_value=1, max_value=3, value=3)
-                    with col_m2:
-                        notas_manuais_input['item4_manual'] = st.number_input("Nota Item 4 (Extrapolabilidade)", min_value=1, max_value=3, value=3)
-                    with col_m3:
-                        notas_manuais_input['item5_manual'] = st.number_input("Nota Item 5 (Signif. Regressores)", min_value=1, max_value=3, value=3)
-                    with col_m4:
-                        notas_manuais_input['item6_manual'] = st.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3)
+                
+                # CÁLCULO DINÂMICO AUTOMÁTICO DO ITEM 4 COM BASE NA EXTRAPOLAÇÃO
+                item4_automatico_valor = 1 if tem_extrapolacao_geral else 3
+
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                with col_m1:
+                    notas_manuais_input['item2_manual'] = st.number_input("Nota Item 2 (Qtd Dados)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais)
+                with col_m2:
+                    # Item 4 agora atualiza sozinho e exibe aviso se houver extrapolação, permitindo sobrescrita se o checkbox estiver ativo
+                    val_item4_default = item4_automatico_valor if not usar_todas_manuais else 3
+                    notas_manuais_input['item4_manual'] = st.number_input(
+                        f"Nota Item 4 (Extrapolabilidade) {'[AUTOMÁTICO]' if not usar_todas_manuais else ''}", 
+                        min_value=1, max_value=3, 
+                        value=val_item4_default, 
+                        disabled=not usar_todas_manuais
+                    )
+                    if not usar_todas_manuais and tem_extrapolacao_geral:
+                        st.caption("🔒 Ajustado automaticamente para Grau I (1) devido à extrapolação detectada.")
+                with col_m3:
+                    notas_manuais_input['item5_manual'] = st.number_input("Nota Item 5 (Signif. Regressores)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais)
+                with col_m4:
+                    notas_manuais_input['item6_manual'] = st.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais)
 
                 st.markdown("---")
                 if st.button("🚀 Executar Saneamento Exato e Gerar Laudo NBR"):
@@ -1077,7 +1085,7 @@ with aba_avm:
                         var_max = ((v_max - v_medio) / v_medio) * 100
 
                         fundamentacao, precisao, soma_pontos, pontos_itens, max_p_reg_val, p_valor_f_calc = calcular_graus_nbr_rigoroso(
-                            n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input
+                            n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input, usar_todas_manuais
                         )
 
                         valores_dict_metricas = {
@@ -1148,7 +1156,7 @@ with aba_avm:
 with aba_juridico:
     st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
     j1, j2 = st.columns(2)
-    matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias)", value=test_val if 'test_val' in locals() else True, key="chk_mat_ok")
+    matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias)", value=True, key="chk_mat_ok")
     sem_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora)", value=True, key="chk_sem_onus")
     sem_acoes = j2.checkbox("Sem ações reipersecutórias", value=True, key="chk_sem_acoes")
     proprietario_ok = j2.checkbox("Vendedor é o proprietário registral", value=True, key="chk_prop_ok")
