@@ -181,7 +181,7 @@ def verificar_micronumerosidade(df, features_selecionadas, classificacoes_var):
     return alertas_micronumerosidade
 
 # =====================================================================
-# AVALIAÇÃO NORMATIVA RIGOROSA CONFORME TABELA NBR 14653-2
+# AVALIAÇÃO NORMATIVA RIGOROSA CONFORME TABELA NBR 14653-2 (EXATA DA IMAGEM)
 # =====================================================================
 def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f, tem_extrapolacao=False, notas_manuais=None):
     p_item1 = notas_manuais.get('item1', 2) if notas_manuais else 2
@@ -226,13 +226,25 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     pontos_itens = [p_item1, p_item2, p_item3, p_item4, p_item5, p_item6]
     soma_pontos = sum(pontos_itens)
 
-    if soma_pontos >= 16 and n_dados >= 30 and r2 >= 0.70 and not tem_extrapolacao and p_item5 > 0:
-        fundamentacao = "Grau III"
-    elif soma_pontos >= 10 and n_dados >= 12 and p_item5 > 0:
-        fundamentacao = "Grau II"
-    else:
-        fundamentacao = "Inválido / Grau I"
+    # REGRAS EXATAS DA IMAGEM OFICIAL DE FUNDAMENTAÇÃO NBR 14653:
+    # Grau III: Pontos >= 16 E Itens obrigatórios (2, 4, 5 e 6 no Grau III [=3], demais no mínimo Grau II [>=2])
+    # Grau II: Pontos >= 10 E Itens obrigatórios (2, 4, 5 e 6 no mínimo Grau II [>=2], demais no mínimo Grau I [>=1])
+    # Grau I: Pontos >= 6 E Todos no mínimo no grau I [>=1]
+    
+    atende_obrigatorios_grau3 = (p_item2 == 3 and p_item4 == 3 and p_item5 == 3 and p_item6 == 3) and all(p >= 2 for p in pontos_itens)
+    atende_obrigatorios_grau2 = (p_item2 >= 2 and p_item4 >= 2 and p_item5 >= 2 and p_item6 >= 2) and all(p >= 1 for p in pontos_itens)
+    atende_obrigatorios_grau1 = all(p >= 1 for p in pontos_itens)
 
+    if soma_pontos >= 16 and atende_obrigatorios_grau3:
+        fundamentacao = "Grau III"
+    elif soma_pontos >= 10 and atende_obrigatorios_grau2:
+        fundamentacao = "Grau II"
+    elif soma_pontos >= 6 and atende_obrigatorios_grau1:
+        fundamentacao = "Grau I"
+    else:
+        fundamentacao = "Inválido / Abaixo do Grau I"
+
+    # Precisão baseada no coeficiente de determinação (R²)
     if r2 >= 0.70:
         precisao = "Grau III"
     elif r2 >= 0.50:
@@ -374,7 +386,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph("LAUDO TÉCNICO DE AVALIAÇÃO - AVM (NBR 14653)", title_style))
     story.append(Paragraph(f"<b>Ordem de Serviço (OS / Referência):</b> {ordem_servico} | <b>Instituição:</b> {tenant} | <b>Tipologia:</b> {tipologia.upper()}", text_style))
     story.append(Paragraph(f"<b>Endereço do Imóvel:</b> {endereco}", text_style))
-    story.append(Paragraph(f"<b>Informante / Contato:</b> {informante} | <b>Telefone:</b> {telefone}", text_style))
+    story.append(Paragraph(f"<b>Contato / Telefone do Contato (OS):</b> {informante} | {telefone}", text_style))
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("1. Atributos do Imóvel Avaliando, Especificações, Limites da Amostra e Sinais", subtitle_style))
@@ -555,7 +567,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     return buffer.getvalue()
 
 # =====================================================================
-# MOTOR DE PARSER LIMPO E ROBUSTO
+# MOTOR DE PARSER LIMPO E ROBUSTO (EXTRAÇÃO EXATA DO TELEFONE DE CONTATO DA OS)
 # =====================================================================
 def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     texto_total = ""
@@ -621,7 +633,10 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     informante_match = re.search(r'(?:Informante|Contato|Respons[áa]vel)[:\s]+([A-Za-z\u00C0-\u00FF\s]{3,30})(?=\s*[-–(]|\s*Tel|\s*E-mail|$)', trecho_limpo, re.IGNORECASE)
     informante_extraido = informante_match.group(1).strip() if informante_match else "ROBERT"
 
-    telefone_match = re.search(r'(?:Tel|Telefone|Cel|Celular)[:\s]*(\(?[0-9]{2}\)?\s*[0-9]{4,5}[\-\s]?[0-9]{4})', trecho_limpo, re.IGNORECASE)
+    # CAPTURA EXATA DO TELEFONE ASSOCIADO DIRETAMENTE AO CONTATO DA ORDEM DE SERVIÇO
+    telefone_match = re.search(r'(?:Contato|Informante|Telefone\s+do\s+Contato|Tel\s+Contato)[:\s\w\-]*?(\(?[0-9]{2}\)?\s*[0-9]{4,5}[\-\s]?[0-9]{4})', trecho_limpo, re.IGNORECASE)
+    if not telefone_match:
+        telefone_match = re.search(r'(?:Tel|Telefone|Cel|Celular)[:\s]*(\(?[0-9]{2}\)?\s*[0-9]{4,5}[\-\s]?[0-9]{4})', trecho_limpo, re.IGNORECASE)
     telefone_extraido = telefone_match.group(1).strip() if telefone_match else "(62) 9614-6622"
 
     tipologia_detectada = "Casa"
@@ -661,7 +676,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     variaveis_encontradas['banheiros'] = 1
     variaveis_encontradas['vagas_garagem'] = 1
 
-    logs_execucao.append(f"Leitura executada com sucesso: OS = {os_extraida}, Informante = {informante_extraido}, Tel = {telefone_extraido}")
+    logs_execucao.append(f"Leitura executada com sucesso: OS = {os_extraida}, Informante = {informante_extraido}, Tel Contato OS = {telefone_extraido}")
     return variaveis_encontradas, os_extraida, endereco_extraido, informante_extraido, telefone_extraido, tipologia_detectada, logs_execucao
 
 # =====================================================================
@@ -703,7 +718,7 @@ tipologia_imovel = st.sidebar.selectbox(
 ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS / Referência)", value=st.session_state.os_auto, placeholder="Aguardando leitura do PDF...")
 endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value=st.session_state.endereco_auto, placeholder="Aguardando leitura do PDF...")
 informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value=st.session_state.informante_auto, placeholder="Aguardando leitura do PDF...")
-informante_tel = st.sidebar.text_input("Telefone do Informante", value=st.session_state.telefone_auto, placeholder="Aguardando leitura do PDF...")
+informante_tel = st.sidebar.text_input("Telefone do Contato (OS)", value=st.session_state.telefone_auto, placeholder="Aguardando leitura do PDF...")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"**Plano Ativo:** `🟢 {plano_assinatura}`")
@@ -743,7 +758,7 @@ with aba_avm:
 
     if documentos_enviados:
         if st.button("🔍 Processar Leitura Automática e Relatório de Auditoria"):
-            with st.spinner("Processando certidão/documentos e extraindo variáveis, informante e telefone..."):
+            with st.spinner("Processando certidão/documentos e extraindo variáveis, informante e telefone do contato da OS..."):
                 dados_extraidos, os_ext, end_ext, inf_ext, tel_ext, tipo_ext, logs = processar_multiplos_documentos_com_auditoria(documentos_enviados)
                 
                 st.info("📋 **Relatório de Auditoria e Extração Documental:**")
@@ -1133,10 +1148,10 @@ with aba_avm:
 with aba_juridico:
     st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
     j1, j2 = st.columns(2)
-    matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias)", value=True)
-    sem_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora)", value=True)
-    sem_acoes = j2.checkbox("Sem ações reipersecutórias", value=True)
-    proprietario_ok = j2.checkbox("Vendedor é o proprietário registral", value=True)
+    matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias)", value=test_val if 'test_val' in locals() else True, key="chk_mat_ok")
+    sem_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora)", value=True, key="chk_sem_onus")
+    sem_acoes = j2.checkbox("Sem ações reipersecutórias", value=True, key="chk_sem_acoes")
+    proprietario_ok = j2.checkbox("Vendedor é o proprietário registral", value=True, key="chk_prop_ok")
 
     if st.button("⚖️ Processar Análise Jurídica"):
         aprovados = sum([matricula_ok, sem_onus, sem_acoes, proprietario_ok])
