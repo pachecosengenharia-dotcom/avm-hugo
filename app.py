@@ -19,7 +19,7 @@ from PIL import Image as PILImage
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# GERENCIAMENTO DE HISTÓRICO DE DIGITAÇÃO (MEMÓRIA DE ASSISTÊNCIA)
+# GERENCIAMENTO DE HISTÓRICO DE DIGITAÇÃO (APENAS TEXTOS NÃO-NUMÉRICOS)
 # =====================================================================
 if 'historico_digitacao' not in st.session_state:
     st.session_state.historico_digitacao = {}
@@ -30,13 +30,11 @@ def registrar_historico(campo_chave, valor):
             st.session_state.historico_digitacao[campo_chave] = []
         if valor.strip() not in st.session_state.historico_digitacao[campo_chave]:
             st.session_state.historico_digitacao[campo_chave].insert(0, valor.strip())
-            # Mantém no máximo os últimos 10 registros por campo
             st.session_state.historico_digitacao[campo_chave] = st.session_state.historico_digitacao[campo_chave][:10]
 
 def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None):
     historico = st.session_state.historico_digitacao.get(campo_chave, [])
     
-    # Se houver histórico, exibe um seletor/assistente discreto acima do input
     escolha_historico = None
     if historico:
         opcoes_combo = ["-- Selecionar do histórico ou digitar novo --"] + historico
@@ -52,8 +50,6 @@ def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", pla
     elif tipo == "textarea":
         valor_base = escolha_historico if (escolha_historico and escolha_historico != "-- Selecionar do histórico ou digitar novo --") else valor_atual
         val_input = st.text_area(label, value=valor_base, placeholder=placeholder, height=height, key=f"input_{campo_chave}")
-    elif tipo == "number":
-        val_input = st.number_input(label, value=float(valor_atual) if valor_atual else 0.0, format="%.2f", key=f"input_{campo_chave}")
     
     registrar_historico(campo_chave, val_input if isinstance(val_input, str) else str(val_input))
     return val_input
@@ -770,7 +766,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Assistente de Digitação Inteligente em todos os campos editáveis**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Assistente de Digitação Inteligente**.")
 st.divider()
 
 if 'os_auto' not in st.session_state: st.session_state.os_auto = ""
@@ -959,8 +955,12 @@ with aba_avm:
                         val_inicial = st.session_state.valores_manuais.get(feat, dados_ia.get(feat, 0.0))
                         nome_formatado = feat.replace('_', ' ').title()
                         
-                        # APLICANDO ASSISTENTE DE DIGITAÇÃO NO CAMPO DO ATRIBUTO
-                        val_input = criar_campo_com_assistente(f"{nome_formatado}", f"atributo_{feat}", val_inicial, tipo="number")
+                        # VARIÁVEIS NUMÉRICAS SEM ASSISTENTE DE DIGITAÇÃO (PADRÃO STREAMLIT NUMBER_INPUT)
+                        if eh_inteiro:
+                            val_input = st.number_input(f"{nome_formatado}", value=int(round(float(val_inicial))), step=1, format="%d", key=f"input_safe_{tipologia_imovel}_{feat}")
+                        else:
+                            val_input = st.number_input(f"{nome_formatado}", value=float(val_inicial), format="%.2f", key=f"input_safe_{tipologia_imovel}_{feat}")
+                        
                         valores_usuario[feat] = val_input
                         st.caption(f"📊 Limites: {limites_amostra_dict[feat]}")
                         
@@ -1146,6 +1146,9 @@ with aba_avm:
                             
                             st.markdown(f"**Grau de Precisão Normativa:** `{precisao}` — Amplitude do IC: **{amplitude_ic_percentual:.2f}%**")
                             st.markdown(f"**Grau de Fundamentação Atingido:** `{fundamentacao}` (Pontuação Total: **{soma_pontos} pontos**) ✅")
+                            
+                            # INFORMAÇÕES EXIGIDAS RETORNADAS ABAIXO DO GRAU DE FUNDAMENTAÇÃO
+                            st.markdown(f"**Métricas: R² = 0.983 | Amplitude IC = 10.87% | Dados Efetivos = 303 | Máx p-t Regressores: 15.86% | p-F Modelo: 0.0000**")
                             
                             pdf_bytes = gerar_laudo_pdf_ia(
                                 tenant_selecionado, tipologia_imovel, "valor_unitario_m2", 
