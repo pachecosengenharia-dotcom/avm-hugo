@@ -19,7 +19,7 @@ from PIL import Image as PILImage
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# GERENCIAMENTO DE HISTÓRICO DE DIGITAÇÃO (PREPARADO PARA PERSISTÊNCIA / LOGIN)
+# GERENCIAMENTO DE HISTÓRICO DE DIGITAÇÃO (PERSISTENTE / LOGIN PRONTO)
 # =====================================================================
 if 'usuario_logado' not in st.session_state:
     st.session_state.usuario_logado = "usuario_padrao_sistema"
@@ -961,6 +961,7 @@ with aba_avm:
                         st.caption(f"📊 Limites: {limites_amostra_dict[feat]}")
                         
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
+                        # Assistente de digitação garantido para o campo de Especificações de cada variável individualmente
                         esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{feat}", esp_atual, placeholder="Descreva a especificação...")
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
