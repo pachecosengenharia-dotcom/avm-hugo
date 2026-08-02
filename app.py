@@ -181,9 +181,9 @@ def verificar_micronumerosidade(df, features_selecionadas, classificacoes_var):
     return alertas_micronumerosidade
 
 # =====================================================================
-# AVALIAÇÃO NORMATIVA RIGOROSA CONFORME TABELA NBR 14653-2 (EXATA DA IMAGEM)
+# AVALIAÇÃO NORMATIVA RIGOROSA CONFORME TABELA NBR 14653-2 & PRECISÃO POR AMPLITUDE DO IC
 # =====================================================================
-def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f, tem_extrapolacao=False, notas_manuais=None, usar_manual=False):
+def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f, amplitude_ic_percentual, tem_extrapolacao=False, notas_manuais=None, usar_manual=False):
     p_item1 = notas_manuais.get('item1', 2) if notas_manuais else 2
     
     if n_dados >= 30:
@@ -195,7 +195,6 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
         
     p_item3 = notas_manuais.get('item3', 2) if notas_manuais else 2
     
-    # ATUALIZAÇÃO AUTOMÁTICA DO ITEM 4 CONFORME EXTRAPOLAÇÃO SE NÃO FOR FORÇADO MANUALMENTE
     if usar_manual and notas_manuais and 'item4_manual' in notas_manuais:
         p_item4 = notas_manuais['item4_manual']
     else:
@@ -242,12 +241,18 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
     else:
         fundamentacao = "Inválido / Abaixo do Grau I"
 
-    if r2 >= 0.70:
+    # AVALIAÇÃO DE PRECISÃO BASEADA EXATAMENTE NA AMPLITUDE DO INTERVALO DE CONFIANÇA (%):
+    # Grau III: Amplitude <= 30%
+    # Grau II: Amplitude <= 40%
+    # Grau I: Amplitude <= 50% (ou superior)
+    if amplitude_ic_percentual <= 30.0:
         precisao = "Grau III"
-    elif r2 >= 0.50:
+    elif amplitude_ic_percentual <= 40.0:
         precisao = "Grau II"
-    else:
+    elif amplitude_ic_percentual <= 50.0:
         precisao = "Grau I"
+    else:
+        precisao = "Fora dos Limites Normativos / Grau I"
 
     return fundamentacao, precisao, soma_pontos, pontos_itens, max_p_regressor, p_valor_f
 
@@ -368,7 +373,7 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
 # =====================================================================
 # GERADOR DE PDF CUSTOMIZADO EM PAISAGEM COM DUPLO GRÁFICO NBR
 # =====================================================================
-def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook, buf_minmax):
+def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, amplitude_ic_perc, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
@@ -431,7 +436,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         sinal_coef = sinais_var.get(feat, "+")
         eq_str += f" {sinal_coef} ({abs(coef):,.6f} * {feat})"
     story.append(Paragraph(eq_str, text_style))
-    story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Dados Efetivos = {n_dados} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
+    story.append(Paragraph(f"<b>Métricas:</b> R² = {r2} | Amplitude IC = {amplitude_ic_perc:.2f}% | Dados Efetivos = {n_dados} | <b>Máx p-t Regressores:</b> {max_p_regressor*100:.2f}% | <b>p-F Modelo:</b> {p_valor_f:.4f}", text_style))
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("3. Resultados da Avaliação, Campo de Arbítrio e Valor Adotado na Precificação", subtitle_style))
@@ -473,7 +478,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
         [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Exclusivo para Dicotômicas, Códigos e Proxy Temporal ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
         [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após o saneamento exclusivo e Cook: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
-        [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
+        [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao} (Amplitude IC: {amplitude_ic_perc:.2f}%)", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
 
     t_fund = Table(t_fund_data, colWidths=[60, 522, 150])
@@ -969,14 +974,12 @@ with aba_avm:
 
                 usar_todas_manuais = st.checkbox("Ajustar itens restantes manualmente se necessário", value=False)
                 
-                # CÁLCULO DINÂMICO AUTOMÁTICO DO ITEM 4 COM BASE NA EXTRAPOLAÇÃO
                 item4_automatico_valor = 1 if tem_extrapolacao_geral else 3
 
                 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
                 with col_m1:
                     notas_manuais_input['item2_manual'] = st.number_input("Nota Item 2 (Qtd Dados)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais)
                 with col_m2:
-                    # Item 4 agora atualiza sozinho e exibe aviso se houver extrapolação, permitindo sobrescrita se o checkbox estiver ativo
                     val_item4_default = item4_automatico_valor if not usar_todas_manuais else 3
                     notas_manuais_input['item4_manual'] = st.number_input(
                         f"Nota Item 4 (Extrapolabilidade) {'[AUTOMÁTICO]' if not usar_todas_manuais else ''}", 
@@ -1065,6 +1068,10 @@ with aba_avm:
                         vu_min = max(lim_inf_estatistico, vu_inf_arbitrio)
                         vu_max = min(lim_sup_estatistico, vu_sup_arbitrio)
 
+                        # CÁLCULO EXATO DA AMPLITUDE DO INTERVALO DE CONFIANÇA EM PERCENTUAL (%)
+                        # Amplitude IC = ((Valor Máximo - Valor Mínimo) / Valor Estimado) * 100
+                        amplitude_ic_percentual = ((vu_max - vu_min) / vu_medio) * 100
+
                         area_avaliando = valores_usuario.get('area_privativa', valores_usuario.get(col_area_base, 1.0))
                         if area_avaliando <= 0:
                             area_avaliando = 1.0
@@ -1085,7 +1092,7 @@ with aba_avm:
                         var_max = ((v_max - v_medio) / v_medio) * 100
 
                         fundamentacao, precisao, soma_pontos, pontos_itens, max_p_reg_val, p_valor_f_calc = calcular_graus_nbr_rigoroso(
-                            n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, tem_extrapolacao_geral, notas_manuais_input, usar_todas_manuais
+                            n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, amplitude_ic_percentual, tem_extrapolacao_geral, notas_manuais_input, usar_todas_manuais
                         )
 
                         valores_dict_metricas = {
@@ -1117,6 +1124,7 @@ with aba_avm:
                             sinal_str_exibicao = "+" if tipo_operador_ajuste == "Majorado (+)" else "-"
                             st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
                             st.markdown(f"**Campo de Arbítrio (±15%):** R$ {v_inf_arb:,.2f} até R$ {v_sup_arb:,.2f}")
+                            st.markdown(f"**Precisão Normativa (Amplitude do IC):** {precisao} (Amplitude: {amplitude_ic_percentual:.2f}%)")
                             if motivo_ajuste_input:
                                 st.info(f"ℹ️ **Justificativa Registrada:** '{motivo_ajuste_input}' (Direção: {tipo_operador_ajuste} {percentual_ajuste}%)")
 
@@ -1125,7 +1133,7 @@ with aba_avm:
                                 ordem_servico_input, endereco_imovel_input,
                                 informante_nome, informante_tel,
                                 valores_dict_metricas,
-                                r2, n_dados_efetivos, features_selecionadas, coeficientes, valores_usuario,
+                                r2, amplitude_ic_percentual, n_dados_efetivos, features_selecionadas, coeficientes, valores_usuario,
                                 st.session_state.classificacoes_variaveis,
                                 st.session_state.especificacoes_variaveis,
                                 st.session_state.sinais_variaveis,
