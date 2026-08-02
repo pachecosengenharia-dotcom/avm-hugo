@@ -97,13 +97,13 @@ def calcular_distancia_cook_e_filtrar(df, coluna_alvo, features):
     return df_filtrado, cooks_d_array, limite_cook
 
 # =====================================================================
-# SANEAMENTO EXATO ULTRA-RESTRITO (APENAS DICOTÔMICA, CÓDIGO ALOCADO E PROXY TEMPORAL)
+# SANEAMENTO EXATO RESTRITO (EXCLUSIVAMENTE DICOTÔMICA, CÓDIGO ALOCADO E PROXY TEMPORAL)
 # =====================================================================
 def sanear_micronumerosidade_exato(df, features_selecionadas, classificacoes_var):
     df_saneado = df.copy()
     log_reclassificacoes = []
     
-    # Apenas Dicotômica, Código Alocado e Proxy Temporal passam por saneamento
+    # Exclusivamente Dicotômica, Código Alocado e Proxy Temporal passam por saneamento automático
     tipos_saneaveis = ["Dicotômica", "Código Alocado", "Proxy Temporal"]
     
     for feat in features_selecionadas:
@@ -112,7 +112,7 @@ def sanear_micronumerosidade_exato(df, features_selecionadas, classificacoes_var
             
         tipo_atual = classificacoes_var.get(feat, "Quantitativa")
         if tipo_atual not in tipos_saneaveis:
-            # Variáveis Quantitativas, Proxy comum (ex: Índice Fiscal) e Dependentes NUNCA são alteradas
+            # Variáveis Quantitativas e Proxy comum (ex: Índice Fiscal) NUNCA sofrem saneamento automático
             continue
             
         serie = df_saneado[feat]
@@ -455,7 +455,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
-    micro_status_text = "REPRESENTATIVIDADE ATENDIDA (Saneamento Ultra-Restrito Aplicado)"
+    micro_status_text = "REPRESENTATIVIDADE ATENDIDA (Saneamento Exclusivo Aplicado)"
 
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
@@ -465,8 +465,8 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         [Paragraph("4", table_cell_style), Paragraph(f"Extrapolabilidade ({'Com Extrapol.' if variaveis_extrapoladas else 'Sem Extrapol.'})", table_cell_style), Paragraph(str(pontos_itens[3]), table_cell_style)],
         [Paragraph("5", table_cell_style), Paragraph(f"Significância Regressores (Máx p = {max_p_regressor*100:.1f}%)", table_cell_style), Paragraph(str(pontos_itens[4]), table_cell_style)],
         [Paragraph("6", table_cell_style), Paragraph(f"Significância Modelo F (p = {p_valor_f:.4f})", table_cell_style), Paragraph(str(pontos_itens[5]), table_cell_style)],
-        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Restrito a Dicotômicas, Códigos e Proxies Temporais ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
-        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após o saneamento e Cook: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
+        [Paragraph("MICRO", table_cell_bold), Paragraph("Critério de Micronumerosidade (Exclusivo para Dicotômicas, Códigos e Proxies Temporais ≥ 10%)", table_cell_style), Paragraph(micro_status_text, table_cell_style)],
+        [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Quantidade de dados efetivamente utilizados nos cálculos após o saneamento exclusivo e Cook: {n_dados} dados.", table_cell_style), Paragraph("OK", table_cell_style)],
         [Paragraph("SOMA", table_cell_bold), Paragraph(f"Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_bold), Paragraph(f"{soma_pontos} PONTOS", table_cell_bold)]
     ]
 
@@ -671,7 +671,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
 # INTERFACE PRINCIPAL DO PAINEL SAAS
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
-st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Classificação Proxy Temporal e Saneamento Ultra-Restrito**.")
+st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Saneamento Exclusivo (Dicotômicas, Códigos Alocados e Proxy Temporal)**.")
 st.divider()
 
 if 'os_auto' not in st.session_state:
@@ -874,8 +874,8 @@ with aba_avm:
                 variaveis_extrapoladas = []
                 cols_inputs = st.columns(len(features_selecionadas))
                 
-                # Incluída a nova opção "Proxy Temporal" solicitada para isolar o saneamento
-                tipos_classificacao_opcoes = ["Quantitativa", "Código Alocado", "Dicotômica", "Proxy Temporal", "Dependente"]
+                # Opções completas contemplando Proxy (não temporal) e Proxy Temporal (saneável)
+                tipos_classificacao_opcoes = ["Quantitativa", "Código Alocado", "Dicotômica", "Proxy", "Proxy Temporal", "Dependente"]
                 sinais_opcoes = ["+", "-"]
                 
                 for i, feat in enumerate(features_selecionadas):
@@ -933,7 +933,7 @@ with aba_avm:
                         )
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
-                        # 2. Campo de Classificação (com Proxy Temporal)
+                        # 2. Campo de Classificação (com Proxy e Proxy Temporal separadas)
                         classificacao_atual = st.session_state.classificacoes_variaveis.get(feat, "Quantitativa")
                         class_escolhida = st.selectbox(
                             f"Classif. ({feat})",
@@ -977,8 +977,8 @@ with aba_avm:
                     
                     n_dados_efetivos = len(df_modelo_final)
                     
-                    st.success(f"✅ Saneamento restrito executado com sucesso! Dados efetivos utilizados: **{n_dados_efetivos} registros**.")
-                    with st.expander("🔍 **Visualizar Relatório Detalhado do Saneamento Restrito Realizado (Plataforma)**", expanded=True):
+                    st.success(f"✅ Saneamento exclusivo executado com sucesso! Dados efetivos utilizados: **{n_dados_efetivos} registros**.")
+                    with st.expander("🔍 **Visualizar Relatório Detalhado do Saneamento Exclusivo Realizado (Plataforma)**", expanded=True):
                         st.markdown("### Histórico de Ações do Motor de Saneamento:")
                         if logs_reclassificacao:
                             for log_item in logs_reclassificacao:
