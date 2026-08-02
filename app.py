@@ -368,11 +368,12 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
     return buf_aderencia, buf_residuos, buf_cook, buf_minmax
 
 # =====================================================================
-# GERADOR DE PDF CUSTOMIZADO COM BANNER DE LOGO EM TODAS AS PÁGINAS
+# GERADOR DE PDF CUSTOMIZADO COM LOGO RECENTRADA E FLUXO SEGURO
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, amplitude_ic_perc, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, observacoes_gerais, incluir_planilha_dados, logo_bytes, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=45, bottomMargin=30)
+    # Margem superior aumentada para 65 para abrir espaço físico limpo para a logo/banner
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=65, bottomMargin=30)
     styles = getSampleStyleSheet()
     
     title_style = ParagraphStyle('T1', parent=styles['Heading1'], fontSize=12, textColor=colors.HexColor("#1A365D"), spaceAfter=6, leading=14)
@@ -383,25 +384,47 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     def cabecalho_banner_canvas(canvas, document):
         canvas.saveState()
-        # Desenhar banner de topo (fundo sutil ou linha separadora)
+        page_width, page_height = landscape(letter)
+        
+        # Fundo do banner superior na margem superior
         canvas.setFillColor(colors.HexColor("#F7FAFC"))
-        canvas.rect(30, landscape(letter)[1] - 40, landscape(letter)[0] - 60, 32, fill=1, stroke=0)
+        canvas.rect(30, page_height - 55, page_width - 60, 48, fill=1, stroke=0)
         canvas.setStrokeColor(colors.HexColor("#CBD5E0"))
         canvas.setLineWidth(0.5)
-        canvas.line(30, landscape(letter)[1] - 40, landscape(letter)[0] - 30, landscape(letter)[1] - 40)
+        canvas.line(30, page_height - 55, page_width - 30, page_height - 55)
         
+        # Desenhar a logo se os bytes estiverem presentes
         if logo_bytes:
             try:
-                img_stream = io.BytesIO(logo_bytes)
-                # Inserir a imagem da logo como banner superior esquerdo
-                canvas.drawImage(img_stream, 35, landscape(letter)[1] - 38, width=110, height=26, preserveAspectRatio=True, mask='auto')
-            except Exception:
-                pass
-        
-        # Texto à direita no banner superior
-        canvas.setFont("Helvetica-Bold", 7.5)
+                img_io = io.BytesIO(logo_bytes)
+                pil_img = PILImage.open(img_io)
+                img_w, img_h = pil_img.size
+                
+                # Proporção fixa de altura para caber perfeitamente no banner (altura de 38 pontos)
+                target_h = 38.0
+                target_w = (img_w / img_h) * target_h if img_h > 0 else 100.0
+                if target_w > 180.0:  # Limite máximo de largura da logo
+                    target_w = 180.0
+                    target_h = (img_h / img_w) * target_w
+                
+                img_io.seek(0)
+                # Posicionado no canto superior esquerdo (x=38, centralizado verticalmente na faixa)
+                canvas.drawImage(img_io, 38, page_height - 50, width=target_w, height=target_h, preserveAspectRatio=True, mask='auto')
+            except Exception as e:
+                # Fallback caso ocorra algum erro na renderização da imagem PIL
+                canvas.setFont("Helvetica-Bold", 8)
+                canvas.setFillColor(colors.HexColor("#E53E3E"))
+                canvas.drawString(38, page_height - 32, "[Erro ao carregar Logo]")
+        else:
+            # Texto institucional caso nenhuma logo seja enviada
+            canvas.setFont("Helvetica-Bold", 9)
+            canvas.setFillColor(colors.HexColor("#2B6CB0"))
+            canvas.drawString(38, page_height - 32, "PLATAFORMA AVM — LAUDO TÉCNICO")
+
+        # Texto descritivo à direita no banner superior
+        canvas.setFont("Helvetica-Bold", 8)
         canvas.setFillColor(colors.HexColor("#1A365D"))
-        canvas.drawRightString(landscape(letter)[0] - 35, landscape(letter)[1] - 25, f"LAUDO TÉCNICO AVM | OS: {ordem_servico}")
+        canvas.drawRightString(page_width - 35, page_height - 32, f"LAUDO TÉCNICO AVM | OS: {ordem_servico}")
         canvas.restoreState()
 
     story = []
@@ -1216,7 +1239,7 @@ with aba_avm:
                                 buf_ad, buf_res, buf_cook, buf_minmax
                             )
                             st.download_button(
-                                "📄 Baixar Laudo Completo em PDF (Com Banner de Logo e Paginação Ajustada)",
+                                "📄 Baixar Laudo Completo em PDF (Com Banner de Logo Garantido)",
                                 data=pdf_bytes,
                                 file_name=f"laudo_nbr_{ordem_servico_input.replace('/', '_')}.pdf",
                                 mime="application/pdf",
