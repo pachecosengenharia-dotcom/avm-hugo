@@ -551,16 +551,19 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
 
     story.append(Paragraph("6. Esteira de Risco Jurídico (BACEN CMN 4.910)", subtitle_style))
     
-    status_legivel = "APROVADO" if status_juridico else "REPROVADO"
+    # Formato idêntico ao da plataforma solicitada: Documentação APROVADO/REPROVADO — Grau de Risco Legal: SCORE
+    status_texto_pdf = "APROVADA" if status_juridico else "REPROVADA"
+    texto_linha_juridica = f"Documentação {status_texto_pdf} — Grau de Risco Legal: {score_juridico}"
+    
     t3 = Table([
-        ["Status Documental", status_legivel],
-        ["Grau de Risco Legal", score_juridico],
+        ["Esteira de Risco Jurídico da Matrícula", texto_linha_juridica],
     ], colWidths=[200, 532])
     t3.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
-        ('PADDING', (0, 0), (-1, -1), 3),
+        ('PADDING', (0, 0), (-1, -1), 5),
         ('TEXTCOLOR', (1, 0), (1, 0), colors.HexColor("#38A169") if status_juridico else colors.HexColor("#E53E3E")),
         ('FONTSIZE', (0, 0), (-1, -1), 7.5),
+        ('BACKGROUND', (1, 0), (1, 0), colors.HexColor("#F0FFF4") if status_juridico else colors.HexColor("#FFF5F5")),
     ]))
     story.append(t3)
     story.append(Spacer(1, 4))
@@ -756,7 +759,7 @@ if 'sinais_variaveis' not in st.session_state:
     st.session_state.sinais_variaveis = {}
 
 st.sidebar.markdown("🔑 **Identificação do Contratante**")
-tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"], key="selectbox_tenant_institucional")
+tenant_selecionado = st.sidebar.selectbox("Cliente Institucional", ["001 - Banco Alfa S.A.", "002 - Imobiliária Local Ltda"], key="selectbox_tenant_institucional_v2")
 plano_assinatura = "ENTERPRISE" if "Alfa" in tenant_selecionado else "STANDARD"
 
 st.sidebar.markdown("---")
@@ -765,7 +768,7 @@ tipologia_imovel = st.sidebar.selectbox(
     "Selecione a Tipologia:", 
     ["Casa", "Apartamento", "Lote", "Galpão Comercial"],
     index=["Casa", "Apartamento", "Lote", "Galpão Comercial"].index(st.session_state.tipologia_auto) if st.session_state.tipologia_auto in ["Casa", "Apartamento", "Lote", "Galpão Comercial"] else 0,
-    key="selectbox_tipologia_imovel_principal"
+    key="selectbox_tipologia_imovel_v2"
 )
 
 ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS / Referência)", value=st.session_state.os_auto, placeholder="Aguardando leitura do PDF...")
@@ -776,7 +779,7 @@ informante_tel = st.sidebar.text_input("Telefone do Contato (OS)", value=st.sess
 # CAMPO DE UPLOAD DA LOGO DO USUÁRIO/CLIENTE NA BARRA LATERAL
 st.sidebar.markdown("---")
 st.sidebar.markdown("🖼️ **Logo do Usuário / Cliente (Banner do Laudo)**")
-arquivo_logo = st.sidebar.file_uploader("Insira a imagem da logo (.png ou .jpg)", type=["png", "jpg", "jpeg"], key="uploader_logo_usuario")
+arquivo_logo = st.sidebar.file_uploader("Insira a imagem da logo (.png ou .jpg)", type=["png", "jpg", "jpeg"], key="uploader_logo_usuario_v2")
 logo_bytes_global = None
 if arquivo_logo is not None:
     logo_bytes_global = arquivo_logo.read()
@@ -810,16 +813,16 @@ with aba_avm:
     
     col_up1, col_up2 = st.columns(2)
     with col_up1:
-        arquivo_planilha = st.file_uploader(f"Base Comparativa para {tipologia_imovel} (.xlsx ou .csv)", type=["xlsx", "csv"])
+        arquivo_planilha = st.file_uploader(f"Base Comparativa para {tipologia_imovel} (.xlsx ou .csv)", type=["xlsx", "csv"], key="uploader_planilha_v2")
         if arquivo_planilha is not None:
             st.markdown("🟢 **Planilha Vinculada com Sucesso!**")
     with col_up2:
-        documentos_enviados = st.file_uploader("Documentação do Imóvel (Certidão, Matrícula, OS em PDF)", type=["pdf"], key="uploader_multiplos", accept_multiple_files=True)
+        documentos_enviados = st.file_uploader("Documentação do Imóvel (Certidão, Matrícula, OS em PDF)", type=["pdf"], key="uploader_multiplos_v2", accept_multiple_files=True)
         if documentos_enviados:
             st.markdown(f"🟢 **{len(documentos_enviados)} documento(s) anexado(s)!**")
 
     if documentos_enviados:
-        if st.button("🔍 Processar Leitura Automática e Relatório de Auditoria"):
+        if st.button("🔍 Processar Leitura Automática e Relatório de Auditoria", key="btn_proc_doc_v2"):
             with st.spinner("Processando certidão/documentos e extraindo variáveis, informante e telefone do contato da OS..."):
                 dados_extraidos, os_ext, end_ext, inf_ext, tel_ext, tipo_ext, logs = processar_multiplos_documentos_com_auditoria(documentos_enviados)
                 
@@ -879,7 +882,7 @@ with aba_avm:
         st.markdown("---")
         with st.expander("📝 Visualizar e Editar Dados da Planilha de Mercado (Acesso Direto)", expanded=False):
             st.markdown("Você pode inspecionar ou realizar edições manuais diretamente na base abaixo se desejar:")
-            df_editado_usuario = st.data_editor(st.session_state.df_dinamico, num_rows="dynamic", key="editor_planilha_mercado")
+            df_editado_usuario = st.data_editor(st.session_state.df_dinamico, num_rows="dynamic", key="editor_planilha_mercado_v2")
             if df_editado_usuario is not None:
                 df_global = df_editado_usuario
                 st.session_state.df_dinamico = df_global
@@ -892,9 +895,9 @@ with aba_avm:
         if len(colunas_numericas) >= 2:
             c1, c2 = st.columns(2)
             with c1:
-                col_valor_total = st.selectbox("Coluna de Valor Total na Base:", [c for c in colunas_numericas if 'valor' in c or 'preco' in c] + colunas_numericas)
+                col_valor_total = st.selectbox("Coluna de Valor Total na Base:", [c for c in colunas_numericas if 'valor' in c or 'preco' in c] + colunas_numericas, key="sel_val_tot_v2")
             with c2:
-                col_area_base = st.selectbox("Coluna de Área Base (ex: area_privativa ou area_terreno):", [c for c in colunas_numericas if 'area' in c] + colunas_numericas)
+                col_area_base = st.selectbox("Coluna de Área Base (ex: area_privativa ou area_terreno):", [c for c in colunas_numericas if 'area' in c] + colunas_numericas, key="sel_area_base_v2")
 
             termos_exclusao_alvo = ['valor_unitario', 'valor_unitario_m2', 'v_unitario', 'vu']
             features_disponiveis = [
@@ -905,7 +908,8 @@ with aba_avm:
             features_selecionadas = st.multiselect(
                 "Escolha as Variáveis Independentes do Modelo:",
                 options=features_disponiveis,
-                default=[c for c in features_disponiveis if c != col_area_base][:min(2, len(features_disponiveis))]
+                default=[c for c in features_disponiveis if c != col_area_base][:min(2, len(features_disponiveis))],
+                key="multiselect_features_v2"
             )
 
             if features_selecionadas and col_valor_total and col_area_base:
@@ -1023,11 +1027,11 @@ with aba_avm:
                 st.subheader("4. Ajustes e Parâmetros de Avaliação")
                 col_aj1, col_aj2, col_aj3 = st.columns(3)
                 with col_aj1:
-                    tipo_operador_ajuste = st.selectbox("Direção do Ajuste de Precificação:", ["depreciado (-)", "majorado (+)"], index=1)
+                    tipo_operador_ajuste = st.selectbox("Direção do Ajuste de Precificação:", ["depreciado (-)", "majorado (+)"], index=1, key="sel_op_ajuste_v2")
                 with col_aj2:
-                    percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
+                    percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f", key="num_perc_ajuste_v2")
                 with col_aj3:
-                    motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...")
+                    motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...", key="txt_motivo_ajuste_v2")
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
@@ -1035,7 +1039,7 @@ with aba_avm:
                     "Insira as observações gerais, considerações de vistoria ou ressalvas técnicas que constarão no laudo:",
                     value="",
                     placeholder="Ex: Imóvel localizado em zona de expansão urbana, vistoriado externamente...",
-                    key="obs_gerais_manual_principal"
+                    key="obs_gerais_manual_principal_v2"
                 )
 
                 st.markdown("---")
@@ -1043,37 +1047,38 @@ with aba_avm:
                 notas_manuais_input = {}
                 col_n1, col_n2 = st.columns(2)
                 with col_n1:
-                    notas_manuais_input['item1'] = st.number_input("Nota Item 1 (Caracterização do Imóvel)", min_value=1, max_value=3, value=2)
+                    notas_manuais_input['item1'] = st.number_input("Nota Item 1 (Caracterização do Imóvel)", min_value=1, max_value=3, value=2, key="nota_item1_v2")
                 with col_n2:
-                    notas_manuais_input['item3'] = st.number_input("Nota Item 3 (Identificação dos Dados)", min_value=1, max_value=3, value=1)
+                    notas_manuais_input['item3'] = st.number_input("Nota Item 3 (Identificação dos Dados)", min_value=1, max_value=3, value=1, key="nota_item3_v2")
 
-                usar_todas_manuais = st.checkbox("Ajustar itens restantes manualmente se necessário", value=False)
+                usar_todas_manuais = st.checkbox("Ajustar itens restantes manualmente se necessário", value=False, key="chk_usar_todas_manuais_v2")
                 
                 item4_automatico_valor = 1 if tem_extrapolacao_geral else 3
 
                 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
                 with col_m1:
-                    notas_manuais_input['item2_manual'] = st.number_input("Nota Item 2 (Qtd Dados)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais)
+                    notas_manuais_input['item2_manual'] = st.number_input("Nota Item 2 (Qtd Dados)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais, key="nota_item2_v2")
                 with col_m2:
                     val_item4_default = item4_automatico_valor if not usar_todas_manuais else 3
                     notas_manuais_input['item4_manual'] = st.number_input(
                         f"Nota Item 4 (Extrapolabilidade) {'[AUTOMÁTICO]' if not usar_todas_manuais else ''}", 
                         min_value=1, max_value=3, 
                         value=val_item4_default, 
-                        disabled=not usar_todas_manuais
+                        disabled=not usar_todas_manuais,
+                        key="nota_item4_v2"
                     )
                     if not usar_todas_manuais and tem_extrapolacao_geral:
                         st.caption("🔒 Ajustado automaticamente para Grau I (1) devido à extrapolação detectada.")
                 with col_m3:
-                    notas_manuais_input['item5_manual'] = st.number_input("Nota Item 5 (Signif. Regressores)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais)
+                    notas_manuais_input['item5_manual'] = st.number_input("Nota Item 5 (Signif. Regressores)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais, key="nota_item5_v2")
                 with col_m4:
-                    notas_manuais_input['item6_manual'] = st.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais)
+                    notas_manuais_input['item6_manual'] = st.number_input("Nota Item 6 (Signif. Modelo F)", min_value=1, max_value=3, value=3, disabled=not usar_todas_manuais, key="nota_item6_v2")
 
                 st.markdown("---")
-                incluir_planilha_pdf = st.checkbox("Incluir Planilha de Dados de Mercado (Anexo) na geração do PDF", value=True, key="chk_incluir_planilha_pdf")
+                incluir_planilha_pdf = st.checkbox("Incluir Planilha de Dados de Mercado (Anexo) na geração do PDF", value=True, key="chk_incluir_planilha_pdf_v2")
 
                 st.markdown("---")
-                if st.button("🚀 Executar Saneamento Exato e Gerar Laudo NBR"):
+                if st.button("🚀 Executar Saneamento Exato e Gerar Laudo NBR", key="btn_executar_avm_v2"):
                     colunas_nec = list(set(features_selecionadas + [col_valor_total, col_area_base]))
                     df_modelo = df_global[colunas_nec].dropna().copy()
                     df_modelo = df_modelo[df_modelo[col_area_base] > 0]
@@ -1247,7 +1252,7 @@ with aba_avm:
 with aba_juridico:
     st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
     j1, j2 = st.columns(2)
-    matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 days)", value=True, key="chk_mat_ok_jur")
+    matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias)", value=True, key="chk_mat_ok_jur")
     sem_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora)", value=True, key="chk_sem_onus_jur")
     sem_acoes = j2.checkbox("Sem ações reipersecutórias", value=True, key="chk_sem_acoes_jur")
     proprietario_ok = j2.checkbox("Vendedor é o proprietário registral", value=False, key="chk_prop_ok_jur")
