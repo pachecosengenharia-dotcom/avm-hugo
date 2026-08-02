@@ -19,6 +19,78 @@ from PIL import Image as PILImage
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
+# INICIALIZAÇÃO DE HISTÓRICO DE DIGITAÇÃO (ASSISTENTE / MEMÓRIA PERSISTENTE)
+# =====================================================================
+if 'historico_digitacao' not in st.session_state:
+    st.session_state.historico_digitacao = {
+        'os': [],
+        'endereco': [],
+        'informante': [],
+        'telefone': [],
+        'especificacoes': {},
+        'valores_feat': {},
+        'ajustes': [],
+        'motivos': [],
+        'observacoes': []
+    }
+
+def registrar_historico(categoria, valor):
+    if valor and isinstance(valor, str) and valor.strip():
+        val_limpo = valor.strip()
+        if categoria == 'especificacoes' or categoria == 'valores_feat':
+            # categoria aqui recebe uma tupla/chave composta (feat, tipo)
+            feat_key, sub_tipo = categoria
+            if feat_key not in st.session_state.historico_digitacao[sub_tipo]:
+                st.session_state.historico_digitacao[sub_tipo][feat_key] = []
+            if val_limpo not in st.session_state.historico_digitacao[sub_tipo][feat_key]:
+                st.session_state.historico_digitacao[sub_tipo][feat_key].insert(0, val_limpo)
+                if len(st.session_state.historico_digitacao[sub_tipo][feat_key]) > 10:
+                    st.session_state.historico_digitacao[sub_tipo][feat_key].pop()
+        else:
+            if val_limpo not in st.session_state.historico_digitacao[categoria]:
+                st.session_state.historico_digitacao[categoria].insert(0, val_limpo)
+                if len(st.session_state.historico_digitacao[categoria]) > 10:
+                    st.session_state.historico_digitacao[categoria].pop()
+
+def campo_com_assistente(label, key_nome, categoria_hist, valor_atual="", tipo_input="text", sub_feat=None, placeholder=""):
+    """
+    Renderiza um campo digitável com assistente de digitação integrado (selectbox ou selectbox combinada)
+    resgatando as digitações anteriores salvas no session_state, inclusive após atualização da página.
+    """
+    if sub_feat:
+        hist_lista = st.session_state.historico_digitacao.get(categoria_hist, {}).get(sub_feat, [])
+    else:
+        hist_lista = st.session_state.historico_digitacao.get(categoria_hist, [])
+    
+    opcoes_disponiveis = [""] + hist_lista
+    
+    st.markdown(f"**{label}**")
+    col_campo, col_hist = st.columns([4, 1])
+    
+    with col_campo:
+        if tipo_input == "text":
+            val_out = st.text_input(label, value=valor_atual, placeholder=placeholder, label_visibility="collapsed", key=f"input_{key_nome}")
+        elif tipo_input == "area":
+            val_out = st.text_area(label, value=valor_atual, placeholder=placeholder, label_visibility="collapsed", key=f"input_{key_nome}")
+        else:
+            val_out = st.text_input(label, value=str(valor_atual), placeholder=placeholder, label_visibility="collapsed", key=f"input_{key_nome}")
+            
+    with col_hist:
+        if opcoes_disponiveis and len(opcoes_disponiveis) > 1:
+            escolha_antiga = st.selectbox("🕒", options=opcoes_disponiveis, key=f"hist_sel_{key_nome}", label_visibility="collapsed")
+            if escolha_antiga and escolha_antiga != "":
+                val_out = escolha_antiga
+    
+    # Salvar no histórico assim que houver conteúdo
+    if val_out:
+        if sub_feat:
+            registrar_historico((sub_feat, categoria_hist), str(val_out))
+        else:
+            registrar_historico(categoria_hist, str(val_out))
+            
+    return val_out
+
+# =====================================================================
 # CÁLCULO ESTATÍSTICO AUTOMÁTICO (TESTE T E TESTE F DE SNEDECOR)
 # =====================================================================
 def calcular_estatisticas_regressao(X, y, coeficientes_reg):
@@ -178,7 +250,7 @@ def verificar_micronumerosidade(df, features_selecionadas, classificacoes_var):
                     'percentual': percentual,
                     'mensagem': f"⚠️ **{feat}** ({tipo_atual}, Código/Valor `{val}`): possui apenas {contagem} dados (**{percentual:.1f}%** - abaixo do limite normativo de 10%)."
                 })
-                    
+                
     return alertas_micronumerosidade
 
 # =====================================================================
@@ -200,7 +272,7 @@ def calcular_graus_nbr_rigoroso(n_dados, r2, n_variaveis, p_valores_t, p_valor_f
         p_item4 = notas_manuais['item4_manual']
     else:
         p_item4 = 1 if tem_extrapolacao else 3
-    
+        
     max_p_regressor = max(p_valores_t[1:]) if len(p_valores_t) > 1 else 0.05
     if max_p_regressor <= 0.10:
         p_item5 = 3
@@ -372,7 +444,6 @@ def gerar_graficos_estatisticos(y_real_log, y_pred_log, cooks_d, limite_cook, df
 # =====================================================================
 def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco, informante, telefone, valores, r2, amplitude_ic_perc, n_dados, features, coeficientes, valores_usuario, classificacoes_var, especificacoes_var, sinais_var, limites_amostra_dict, variaveis_extrapoladas, fundamentacao, precisao, status_juridico, score_juridico, soma_pontos, pontos_itens, max_p_regressor, p_valor_f, micronumerosidade_atendida, alertas_micro_detalhes, logs_reclassificacao, df_original_bruto, df_final_utilizado, tipo_operador_ajuste, percentual_ajuste, motivo_ajuste, observacoes_gerais, incluir_planilha_dados, logo_bytes, buf_ad, buf_res, buf_cook, buf_minmax):
     buffer = io.BytesIO()
-    # Margem superior aumentada para 65 para abrir espaço físico limpo para a logo/banner
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=65, bottomMargin=30)
     styles = getSampleStyleSheet()
     
@@ -386,21 +457,18 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
         canvas.saveState()
         page_width, page_height = landscape(letter)
         
-        # Fundo do banner superior na margem superior
         canvas.setFillColor(colors.HexColor("#F7FAFC"))
         canvas.rect(30, page_height - 55, page_width - 60, 48, fill=1, stroke=0)
         canvas.setStrokeColor(colors.HexColor("#CBD5E0"))
         canvas.setLineWidth(0.5)
         canvas.line(30, page_height - 55, page_width - 30, page_height - 55)
         
-        # Desenhar a logo de forma robusta utilizando RLImage interna do ReportLab se disponível
         if logo_bytes:
             try:
                 img_io = io.BytesIO(logo_bytes)
                 pil_img = PILImage.open(img_io)
                 pil_img = pil_img.convert('RGBA')
                 
-                # Converter para PNG em memória compatível com ReportLab
                 img_clean_io = io.BytesIO()
                 pil_img.save(img_clean_io, format='PNG')
                 img_clean_io.seek(0)
@@ -413,7 +481,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
                     target_h = (img_h / img_w) * target_w
                 
                 rl_img = RLImage(img_clean_io, width=target_w, height=target_h)
-                # Posicionar a imagem no canvas na parte superior esquerda
                 rl_img.drawOn(canvas, 36, page_height - 50)
             except Exception:
                 canvas.setFont("Helvetica-Bold", 8)
@@ -424,7 +491,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
             canvas.setFillColor(colors.HexColor("#2B6CB0"))
             canvas.drawString(38, page_height - 32, "PLATAFORMA AVM — LAUDO TÉCNICO")
 
-        # Texto descritivo à direita no banner superior
         canvas.setFont("Helvetica-Bold", 8)
         canvas.setFillColor(colors.HexColor("#1A365D"))
         canvas.drawRightString(page_width - 35, page_height - 32, f"LAUDO TÉCNICO AVM | OS: {ordem_servico}")
@@ -512,7 +578,6 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(t2)
     story.append(Spacer(1, 4))
 
-    # FORÇAR QUEBRA DE PÁGINA PARA QUE O ITEM 4 COMEÇE EXATAMENTE NA PÁGINA 2
     story.append(PageBreak())
 
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
@@ -772,10 +837,11 @@ tipologia_imovel = st.sidebar.selectbox(
     index=["Casa", "Apartamento", "Lote", "Galpão Comercial"].index(st.session_state.tipologia_auto) if st.session_state.tipologia_auto in ["Casa", "Apartamento", "Lote", "Galpão Comercial"] else 0
 )
 
-ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS / Referência)", value=st.session_state.os_auto, placeholder="Aguardando leitura do PDF...")
-endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value=st.session_state.endereco_auto, placeholder="Aguardando leitura do PDF...")
-informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value=st.session_state.informante_auto, placeholder="Aguardando leitura do PDF...")
-informante_tel = st.sidebar.text_input("Telefone do Contato (OS)", value=st.session_state.telefone_auto, placeholder="Aguardando leitura do PDF...")
+# CAMPOS DIGITÁVEIS MANUALMENTE NA BARRA LATERAL COM ASSISTENTE DE DIGITAÇÃO INTEGRADO
+ordem_servico_input = campo_com_assistente("Número da Ordem de Serviço (OS / Referência)", "os_servico", "os", valor_atual=st.session_state.os_auto, placeholder="Digite ou selecione OS...")
+endereco_imovel_input = campo_com_assistente("Endereço do Imóvel", "endereco_imovel", "endereco", valor_atual=st.session_state.endereco_auto, placeholder="Digite ou selecione Endereço...")
+informante_nome = campo_com_assistente("Nome do Informante / Contato", "informante_nome", "informante", valor_atual=st.session_state.informante_auto, placeholder="Digite ou selecione Informante...")
+informante_tel = campo_com_assistente("Telefone do Contato (OS)", "informante_tel", "telefone", valor_atual=st.session_state.telefone_auto, placeholder="Digite ou selecione Telefone...")
 
 # CAMPO DE UPLOAD DA LOGO DO USUÁRIO/CLIENTE NA BARRA LATERAL (TELA PRINCIPAL)
 st.sidebar.markdown("---")
@@ -835,12 +901,16 @@ with aba_avm:
                     st.session_state.dados_extraidos_ia = dados_extraidos
                     if os_ext and len(os_ext) > 2:
                         st.session_state.os_auto = os_ext
+                        registrar_historico('os', os_ext)
                     if end_ext and len(end_ext) > 10:
                         st.session_state.endereco_auto = end_ext
+                        registrar_historico('endereco', end_ext)
                     if inf_ext and len(inf_ext) > 1:
                         st.session_state.informante_auto = inf_ext
+                        registrar_historico('informante', inf_ext)
                     if tel_ext and len(tel_ext) > 4:
                         st.session_state.telefone_auto = tel_ext
+                        registrar_historico('telefone', tel_ext)
                     if tipo_ext and tipologia_imovel in ["Casa", "Apartamento", "Lote", "Galpão Comercial"]:
                         st.session_state.tipologia_auto = tipo_ext
                     
@@ -988,12 +1058,16 @@ with aba_avm:
                             valores_usuario[feat] = val_input
                             st.caption(f"📊 Limites: [{min_amostra:.2f} a {max_amostra:.2f}]")
                         
+                        # CAMPO DE ESPECIFICAÇÕES COM ASSISTENTE DE DIGITAÇÃO INTEGRADO
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        esp_input = st.text_input(
+                        esp_input = campo_com_assistente(
                             f"Especificações ({feat})",
-                            value=esp_atual,
-                            placeholder="Descreva a especificação...",
-                            key=f"esp_{tipologia_imovel}_{feat}"
+                            f"esp_{tipologia_imovel}_{feat}",
+                            "especificacoes",
+                            valor_atual=esp_atual,
+                            tipo_input="text",
+                            sub_feat=feat,
+                            placeholder="Descreva a especificação..."
                         )
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
@@ -1031,15 +1105,26 @@ with aba_avm:
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
-                    motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...")
+                    # CAMPO DE MOTIVO DE AJUSTE COM ASSISTENTE DE DIGITAÇÃO INTEGRADO
+                    motivo_ajuste_input = campo_com_assistente(
+                        "Motivo da alteração do valor médio calculado",
+                        "motivo_ajuste_input",
+                        "motivos",
+                        valor_atual="",
+                        tipo_input="text",
+                        placeholder="Descreva aqui a justificativa..."
+                    )
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
-                observacoes_gerais_input = st.text_area(
+                # CAMPO DE OBSERVAÇÕES GERAIS COM ASSISTENTE DE DIGITAÇÃO INTEGRADO
+                observacoes_gerais_input = campo_com_assistente(
                     "Insira as observações gerais, considerações de vistoria ou ressalvas técnicas que constarão no laudo:",
-                    value="",
-                    placeholder="Ex: Imóvel localizado em zona de expansão urbana, vistoriado externamente...",
-                    key="obs_gerais_manual_principal"
+                    "obs_gerais_manual_principal",
+                    "observacoes",
+                    valor_atual="",
+                    tipo_input="area",
+                    placeholder="Ex: Imóvel localizado em zona de expansão urbana, vistoriado externamente..."
                 )
 
                 st.markdown("---")
