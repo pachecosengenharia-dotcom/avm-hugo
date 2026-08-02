@@ -835,7 +835,13 @@ with aba_avm:
             with c2:
                 col_area_base = st.selectbox("Coluna de Área Base (ex: area_privativa ou area_terreno):", [c for c in colunas_numericas if 'area' in c] + colunas_numericas)
 
-            features_disponiveis = [c for c in colunas_numericas if c != col_valor_total]
+            # EXCLUSÃO DA VARIÁVEL valor_unitario_m2 (E SIMILARES) DA LISTA DE VARIÁVEIS INDEPENDENTES DO MODELO
+            termos_exclusao_alvo = ['valor_unitario', 'valor_unitario_m2', 'v_unitario', 'vu']
+            features_disponiveis = [
+                c for c in colunas_numericas 
+                if c != col_valor_total and not any(termo in c.lower() for termo in termos_exclusao_alvo)
+            ]
+
             features_selecionadas = st.multiselect(
                 "Escolha as Variáveis Independentes do Modelo:",
                 options=features_disponiveis,
@@ -1124,8 +1130,9 @@ with aba_avm:
                             st.markdown(f"**Valor Adotado na Precificação ({sinal_str_exibicao}{percentual_ajuste:.1f}%):** R$ {v_adotado:,.2f} (Unitário: R$ {vu_adotado:,.2f}/m²)")
                             st.markdown(f"**Campo de Arbítrio (±15%):** R$ {v_inf_arb:,.2f} até R$ {v_sup_arb:,.2f}")
                             
-                            # INCLUSÃO DO GRAU DE PRECISÃO COM O RESPECTIVO PERCENTUAL DE AMPLITUDE DIRETAMENTE NA TELA PRINCIPAL (ITEM 5)
+                            # EXIBIÇÃO DIRETAMENTE NA TELA PRINCIPAL: GRAU DE PRECISÃO + PERCENTUAL DE AMPLITUDE E LOGO ABAIXO O GRAU DE FUNDAMENTAÇÃO ATINGIDO
                             st.markdown(f"**Grau de Precisão Normativa:** `{precisao}` — Amplitude do Intervalo de Confiança: **{amplitude_ic_percentual:.2f}%**")
+                            st.markdown(f"**Grau de Fundamentação Atingido:** `{fundamentacao}` (Pontuação Total: **{soma_pontos} pontos**) ✅")
                             
                             if motivo_ajuste_input:
                                 st.info(f"ℹ️ **Justificativa Registrada:** '{motivo_ajuste_input}' (Direção: {tipo_operador_ajuste} {percentual_ajuste}%)")
