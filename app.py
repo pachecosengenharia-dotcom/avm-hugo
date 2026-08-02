@@ -15,6 +15,7 @@ from sklearn.linear_model import LinearRegression
 import scipy.stats as stats
 import streamlit as st
 from PIL import Image as PILImage
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
@@ -22,12 +23,19 @@ st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válida
 # GERENCIAMENTO DE BANCO DE DADOS DE USUÁRIOS E AUTENTICAÇÃO
 # =====================================================================
 if 'usuarios_cadastrados' not in st.session_state:
-    # Usuário padrão predefinido para testes imediatos
+    # Usuário padrão de teste criado com data simulada no passado para testar o bloqueio do 8º dia se necessário, ou data atual
     st.session_state.usuarios_cadastrados = {
         "admin@avm.com": {
             "senha": "123",
             "nome": "Administrador AVM",
-            "plano": "🟢 ENTERPRISE (R$ 289/mês)"
+            "plano": "🟢 ENTERPRISE (R$ 289/mês)",
+            "data_cadastro": datetime.now()
+        },
+        "teste@avm.com": {
+            "senha": "123",
+            "nome": "Usuário Teste",
+            "plano": "⏱️ Teste de 7 Dias (Grátis)",
+            "data_cadastro": datetime.now() - timedelta(days=8)  # Simula usuário no 8º dia para validação do bloqueio
         }
     }
 
@@ -37,14 +45,11 @@ if 'autenticado' not in st.session_state:
 if 'usuario_atual' not in st.session_state:
     st.session_state.usuario_atual = None
 
-if 'plano_usuario_atual' not in st.session_state:
-    st.session_state.plano_usuario_atual = "🟢 ENTERPRISE (R$ 289/mês)"
-
 if 'historico_digitacao' not in st.session_state:
     st.session_state.historico_digitacao = {}
 
 # =====================================================================
-# TELA DE LOGIN E CADASTRO (AUTENTICAÇÃO OBRIGATÓRIA)
+# TELA DE LOGIN E CADASTRO
 # =====================================================================
 def tela_autenticacao():
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -52,7 +57,7 @@ def tela_autenticacao():
     
     with col2:
         st.markdown("<h2 style='text-align: center;'>🏢 Plataforma AVM SaaS</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: gray;'>Motor de Equações Válidas NBR & Controle de Crédito</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: gray;'>Motor de Equações Válidas NBR & Controle de Assinatura</p>", unsafe_allow_html=True)
         
         aba_login, aba_cadastro = st.tabs(["🔑 Entrar no Sistema", "📝 Criar Nova Conta"])
         
@@ -66,8 +71,7 @@ def tela_autenticacao():
                     if st.session_state.usuarios_cadastrados[email_login]["senha"] == senha_login:
                         st.session_state.autenticado = True
                         st.session_state.usuario_atual = email_login
-                        st.session_state.plano_usuario_atual = st.session_state.usuarios_cadastrados[email_login]["plano"]
-                        st.success("Login realizado com sucesso! Carregando painel...")
+                        st.success("Login realizado com sucesso!")
                         st.rerun()
                     else:
                         st.error("Senha incorreta.")
@@ -99,17 +103,50 @@ def tela_autenticacao():
                     st.session_state.usuarios_cadastrados[novo_email] = {
                         "senha": nova_senha,
                         "nome": novo_nome,
-                        "plano": escolha_plano
+                        "plano": "⏱️ Teste de 7 Dias (Grátis)" if "Teste" in escolha_plano else "🟢 ENTERPRISE (R$ 289/mês)",
+                        "data_cadastro": datetime.now()
                     }
                     st.session_state.autenticado = True
                     st.session_state.usuario_atual = novo_email
-                    st.session_state.plano_usuario_atual = escolha_plano
                     st.success("Conta criada com sucesso! Bem-vindo(a) à plataforma.")
                     st.rerun()
 
-# Se o usuário não estiver autenticado, exibe apenas a tela de login/cadastro e interrompe a execução
 if not st.session_state.autenticado:
     tela_autenticacao()
+    st.stop()
+
+# =====================================================================
+# VERIFICAÇÃO DO PERÍODO DE TESTE (7 DIAS) E BLOQUEIO NO 8º DIA
+# =====================================================================
+dados_usuario_logado = st.session_state.usuarios_cadastrados[st.session_state.usuario_atual]
+plano_atual_str = dados_usuario_logado["plano"]
+data_cadastro_usuario = dados_usuario_logado.get("data_cadastro", datetime.now())
+
+dias_decorridos = (datetime.now() - data_cadastro_usuario).days
+teste_expirado = ("Teste" in plano_atual_str) and (dias_decorridos >= 7)
+
+# Se o teste expirou (8º dia ou mais), exibe a tela de bloqueio e cobrança automática
+if teste_expirado:
+    st.sidebar.markdown(f"👤 **Usuário:** `{st.session_state.usuario_atual}`")
+    st.sidebar.markdown("🔴 **Status:** `TESTE EXPIRADO (BLOQUEADO)`")
+    if st.sidebar.button("🚪 Sair / Logout", use_container_width=True):
+        st.session_state.autenticado = False
+        st.session_state.usuario_atual = None
+        st.rerun()
+
+    st.error("⚠️ **Seu período de teste gratuito de 7 dias expirou!**")
+    st.warning("✉️ Um e-mail automático de cobrança foi enviado para a sua caixa de entrada com os detalhes para regularização.")
+    
+    col_b1, col_b2, col_b3 = st.columns([1, 2, 1])
+    with col_b2:
+        st.markdown("### 💳 Regularize seu Acesso - Plano Enterprise")
+        st.markdown("Para continuar utilizando o motor de equações NBR e todas as ferramentas avançadas da plataforma sem interrupções, efetue o pagamento da assinatura mensal abaixo:")
+        st.info("💎 **Valor Mensal:** R$ 289,00 / mês\n\n✅ Acesso imediato e liberação automática após a confirmação do pagamento.")
+        
+        if st.button("🚀 Pagar R$ 289,00 Agora e Liberar Acesso", use_container_width=True):
+            st.session_state.usuarios_cadastrados[st.session_state.usuario_atual]["plano"] = "🟢 ENTERPRISE (R$ 289/mês)"
+            st.success("🎉 Pagamento confirmado com sucesso! Acesso liberado permanentemente.")
+            st.rerun()
     st.stop()
 
 # =====================================================================
@@ -846,7 +883,7 @@ def processar_multiplos_documentos_com_auditoria(lista_arquivos):
     return variaveis_encontradas, os_extraida, endereco_extraido, informante_extraido, telefone_extraido, tipologia_detectada, logs_execucao
 
 # =====================================================================
-# INTERFACE PRINCIPAL DO PAINEL SAAS (PÓS-LOGIN)
+# INTERFACE PRINCIPAL DO PAINEL SAAS (PÓS-LOGIN E ATIVO)
 # =====================================================================
 st.title("🏢 Painel de Crédito e Controle AVM - Motor de Equações Válidas NBR")
 st.markdown("Validação rigorosa: Significância ($\le 30\%$) + **Laudo Distribuído Perfeitamente (Página 1 com Auditoria Integrada / Página 2 de Gráficos e Jurídico)**.")
@@ -861,10 +898,20 @@ if 'classificacoes_variaveis' not in st.session_state: st.session_state.classifi
 if 'especificacoes_variaveis' not in st.session_state: st.session_state.especificacoes_variaveis = {}
 if 'sinais_variaveis' not in st.session_state: st.session_state.sinais_variaveis = {}
 
-# MENU LATERAL ESQUERDO (COM IDENTIFICAÇÃO DO USUÁRIO LOGADO)
+# MENU LATERAL ESQUERDO (COM IDENTIFICAÇÃO E OPÇÃO DE MUDANÇA DE PLANO ANTES DOS 7 DIAS)
 st.sidebar.markdown(f"👤 **Usuário Logado:** `{st.session_state.usuario_atual}`")
-st.sidebar.markdown(f"📦 **Plano Ativo:** `{st.session_state.plano_usuario_atual}`")
+st.sidebar.markdown(f"📦 **Plano Ativo:** `{plano_atual_str}`")
 
+# Se o usuário estiver no plano de teste, permite fazer o upgrade antecipado a qualquer momento
+if "Teste" in plano_atual_str:
+    dias_restantes = max(0, 7 - dias_decorridos)
+    st.sidebar.info(f"⏳ **{dias_restantes} dia(s) restante(s)** do seu teste gratuito.")
+    if st.sidebar.button("⚡ Fazer Upgrade para Enterprise (R$ 289/mês)", use_container_width=True):
+        st.session_state.usuarios_cadastrados[st.session_state.usuario_atual]["plano"] = "🟢 ENTERPRISE (R$ 289/mês)"
+        st.success("Plano atualizado para Enterprise com sucesso!")
+        st.rerun()
+
+st.sidebar.markdown("---")
 if st.sidebar.button("🚪 Sair / Logout", use_container_width=True):
     st.session_state.autenticado = False
     st.session_state.usuario_atual = None
@@ -1052,7 +1099,6 @@ with aba_avm:
                         st.caption(f"📊 Limites: {limites_amostra_dict[feat]}")
                         
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        # Assistente de digitação garantido para o campo de Especificações de cada variável individualmente com chave exclusiva
                         esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Descreva a especificação...")
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
