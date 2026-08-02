@@ -1135,7 +1135,7 @@ with aba_avm:
                             st.markdown(f"**Campo de Arbítrio (±15%):** R$ {v_inf_arb:,.2f} até R$ {v_sup_arb:,.2f}")
                             
                             st.markdown(f"**Grau de Precisão Normativa:** `{precisao}` — Amplitude do IC: **{amplitude_ic_percentual:.2f}%**")
-                            st.markdown(f"**Grau de Fundamentação Atingido:** `{fundamentacao}` (Pontuação Total: **{soma_pontos} pontos**) ✅")
+                            st.markdown(f"**Grau de Fundamentação Atingido:** `{fundamentacao}` (Pontuação Total: **{soma_pontos} pontos**)")
                             st.markdown(f"**Métricas: R² = 0.983 | Amplitude IC = 10.87% | Dados Efetivos = 303 | Máx p-t Regressores: 15.86% | p-F Modelo: 0.0000**")
                             
                             pdf_bytes = gerar_laudo_pdf_ia(
