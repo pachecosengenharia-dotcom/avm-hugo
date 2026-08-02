@@ -19,57 +19,6 @@ from PIL import Image as PILImage
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# INICIALIZAÇÃO DE HISTÓRICO DE DIGITAÇÃO PARA CAMPOS MANUAIS DO CORPO
-# =====================================================================
-if 'historico_digitacao' not in st.session_state:
-    st.session_state.historico_digitacao = {
-        'especificacoes': {},
-        'motivos': [],
-        'observacoes': []
-    }
-
-def campo_manual_com_historico(label, key_name, categoria_hist, valor_atual="", tipo_input="text", sub_feat=None, placeholder=""):
-    """
-    Assistente de digitação integrado para os campos manuais do corpo da plataforma,
-    resgatando digitações anteriores realizadas e mantendo a persistência após atualização da página.
-    """
-    if sub_feat:
-        if categoria_hist not in st.session_state.historico_digitacao:
-            st.session_state.historico_digitacao[categoria_hist] = {}
-        if sub_feat not in st.session_state.historico_digitacao[categoria_hist]:
-            st.session_state.historico_digitacao[categoria_hist][sub_feat] = []
-        hist_lista = st.session_state.historico_digitacao[categoria_hist][sub_feat]
-    else:
-        if categoria_hist not in st.session_state.historico_digitacao:
-            st.session_state.historico_digitacao[categoria_hist] = []
-        hist_lista = st.session_state.historico_digitacao[categoria_hist]
-
-    if hist_lista:
-        escolha_antiga = st.selectbox(f"🕒 Digitações anteriores ({label})", options=[""] + hist_lista, key=f"sel_hist_{key_name}")
-        if escolha_antiga and escolha_antiga != "":
-            valor_atual = escolha_antiga
-
-    if tipo_input == "area":
-        val_out = st.text_area(label, value=valor_atual, placeholder=placeholder, key=f"input_{key_name}")
-    else:
-        val_out = st.text_input(label, value=str(valor_atual), placeholder=placeholder, key=f"input_{key_name}")
-
-    if val_out and isinstance(val_out, str) and val_out.strip():
-        val_limpo = val_out.strip()
-        if sub_feat:
-            if val_limpo not in st.session_state.historico_digitacao[categoria_hist][sub_feat]:
-                st.session_state.historico_digitacao[categoria_hist][sub_feat].insert(0, val_limpo)
-                if len(st.session_state.historico_digitacao[categoria_hist][sub_feat]) > 10:
-                    st.session_state.historico_digitacao[categoria_hist][sub_feat].pop()
-        else:
-            if val_limpo not in st.session_state.historico_digitacao[categoria_hist]:
-                st.session_state.historico_digitacao[categoria_hist].insert(0, val_limpo)
-                if len(st.session_state.historico_digitacao[categoria_hist]) > 10:
-                    st.session_state.historico_digitacao[categoria_hist].pop()
-
-    return val_out
-
-# =====================================================================
 # CÁLCULO ESTATÍSTICO AUTOMÁTICO (TESTE T E TESTE F DE SNEDECOR)
 # =====================================================================
 def calcular_estatisticas_regressao(X, y, coeficientes_reg):
@@ -601,8 +550,11 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Spacer(1, 4))
 
     story.append(Paragraph("6. Esteira de Risco Jurídico (BACEN CMN 4.910)", subtitle_style))
+    
+    # Renderização no PDF condizente com a regra atualizada de aprovação (Risco Baixo/Mínimo aprovado em verde)
+    status_legivel = "APROVADO" if status_juridico else "REPROVADO"
     t3 = Table([
-        ["Status Documental", "APROVADO" if status_juridico else "REPROVADO"],
+        ["Status Documental", status_legivel],
         ["Grau de Risco Legal", score_juridico],
     ], colWidths=[200, 532])
     t3.setStyle(TableStyle([
@@ -816,7 +768,6 @@ tipologia_imovel = st.sidebar.selectbox(
     index=["Casa", "Apartamento", "Lote", "Galpão Comercial"].index(st.session_state.tipologia_auto) if st.session_state.tipologia_auto in ["Casa", "Apartamento", "Lote", "Galpão Comercial"] else 0
 )
 
-# CAMPOS DA BARRA LATERAL RESTAURADOS AO FORMATO ORIGINAL (SEM DESCONFIGURAR O MENU)
 ordem_servico_input = st.sidebar.text_input("Número da Ordem de Serviço (OS / Referência)", value=st.session_state.os_auto, placeholder="Aguardando leitura do PDF...")
 endereco_imovel_input = st.sidebar.text_input("Endereço do Imóvel", value=st.session_state.endereco_auto, placeholder="Aguardando leitura do PDF...")
 informante_nome = st.sidebar.text_input("Nome do Informante / Contato", value=st.session_state.informante_auto, placeholder="Aguardando leitura do PDF...")
@@ -1033,16 +984,12 @@ with aba_avm:
                             valores_usuario[feat] = val_input
                             st.caption(f"📊 Limites: [{min_amostra:.2f} a {max_amostra:.2f}]")
                         
-                        # CAMPO DE ESPECIFICAÇÕES NO CORPO COM ASSISTENTE DE HISTÓRICO
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        esp_input = campo_manual_com_historico(
+                        esp_input = st.text_input(
                             f"Especificações ({feat})",
-                            f"esp_{tipologia_imovel}_{feat}",
-                            "especificacoes",
-                            valor_atual=esp_atual,
-                            tipo_input="text",
-                            sub_feat=feat,
-                            placeholder="Descreva a especificação..."
+                            value=esp_atual,
+                            placeholder="Descreva a especificação...",
+                            key=f"esp_{tipologia_imovel}_{feat}"
                         )
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
@@ -1080,26 +1027,15 @@ with aba_avm:
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
-                    # CAMPO DE MOTIVO COM ASSISTENTE DE HISTÓRICO
-                    motivo_ajuste_input = campo_manual_com_historico(
-                        "Motivo da alteração do valor médio calculado",
-                        "motivo_ajuste_input",
-                        "motivos",
-                        valor_atual="",
-                        tipo_input="text",
-                        placeholder="Descreva aqui a justificativa..."
-                    )
+                    motivo_ajuste_input = st.text_input("Motivo da alteração do valor médio calculado", value="", placeholder="Descreva aqui a justificativa...")
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
-                # CAMPO DE OBSERVAÇÕES GERAIS COM ASSISTENTE DE HISTÓRICO
-                observacoes_gerais_input = campo_manual_com_historico(
+                observacoes_gerais_input = st.text_area(
                     "Insira as observações gerais, considerações de vistoria ou ressalvas técnicas que constarão no laudo:",
-                    "obs_gerais_manual_principal",
-                    "observacoes",
-                    valor_atual="",
-                    tipo_input="area",
-                    placeholder="Ex: Imóvel localizado em zona de expansão urbana, vistoriado externamente..."
+                    value="",
+                    placeholder="Ex: Imóvel localizado em zona de expansão urbana, vistoriado externamente...",
+                    key="obs_gerais_manual_principal"
                 )
 
                 st.markdown("---")
@@ -1309,41 +1245,34 @@ with aba_avm:
                             )
 
 with aba_juridico:
-    st.subheader("📜 Esteira de Risco Jurídico da Matrícula (BACEN CMN 4.910)")
-    st.markdown("Selecione os critérios conferidos na documentação e processe a esteira para definir o risco normativo:")
-    
+    st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
     j1, j2 = st.columns(2)
-    matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias) [OBRIGATÓRIO]", value=True, key="chk_mat_ok")
-    sem_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora) [OBRIGATÓRIO]", value=True, key="chk_sem_onus")
+    matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias)", value=True, key="chk_mat_ok")
+    sem_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora)", value=True, key="chk_sem_onus")
     sem_acoes = j2.checkbox("Sem ações reipersecutórias", value=True, key="chk_sem_acoes")
     proprietario_ok = j2.checkbox("Vendedor é o proprietário registral", value=False, key="chk_prop_ok")
 
     if st.button("⚖️ Processar Análise Jurídica"):
-        # Regra de Obrigatoriedade Específica (Opção 2)
-        # Itens críticos obrigatórios para qualquer aceite: Matrícula Atualizada e Sem Ônus Reais
-        criticos_atendidos = matricula_ok and sem_onus
+        # Regra de Obrigatoriedade: Matrícula atualizada e sem ônus reais são estritamente obrigatórios.
+        criticos_ok = matricula_ok and sem_onus
         
-        # Contagem geral para definir o score descritivo
-        pontos_secundarios = sum([sem_acoes, proprietario_ok])
-        
-        if not criticos_atendidos:
-            # Se faltar um item crítico, o risco é inelegível / reprovado direto
+        if not criticos_ok:
             st.session_state.status_juridico_global = False
             st.session_state.score_juridico_global = "ALTO RISCO (Pendência em Requisito Crítico)"
         else:
-            # Se os críticos estão OK, avaliamos os secundários para definir o score de risco
-            if pontos_secundarios == 2:
+            # Se os críticos estão atendidos, definimos o score e asseguramos a aprovação para riscos Mínimo, Baixo ou Moderado
+            secundarios = sum([sem_acoes, proprietario_ok])
+            if secundarios == 2:
                 st.session_state.status_juridico_global = True
-                st.session_state.score_juridico_global = "RISCO MÍNIMO / BAIXO"
-            elif pontos_secundarios == 1:
+                st.session_state.score_juridico_global = "RISCO MÍNIMO"
+            elif secundarios == 1:
                 st.session_state.status_juridico_global = True
-                st.session_state.score_juridico_global = "RISCO BAIXO A MODERADO"
+                st.session_state.score_juridico_global = "RISCO BAIXO"
             else:
-                # Apenas os obrigatórios presentes, sem os secundários completos
                 st.session_state.status_juridico_global = True
                 st.session_state.score_juridico_global = "RISCO MODERADO"
 
-    # Exibição dinâmica em Tempo Real (Verde para Aprovado / Vermelho para Reprovado)
+    # Exibição visual dinâmica com cores corretas (Verde para Aprovado / Vermelho para Reprovado)
     score_atual = st.session_state.get('score_juridico_global', 'PENDENTE')
     status_atual = st.session_state.get('status_juridico_global', True)
 
