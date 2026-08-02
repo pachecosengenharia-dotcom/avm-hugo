@@ -148,7 +148,7 @@ if teste_expirado:
     st.stop()
 
 # =====================================================================
-# FUNÇÕES DE HISTÓRICO E ASSISTENTE DE DIGITAÇÃO NATIVO
+# FUNÇÕES DE HISTÓRICO E ASSISTENTE DE DIGITAÇÃO NATIVO E FIXO
 # =====================================================================
 def registrar_historico(campo_chave, valor):
     if valor and isinstance(valor, str) and valor.strip():
@@ -159,23 +159,24 @@ def registrar_historico(campo_chave, valor):
             st.session_state.historico_digitacao[campo_chave] = st.session_state.historico_digitacao[campo_chave][:15]
 
 def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None):
+    if campo_chave not in st.session_state.historico_digitacao:
+        st.session_state.historico_digitacao[campo_chave] = []
+        
     historico = st.session_state.historico_digitacao.get(campo_chave, [])
+    opcoes_combo = ["-- Digitar novo ou selecionar do histórico --"] + historico
     
-    escolha_historico = None
-    if historico:
-        opcoes_combo = ["-- Selecionar do histórico ou digitar novo --"] + historico
-        escolha_historico = st.selectbox(
-            f"💡 Sugestões anteriores para: {label}", 
-            options=opcoes_combo, 
-            key=f"hist_sel_{campo_chave}"
-        )
+    escolha_historico = st.selectbox(
+        f"💡 Sugestões para: {label}", 
+        options=opcoes_combo, 
+        key=f"hist_sel_{campo_chave}"
+    )
     
+    val_base = escolha_historico if (escolha_historico and escolha_historico != "-- Digitar novo ou selecionar do histórico --") else valor_atual
+
     if tipo == "text":
-        valor_base = escolha_historico if (escolha_historico and escolha_historico != "-- Selecionar do histórico ou digitar novo --") else valor_atual
-        val_input = st.text_input(label, value=valor_base, placeholder=placeholder, key=f"input_{campo_chave}")
+        val_input = st.text_input(label, value=val_base, placeholder=placeholder, key=f"input_{campo_chave}")
     elif tipo == "textarea":
-        valor_base = escolha_historico if (escolha_historico and escolha_historico != "-- Selecionar do histórico ou digitar novo --") else valor_atual
-        val_input = st.text_area(label, value=valor_base, placeholder=placeholder, height=height, key=f"input_{campo_chave}")
+        val_input = st.text_area(label, value=val_base, placeholder=placeholder, height=height, key=f"input_{campo_chave}")
     
     registrar_historico(campo_chave, val_input if isinstance(val_input, str) else str(val_input))
     return val_input
@@ -1060,7 +1061,7 @@ with aba_avm:
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas, classificacoes_atuais_dict)
 
                 st.markdown("---")
-                st.subheader("3. Atributos do Imóvel Avaliando & Limites do Dado (Com Assistente de Histórico Nativo)")
+                st.subheader("3. Atributos do Imóvel Avaliando & Limites do Dado (Com Assistente de Histórico Fixo)")
                 
                 dados_ia = st.session_state.get('dados_extraidos_ia', {})
                 campos_inteiros = ['quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem', 'estado_de_conservacao', 'conservacao', 'padrao_de_acabamento', 'acabamento', 'idade_aparente', 'idade', 'evento', 'data_do_evento', 'ano', 'pe_direito']
@@ -1096,7 +1097,7 @@ with aba_avm:
                         st.caption(f"📊 Limites: {limites_amostra_dict[feat]}")
                         
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        # Assistente de sugestões e histórico travado nativamente de forma idêntica para TODAS as variáveis
+                        # Assistente travado nativamente de forma idêntica para TODas as variáveis
                         esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Descreva a especificação...")
                         st.session_state.especificacoes_variaveis[feat] = esp_input
 
