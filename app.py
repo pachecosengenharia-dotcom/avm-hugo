@@ -240,6 +240,58 @@ def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", pla
     return val_input
 
 # =====================================================================
+# ASSISTENTE DE JUSTIFICATIVA FIXA PARA O ITEM 4 (AJUSTES)
+# =====================================================================
+def criar_campo_motivo_ajuste_fixo(label, campo_chave, valor_atual):
+    opcoes_fixas = [
+        "-- Selecione uma Justificativa Padrão --",
+        "MAJORADO EM FUNÇÃO DO IMÓVEL POSSUIR GERAÇÃO PRÓPRIA DE ENERGIA.",
+        "DEPRECIADO EM FUNÇÃO DO IMÓVEL POSSUIR ÁREA CONSTRUÍDA NÃO AVERBADA (SITUAÇÃO DESVALORIZANTE)",
+        "DEPRECIADO EM FUNÇÃO DA VARIÁVEL ORIGEM DA INFORMAÇÃO NÃO TER SIDO UTILIZADA NA EQUAÇÃO.",
+        "MAJORADO EM FUNÇÃO DA VARIÁVEL QUARTOS NÃO TER SIDO UTILIZADA NA EQUAÇÃO."
+    ]
+    
+    index_atual = 0
+    if valor_atual in opcoes_fixas:
+        index_atual = opcoes_fixas.index(valor_atual)
+
+    escolha_fixa = st.selectbox(
+        f"💡 {label}", 
+        options=opcoes_fixas, 
+        index=index_atual,
+        key=f"motivo_fixo_{campo_chave}"
+    )
+    
+    val_final = escolha_fixa if escolha_fixa != "-- Selecione uma Justificativa Padrão --" else valor_atual
+    return val_final
+
+# =====================================================================
+# ASSISTENTE DE OBSERVAÇÕES GERAIS FIXAS PARA O ITEM 5
+# =====================================================================
+def criar_campo_observacoes_fixas(label, campo_chave, valor_atual):
+    opcoes_fixas = [
+        "-- Selecione uma Observação Padrão --",
+        "MAJORADO EM FUNÇÃO DO IMÓVEL POSSUIR GERAÇÃO PRÓPRIA DE ENERGIA.",
+        "DEPRECIADO EM FUNÇÃO DO IMÓVEL POSSUIR ÁREA CONSTRUÍDA NÃO AVERBADA (SITUAÇÃO DESVALORIZANTE)",
+        "DEPRECIADO EM FUNÇÃO DA VARIÁVEL ORIGEM DA INFORMAÇÃO NÃO TER SIDO UTILIZADA NA EQUAÇÃO.",
+        "MAJORADO EM FUNÇÃO DA VARIÁVEL QUARTOS NÃO TER SIDO UTILIZADA NA EQUAÇÃO."
+    ]
+    
+    index_atual = 0
+    if valor_atual in opcoes_fixas:
+        index_atual = opcoes_fixas.index(valor_atual)
+
+    escolha_fixa = st.selectbox(
+        f"💡 {label}", 
+        options=opcoes_fixas, 
+        index=index_atual,
+        key=f"obs_fixa_{campo_chave}"
+    )
+    
+    val_final = escolha_fixa if escolha_fixa != "-- Selecione uma Observação Padrão --" else valor_atual
+    return val_final
+
+# =====================================================================
 # CÁLCULO ESTATÍSTICO AUTOMÁTICO (TESTE T E TESTE F DE SNEDECOR)
 # =====================================================================
 def calcular_estatisticas_regressao(X, y, coeficientes_reg):
@@ -1202,11 +1254,14 @@ with aba_avm:
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
-                    motivo_ajuste_input = criar_campo_com_assistente("Motivo da alteração do valor médio calculated", "motivo_ajuste_key", "", placeholder="Descreva aqui a justificativa...")
+                    motivo_ajuste_atual = st.session_state.get("motivo_ajuste_key", "")
+                    motivo_ajuste_input = criar_campo_motivo_ajuste_fixo("Motivo da alteração do valor médio calculated", "motivo_ajuste_key", motivo_ajuste_atual)
+                    st.session_state["motivo_ajuste_key"] = motivo_ajuste_input
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
-                observacoes_gerais_input = criar_campo_com_assistente("Insira as observações gerais, considerações de vistoria ou ressalvas técnicas:", "obs_gerais_key", "", tipo="textarea", placeholder="Ex: Imóvel localizado em zona de expansão urbana...", height=100)
+                obs_gerais_atual = st.session_state.get("obs_gerais_key", "")
+                observacoes_gerais_input = criar_campo_observacoes_fixas("Insira as observações gerais, considerações de vistoria ou ressalvas técnicas:", "obs_gerais_key", obs_gerais_atual)
 
                 st.markdown("---")
                 st.subheader("6. Atribuição Manual de Notas FUNDAMENTAÇÃO-NBR")
