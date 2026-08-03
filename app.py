@@ -176,7 +176,7 @@ if teste_expirado:
     st.stop()
 
 # =====================================================================
-# LISTAS FIXAS DE OPÇÕES SEPARADAS POR CAMPO
+# LISTAS FIXAS DE OPÇÕES SEPARADAS POR CAMPO (NOME CORRIGIDO SEM ESPAÇO)
 # =====================================================================
 OPCOES_ESPECIFICACOES_FIXAS = [
     "ÁREA DO LOTE EM M²",
@@ -191,7 +191,7 @@ OPCOES_ESPECIFICACOES_FIXAS = [
     "1 - JAN A MAR/2025; 2 - ABR A JUN/2025; 3 - JUL A SET/2025; 4 - OUT A DEZ/2025; 5 - JAN A MAR/2026; 6 - ABR A JUN/2026; 7 - JUL /2026"
 ]
 
-OPCOES_ESPECIFICAS_ITEM_4_ E_5 = [
+OPCOES_ESPECIFICAS_ITEM_4_5 = [
     "MAJORADO EM FUNÇÃO DO IMÓVEL POSSUIR GERAÇÃO PRÓPRIA DE ENERGIA.",
     "DEPRECIADO EM FUNÇÃO DO IMÓVEL POSSUIR ÁREA CONSTRUÍDA NÃO AVERBADA (SITUAÇÃO DESVALORIZANTE)",
     "DEPRECIADO EM FUNÇÃO DA VARIÁVEL ORIGEM DA INFORMAÇÃO NÃO TER SIDO UTILIZADA NA EQUAÇÃO.",
@@ -200,7 +200,7 @@ OPCOES_ESPECIFICAS_ITEM_4_ E_5 = [
 
 def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None, usar_lista_especial=False):
     if usar_lista_especial:
-        opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICAS_ITEM_4_ E_5
+        opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICAS_ITEM_4_5
     else:
         opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICACOES_FIXAS
     
@@ -1281,14 +1281,14 @@ with aba_avm:
                         vu_base_medio = float(np.mean(previsoes_unitarios_reais))
                         vu_medio = vu_base_medio
                         
-                        lim_inf_estatistico = np.percentile(previsoes_unitarios_reais, 10)
-                        lim_sup_estatistico = np.percentile(previsoes_unitarios_reais, 90)
+                        _10 = np.percentile(previsoes_unitarios_reais, 10)
+                        _90 = np.percentile(previsoes_unitarios_reais, 90)
                         
                         vu_inf_arbitrio = vu_medio * 0.85
                         vu_sup_arbitrio = vu_medio * 1.15
                         
-                        vu_min = max(lim_inf_estatistico, vu_inf_arbitrio)
-                        vu_max = min(lim_sup_estatistico, vu_sup_arbitrio)
+                        vu_min = max(_10, vu_inf_arbitrio)
+                        vu_max = min(_90, vu_sup_arbitrio)
 
                         amplitude_ic_percentual = ((vu_max - vu_min) / vu_medio) * 100
 
@@ -1322,7 +1322,7 @@ with aba_avm:
                             'vu_inf_arb': vu_inf_arbitrio, 'vu_sup_arb': vu_sup_arbitrio
                         }
 
-                        buf_ad, buf_res, buf_cook, buf_minmax = gerar_graficos_estatisticos(y_log, modelo.predict(X), cooks_d_vals, limite_cook_val, df_modelo_final, col_area_base, col_valor_total, fator_escala)
+                        buf_ad, buf_res, buf_cook, buf_minmax = gerar_graficos_estatisticos(y_log, modelo.predict(X), cooks_d_vals, limite_cook_val, df_modelo_final, em_area := col_area_base, col_valor_total, fator_escala)
 
                         if pontos_itens[4] == 0:
                             st.error(f"❌ **EQUAÇÃO REJEITADA POR NÃO ATENDER A NBR!** A maior significância dos regressores é **{max_p_regressor*100:.2f}%**.")
@@ -1374,7 +1374,7 @@ with aba_juridico:
     if st.button("⚖️ Processar Análise Jurídica"):
         aprovados = sum([matricula_ok, pesquisa_onus, sem_acoes, proprietario_ok])
         st.session_state.status_juridico_global = aprovados == 4
-        st.session_state.score_juridico_global = ["ALTO RISCO", "ALTO RISCO", "RISCO MODERADO", "RISCO BAIXO", "RISCO MÍNIMO"][aprovados]
+        st.session_state.score_juridico_global = ["ALTO RISCO", "ALTO RISCO", "RISCO MODERADO", "RISCO BAIXO", "RISCO MÍNIMO"][aprovados] em_resp := [aprovados]
         if st.session_state.status_juridico_global:
             st.success(f"✅ Documentação APROVADA — {st.session_state.score_juridico_global}")
         else:
