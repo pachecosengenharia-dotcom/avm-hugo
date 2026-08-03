@@ -180,6 +180,7 @@ if teste_expirado:
 # AUXILIARES PARA SUGESTÕES E PREENCHIMENTO AUTOMÁTICO (ITENS 3, 4 E 5)
 # =====================================================================
 def criar_campo_especificacao_com_sugestoes(label, campo_chave, valor_atual):
+    # Sugestões limpas para as variáveis (sem as observações de ajustes)
     opcoes_fixas = [
         "-- Selecione a Especificação Padrão --",
         "ÁREA DO LOTE EM M²",
@@ -191,11 +192,7 @@ def criar_campo_especificacao_com_sugestoes(label, campo_chave, valor_atual):
         "1 = REPAROS IMPORTANTES; 2 = REPAROS SIMPLES; 3 = BOM; 4 = NOVO",
         "IDADE APARENTE DO IMÓVEL, EM ANOS",
         "PV 2016",
-        "1 - JAN A MAR/2025; 2 - ABR A JUN/2025; 3 - JUL A SET/2025; 4 - OUT A DEZ/2025; 5 - JAN A MAR/2026; 6 - ABR A JUN/2026; 7 - JUL /2026",
-        "MAJORADO EM FUNÇÃO DO IMÓVEL POSSUIR GERAÇÃO PRÓPRIA DE ENERGIA.",
-        "DEPRECIADO EM FUNÇÃO DO IMÓVEL POSSUIR ÁREA CONSTRUÍDA NÃO AVERBADA (SITUAÇÃO DESVALORIZANTE)",
-        "DEPRECIADO EM FUNÇÃO DA VARIÁVEL ORIGEM DA INFORMAÇÃO NÃO TER SIDO UTILIZADA NA EQUAÇÃO.",
-        "MAJORADO EM FUNÇÃO DA VARIÁVEL QUARTOS NÃO TER SIDO UTILIZADA NA EQUAÇÃO."
+        "1 - JAN A MAR/2025; 2 - ABR A JUN/2025; 3 - JUL A SET/2025; 4 - OUT A DEZ/2025; 5 - JAN A MAR/2026; 6 - ABR A JUN/2026; 7 - JUL /2026"
     ]
     
     escolha_sugestao = st.selectbox(
