@@ -198,20 +198,31 @@ OPCOES_ESPECIFICACOES_FIXAS = [
 ]
 
 def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None):
-    opcoes_combo = ["-- Selecionar da lista fixa ou digitar novo --"] + OPCOES_ESPECIFICACOES_FIXAS
+    opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICACOES_FIXAS
     
+    # Chave para armazenar o valor atual do texto no session_state
+    text_key = f"input_{campo_chave}"
+    sel_key = f"hist_sel_{campo_chave}"
+    
+    if text_key not in st.session_state:
+        st.session_state[text_key] = valor_atual
+
+    def ao_selecionar_opcao():
+        selecao = st.session_state.get(sel_key)
+        if selecao and selecao != "-- Selecionar da lista fixa --":
+            st.session_state[text_key] = selecao
+
     escolha_historico = st.selectbox(
         f"💡 Sugestões: {label}", 
         options=opcoes_combo, 
-        key=f"hist_sel_{campo_chave}"
+        key=sel_key,
+        on_change=ao_selecionar_opcao
     )
-    
-    val_base = escolha_historico if (escolha_historico and escolha_historico != "-- Selecionar da lista fixa ou digitar novo --") else valor_atual
 
     if tipo == "text":
-        val_input = st.text_input(label, value=val_base, placeholder=placeholder, key=f"input_{campo_chave}")
+        val_input = st.text_input(label, value=st.session_state[text_key], placeholder=placeholder, key=text_key)
     elif tipo == "textarea":
-        val_input = st.text_area(label, value=val_base, placeholder=placeholder, height=height, key=f"input_{campo_chave}")
+        val_input = st.text_area(label, value=st.session_state[text_key], placeholder=placeholder, height=height, key=text_key)
     
     return val_input
 
