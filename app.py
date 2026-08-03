@@ -34,7 +34,7 @@ if 'usuarios_cadastrados' not in st.session_state:
             "senha": "123",
             "nome": "Usuário Teste",
             "plano": "⏱️ Teste de 7 Dias (Grátis)",
-            "data_cadastro": datetime.now() - timedelta(days=8)  # Simula 8º dia para validação do bloqueio
+            "data_cadastro": datetime.now() - timedelta(days=8)
         }
     }
 
@@ -166,7 +166,7 @@ def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", pla
     opcoes_combo = ["-- Digitar novo ou selecionar do histórico --"] + historico
     
     escolha_historico = st.selectbox(
-        f"💡 Sugestões para: {label}", 
+        f"💡 Sugestões: {label}", 
         options=opcoes_combo, 
         key=f"hist_sel_{campo_chave}"
     )
@@ -668,7 +668,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
-        [Paragraph("1 a 6", table_cell_style), Paragraph(f"Critérios NBR (Itens 1 a 6) | Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_style), Paragraph(f"{soma_pontos} PONTOS", table_cell_style)],
+        [Paragraph("1 a 6", table_cell_style), Paragraph(f"Critérios NBR (Itens 1 a 6) | Fundamentacao: {fundamentacao} | Precisão: {precisao}", table_cell_style), Paragraph(f"{soma_pontos} PONTOS", table_cell_style)],
         [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Métricas: R² = {r2} | Amplitude IC = {amplitude_ic_perc:.2f}% | Dados Efetivos = {n_dados} | Máx p-t: {max_p_regressor*100:.2f}% | p-F: {p_valor_f:.4f}", table_cell_style), Paragraph("ATENDIDO", table_cell_bold)]
     ]
 
@@ -1061,7 +1061,8 @@ with aba_avm:
                 alertas_micronumerosidade = verificar_micronumerosidade(df_amostra_saneada, features_selecionadas, classificacoes_atuais_dict)
 
                 st.markdown("---")
-                st.subheader("3. Atributos do Imóvel Avaliando & Limites do Dado (Com Assistente de Histórico Fixo)")
+                st.subheader("3. Atributos do Imóvel Avaliando & Limites do Dado (Disposição Tabular Organizada)")
+                st.markdown("Gerencie os atributos com clareza idêntica à apresentação tabular do laudo final:")
                 
                 dados_ia = st.session_state.get('dados_extraidos_ia', {})
                 campos_inteiros = ['quartos', 'suites', 'suite', 'banheiros', 'vagas', 'vagas_garagem', 'garagem', 'estado_de_conservacao', 'conservacao', 'padrao_de_acabamento', 'acabamento', 'idade_aparente', 'idade', 'evento', 'data_do_evento', 'ano', 'pe_direito']
@@ -1069,51 +1070,69 @@ with aba_avm:
                 valores_usuario = {}
                 limites_amostra_dict = {}
                 variaveis_extrapoladas = []
-                cols_inputs = st.columns(len(features_selecionadas))
                 
                 tipos_classificacao_opcoes = ["Quantitativa", "Código Alocado", "Dicotômica", "Proxy", "Proxy Temporal", "Dependente"]
                 sinais_opcoes = ["+", "-"]
                 
-                for i, feat in enumerate(features_selecionadas):
-                    with cols_inputs[i % len(cols_inputs)]:
-                        eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
-                        min_amostra = df_amostra_saneada[feat].min() if not df_amostra_saneada[feat].empty else 0.0
-                        max_amostra = df_amostra_saneada[feat].max() if not df_amostra_saneada[feat].empty else 0.0
+                # Cabeçalho da Tabela Visual de Atributos
+                col_h1, col_h2, col_h3, col_h4, col_h5, col_h6 = st.columns([1.2, 1, 1.8, 1.2, 0.8, 1.2])
+                col_h1.markdown("**Variável**")
+                col_h2.markdown("**Valor Avaliando**")
+                col_h3.markdown("**Especificação (Histórico)**")
+                col_h4.markdown("**Classificação**")
+                col_h5.markdown("**Sinal**")
+                col_h6.markdown("**Limites Amostra**")
+                st.markdown("---")
+
+                for feat in features_selecionadas:
+                    eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
+                    min_amostra = df_amostra_saneada[feat].min() if not df_amostra_saneada[feat].empty else 0.0
+                    max_amostra = df_amostra_saneada[feat].max() if not df_amostra_saneada[feat].empty else 0.0
+                    
+                    if eh_inteiro:
+                        limites_amostra_dict[feat] = f"[{int(min_amostra)} a {int(max_amostra)}]"
+                    else:
+                        limites_amostra_dict[feat] = f"[{min_amostra:.2f} a {max_amostra:.2f}]"
+                    
+                    val_inicial = st.session_state.valores_manuais.get(feat, dados_ia.get(feat, 0.0))
+                    nome_formatado = feat.replace('_', ' ').title()
+                    
+                    col_r1, col_r2, col_r3, col_r4, col_r5, col_r6 = st.columns([1.2, 1, 1.8, 1.2, 0.8, 1.2])
+                    
+                    with col_r1:
+                        st.markdown(f"**{nome_formatado}**")
                         
+                    with col_r2:
                         if eh_inteiro:
-                            limites_amostra_dict[feat] = f"[{int(min_amostra)} a {int(max_amostra)}]"
+                            val_input = st.number_input(f"Val_{feat}", value=int(round(float(val_inicial))), step=1, format="%d", key=f"input_safe_{tipologia_imovel}_{feat}", label_visibility="collapsed")
                         else:
-                            limites_amostra_dict[feat] = f"[{min_amostra:.2f} a {max_amostra:.2f}]"
-                        
-                        val_inicial = st.session_state.valores_manuais.get(feat, dados_ia.get(feat, 0.0))
-                        nome_formatado = feat.replace('_', ' ').title()
-                        
-                        if eh_inteiro:
-                            val_input = st.number_input(f"{nome_formatado}", value=int(round(float(val_inicial))), step=1, format="%d", key=f"input_safe_{tipologia_imovel}_{feat}")
-                        else:
-                            val_input = st.number_input(f"{nome_formatado}", value=float(val_inicial), format="%.2f", key=f"input_safe_{tipologia_imovel}_{feat}")
-                        
+                            val_input = st.number_input(f"Val_{feat}", value=float(val_inicial), format="%.2f", key=f"input_safe_{tipologia_imovel}_{feat}", label_visibility="collapsed")
                         valores_usuario[feat] = val_input
-                        st.caption(f"📊 Limites: {limites_amostra_dict[feat]}")
                         
+                    with col_r3:
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        # Assistente travado nativamente de forma idêntica para TODas as variáveis
-                        esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Descreva a especificação...")
+                        esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Descreva...")
                         st.session_state.especificacoes_variaveis[feat] = esp_input
-
+                        
+                    with col_r4:
                         classificacao_atual = st.session_state.classificacoes_variaveis.get(feat, "Quantitativa")
-                        class_escolhida = st.selectbox(f"Classif. ({feat})", options=tipos_classificacao_opcoes, index=tipos_classificacao_opcoes.index(classificacao_atual) if classificacao_atual in tipos_classificacao_opcoes else 0, key=f"class_{tipologia_imovel}_{feat}")
+                        class_escolhida = st.selectbox(f"Classif_{feat}", options=tipos_classificacao_opcoes, index=tipos_classificacao_opcoes.index(classificacao_atual) if classificacao_atual in tipos_classificacao_opcoes else 0, key=f"class_{tipologia_imovel}_{feat}", label_visibility="collapsed")
                         st.session_state.classificacoes_variaveis[feat] = class_escolhida
-
+                        
+                    with col_r5:
                         sinal_atual = st.session_state.sinais_variaveis.get(feat, "+")
-                        sinal_escolhido = st.selectbox(f"Sinal ({feat})", options=sinais_opcoes, index=sinais_opcoes.index(sinal_atual) if sinal_atual in sinais_opcoes else 0, key=f"sinal_{tipologia_imovel}_{feat}")
+                        sinal_escolhido = st.selectbox(f"Sinal_{feat}", options=sinais_opcoes, index=sinais_opcoes.index(sinal_atual) if sinal_atual in sinais_opcoes else 0, key=f"sinal_{tipologia_imovel}_{feat}", label_visibility="collapsed")
                         st.session_state.sinais_variaveis[feat] = sinal_escolhido
+                        
+                    with col_r6:
+                        st.markdown(f"`{limites_amostra_dict[feat]}`")
 
-                        if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
-                            variaveis_extrapoladas.append(feat)
-                            st.error(f"⚠️ Alerta: '{nome_formatado}' está EXTRAPOLADO!")
+                    if valores_usuario[feat] < min_amostra or valores_usuario[feat] > max_amostra:
+                        variaveis_extrapoladas.append(feat)
+                        st.error(f"⚠️ Alerta: '{nome_formatado}' está EXTRAPOLADO em relação à amostra!")
 
-                        st.session_state.valores_manuais[feat] = valores_usuario[feat]
+                    st.session_state.valores_manuais[feat] = valores_usuario[feat]
+                    st.divider()
 
                 tem_extrapolacao_geral = len(variaveis_extrapoladas) > 0
 
