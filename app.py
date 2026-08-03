@@ -191,7 +191,7 @@ OPCOES_ESPECIFICACOES_FIXAS = [
     "1 - JAN A MAR/2025; 2 - ABR A JUN/2025; 3 - JUL A SET/2025; 4 - OUT A DEZ/2025; 5 - JAN A MAR/2026; 6 - ABR A JUN/2026; 7 - JUL /2026"
 ]
 
-OPCOES_ESPECIFICAS_ITEM_4_ E_5 = [
+OPCOES_ESPECIFICAS_ITEM_4_5 = [
     "MAJORADO EM FUNÇÃO DO IMÓVEL POSSUIR GERAÇÃO PRÓPRIA DE ENERGIA.",
     "DEPRECIADO EM FUNÇÃO DO IMÓVEL POSSUIR ÁREA CONSTRUÍDA NÃO AVERBADA (SITUAÇÃO DESVALORIZANTE)",
     "DEPRECIADO EM FUNÇÃO DA VARIÁVEL ORIGEM DA INFORMAÇÃO NÃO TER SIDO UTILIZADA NA EQUAÇÃO.",
@@ -200,7 +200,7 @@ OPCOES_ESPECIFICAS_ITEM_4_ E_5 = [
 
 def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None, usar_lista_especial=False):
     if usar_lista_especial:
-        opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICAS_ITEM_4_ E_5
+        opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICAS_ITEM_4_5
     else:
         opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICACOES_FIXAS
     
@@ -1134,7 +1134,7 @@ with aba_avm:
 
                 for feat in features_selecionadas:
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
-                    min_amostra = df_amostra_saneada[feat].min() if not df_amostra_saneada[feat].empty else 0.0
+                    min_amostra = df_amost_saneada[feat].min() if not df_amostra_saneada[feat].empty else 0.0
                     max_amostra = df_amostra_saneada[feat].max() if not df_amostra_saneada[feat].empty else 0.0
                     
                     if eh_inteiro:
