@@ -137,7 +137,6 @@ if not st.session_state.autenticado:
 # =====================================================================
 usr_logado_chave = st.session_state.usuario_atual
 
-# Garante proteção absoluta contra KeyError ao acessar os dados do usuário logado
 if usr_logado_chave not in st.session_state.usuarios_cadastrados:
     st.session_state.usuarios_cadastrados[usr_logado_chave] = {
         "senha": "123",
@@ -178,8 +177,37 @@ if teste_expirado:
     st.stop()
 
 # =====================================================================
-# FUNÇÕES DE HISTÓRICO E ASSISTENTE DE DIGITAÇÃO NATIVO E FIXO
+# ASSISTENTE DE ESPECIFICAÇÕES FIXAS NORMATIVAS
 # =====================================================================
+def criar_campo_especificacao_fixa(label, campo_chave, valor_atual):
+    opcoes_fixas = [
+        "-- Selecione a Especificação Padrão --",
+        "ÁREA DO LOTE EM M²",
+        "QUANTIDADE DE QUARTOS TOTAIS DO IMÓVEL",
+        "ÁREA CONSTRUÍDA COBERTA EM M²",
+        "1 = VENDA; 2 = OFERTA",
+        "1 = NORMAL/BAIXO; 2 = NORMAL; 3 = NORMAL/ALTO; 4 = ALTO",
+        "QUANTIDADE DE BANHEIROS PRIVATIVOS DO IMÓVEL",
+        "1 = REPAROS IMPORTANTES; 2 = REPAROS SIMPLES; 3 = BOM; 4 = NOVO",
+        "IDADE APARENTE DO IMÓVEL, EM ANOS",
+        "PV 2016",
+        "1 - JAN A MAR/2025; 2 - ABR A JUN/2025; 3 - JUL A SET/2025; 4 - OUT A DEZ/2025; 5 - JAN A MAR/2026; 6 - ABR A JUN/2026; 7 - JUL /2026"
+    ]
+    
+    index_atual = 0
+    if valor_atual in opcoes_fixas:
+        index_atual = opcoes_fixas.index(valor_atual)
+
+    escolha_fixa = st.selectbox(
+        f"💡 {label}", 
+        options=opcoes_fixas, 
+        index=index_atual,
+        key=f"esp_fixa_{campo_chave}"
+    )
+    
+    val_final = escolha_fixa if escolha_fixa != "-- Selecione a Especificação Padrão --" else valor_atual
+    return val_final
+
 def registrar_historico(campo_chave, valor):
     if valor and isinstance(valor, str) and valor.strip():
         if campo_chave not in st.session_state.historico_digitacao:
@@ -1105,7 +1133,6 @@ with aba_avm:
                 tipos_classificacao_opcoes = ["Quantitativa", "Código Alocado", "Dicotômica", "Proxy", "Proxy Temporal", "Dependente"]
                 sinais_opcoes = ["+", "-"]
                 
-                # Cabeçalho da Tabela Visual de Atributos
                 col_h1, col_h2, col_h3, col_h4, col_h5, col_h6 = st.columns([1.2, 1, 1.8, 1.2, 0.8, 1.2])
                 col_h1.markdown("**Variável**")
                 col_h2.markdown("**Valor Avaliando**")
@@ -1142,7 +1169,7 @@ with aba_avm:
                         
                     with col_r3:
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Descreva...")
+                        esp_input = criar_campo_especificacao_fixa(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual)
                         st.session_state.especificacoes_variaveis[feat] = esp_input
                         
                     with col_r4:
