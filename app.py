@@ -177,9 +177,9 @@ if teste_expirado:
     st.stop()
 
 # =====================================================================
-# ASSISTENTE DE ESPECIFICAÇÕES FIXAS NORMATIVAS
+# AUXILIARES PARA SUGESTÕES E PREENCHIMENTO AUTOMÁTICO (ITENS 3, 4 E 5)
 # =====================================================================
-def criar_campo_especificacao_fixa(label, campo_chave, valor_atual):
+def criar_campo_especificacao_com_sugestoes(label, campo_chave, valor_atual):
     opcoes_fixas = [
         "-- Selecione a Especificação Padrão --",
         "ÁREA DO LOTE EM M²",
@@ -191,58 +191,27 @@ def criar_campo_especificacao_fixa(label, campo_chave, valor_atual):
         "1 = REPAROS IMPORTANTES; 2 = REPAROS SIMPLES; 3 = BOM; 4 = NOVO",
         "IDADE APARENTE DO IMÓVEL, EM ANOS",
         "PV 2016",
-        "1 - JAN A MAR/2025; 2 - ABR A JUN/2025; 3 - JUL A SET/2025; 4 - OUT A DEZ/2025; 5 - JAN A MAR/2026; 6 - ABR A JUN/2026; 7 - JUL /2026"
+        "1 - JAN A MAR/2025; 2 - ABR A JUN/2025; 3 - JUL A SET/2025; 4 - OUT A DEZ/2025; 5 - JAN A MAR/2026; 6 - ABR A JUN/2026; 7 - JUL /2026",
+        "MAJORADO EM FUNÇÃO DO IMÓVEL POSSUIR GERAÇÃO PRÓPRIA DE ENERGIA.",
+        "DEPRECIADO EM FUNÇÃO DO IMÓVEL POSSUIR ÁREA CONSTRUÍDA NÃO AVERBADA (SITUAÇÃO DESVALORIZANTE)",
+        "DEPRECIADO EM FUNÇÃO DA VARIÁVEL ORIGEM DA INFORMAÇÃO NÃO TER SIDO UTILIZADA NA EQUAÇÃO.",
+        "MAJORADO EM FUNÇÃO DA VARIÁVEL QUARTOS NÃO TER SIDO UTILIZADA NA EQUAÇÃO."
     ]
     
-    index_atual = 0
-    if valor_atual in opcoes_fixas:
-        index_atual = opcoes_fixas.index(valor_atual)
-
-    escolha_fixa = st.selectbox(
-        f"💡 {label}", 
-        options=opcoes_fixas, 
-        index=index_atual,
-        key=f"esp_fixa_{campo_chave}"
-    )
-    
-    val_final = escolha_fixa if escolha_fixa != "-- Selecione a Especificação Padrão --" else valor_atual
-    return val_final
-
-def registrar_historico(campo_chave, valor):
-    if valor and isinstance(valor, str) and valor.strip():
-        if campo_chave not in st.session_state.historico_digitacao:
-            st.session_state.historico_digitacao[campo_chave] = []
-        if valor.strip() not in st.session_state.historico_digitacao[campo_chave]:
-            st.session_state.historico_digitacao[campo_chave].insert(0, valor.strip())
-            st.session_state.historico_digitacao[campo_chave] = st.session_state.historico_digitacao[campo_chave][:15]
-
-def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None):
-    if campo_chave not in st.session_state.historico_digitacao:
-        st.session_state.historico_digitacao[campo_chave] = []
-        
-    historico = st.session_state.historico_digitacao.get(campo_chave, [])
-    opcoes_combo = ["-- Digitar novo ou selecionar do histórico --"] + historico
-    
-    escolha_historico = st.selectbox(
+    escolha_sugestao = st.selectbox(
         f"💡 Sugestões: {label}", 
-        options=opcoes_combo, 
-        key=f"hist_sel_{campo_chave}"
+        options=opcoes_fixas, 
+        key=f"sug_esp_{campo_chave}"
     )
     
-    val_base = escolha_historico if (escolha_historico and escolha_historico != "-- Digitar novo ou selecionar do histórico --") else valor_atual
+    val_base = valor_atual
+    if escolha_sugestao != "-- Selecione a Especificação Padrão --":
+        val_base = escolha_sugestao
 
-    if tipo == "text":
-        val_input = st.text_input(label, value=val_base, placeholder=placeholder, key=f"input_{campo_chave}")
-    elif tipo == "textarea":
-        val_input = st.text_area(label, value=val_base, placeholder=placeholder, height=height, key=f"input_{campo_chave}")
-    
-    registrar_historico(campo_chave, val_input if isinstance(val_input, str) else str(val_input))
+    val_input = st.text_input(label, value=val_base, key=f"input_val_{campo_chave}", label_visibility="collapsed")
     return val_input
 
-# =====================================================================
-# ASSISTENTE DE JUSTIFICATIVA FIXA PARA O ITEM 4 (AJUSTES)
-# =====================================================================
-def criar_campo_motivo_ajuste_fixo(label, campo_chave, valor_atual):
+def criar_campo_motivo_ajuste_com_sugestoes(label, campo_chave, valor_atual):
     opcoes_fixas = [
         "-- Selecione uma Justificativa Padrão --",
         "MAJORADO EM FUNÇÃO DO IMÓVEL POSSUIR GERAÇÃO PRÓPRIA DE ENERGIA.",
@@ -251,24 +220,20 @@ def criar_campo_motivo_ajuste_fixo(label, campo_chave, valor_atual):
         "MAJORADO EM FUNÇÃO DA VARIÁVEL QUARTOS NÃO TER SIDO UTILIZADA NA EQUAÇÃO."
     ]
     
-    index_atual = 0
-    if valor_atual in opcoes_fixas:
-        index_atual = opcoes_fixas.index(valor_atual)
-
-    escolha_fixa = st.selectbox(
-        f"💡 {label}", 
+    escolha_sugestao = st.selectbox(
+        f"💡 Sugestões: {label}", 
         options=opcoes_fixas, 
-        index=index_atual,
-        key=f"motivo_fixo_{campo_chave}"
+        key=f"sug_motivo_{campo_chave}"
     )
     
-    val_final = escolha_fixa if escolha_fixa != "-- Selecione uma Justificativa Padrão --" else valor_atual
-    return val_final
+    val_base = valor_atual
+    if escolha_sugestao != "-- Selecione uma Justificativa Padrão --":
+        val_base = escolha_sugestao
 
-# =====================================================================
-# ASSISTENTE DE OBSERVAÇÕES GERAIS FIXAS PARA O ITEM 5
-# =====================================================================
-def criar_campo_observacoes_fixas(label, campo_chave, valor_atual):
+    val_input = st.text_input(label, value=val_base, key=f"input_val_{campo_chave}")
+    return val_input
+
+def criar_campo_observacoes_com_sugestoes(label, campo_chave, valor_atual):
     opcoes_fixas = [
         "-- Selecione uma Observação Padrão --",
         "MAJORADO EM FUNÇÃO DO IMÓVEL POSSUIR GERAÇÃO PRÓPRIA DE ENERGIA.",
@@ -277,19 +242,18 @@ def criar_campo_observacoes_fixas(label, campo_chave, valor_atual):
         "MAJORADO EM FUNÇÃO DA VARIÁVEL QUARTOS NÃO TER SIDO UTILIZADA NA EQUAÇÃO."
     ]
     
-    index_atual = 0
-    if valor_atual in opcoes_fixas:
-        index_atual = opcoes_fixas.index(valor_atual)
-
-    escolha_fixa = st.selectbox(
-        f"💡 {label}", 
+    escolha_sugestao = st.selectbox(
+        f"💡 Sugestões: {label}", 
         options=opcoes_fixas, 
-        index=index_atual,
-        key=f"obs_fixa_{campo_chave}"
+        key=f"sug_obs_{campo_chave}"
     )
     
-    val_final = escolha_fixa if escolha_fixa != "-- Selecione uma Observação Padrão --" else valor_atual
-    return val_final
+    val_base = valor_atual
+    if escolha_sugestao != "-- Selecione uma Observação Padrão --":
+        val_base = escolha_sugestao
+
+    val_input = st.text_area(label, value=val_base, height=100, key=f"input_val_{campo_chave}")
+    return val_input
 
 # =====================================================================
 # CÁLCULO ESTATÍSTICO AUTOMÁTICO (TESTE T E TESTE F DE SNEDECOR)
@@ -1221,7 +1185,7 @@ with aba_avm:
                         
                     with col_r3:
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        esp_input = criar_campo_especificacao_fixa(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual)
+                        esp_input = criar_campo_especificacao_com_sugestoes(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual)
                         st.session_state.especificacoes_variaveis[feat] = esp_input
                         
                     with col_r4:
@@ -1255,13 +1219,13 @@ with aba_avm:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
                     motivo_ajuste_atual = st.session_state.get("motivo_ajuste_key", "")
-                    motivo_ajuste_input = criar_campo_motivo_ajuste_fixo("Motivo da alteração do valor médio calculated", "motivo_ajuste_key", motivo_ajuste_atual)
+                    motivo_ajuste_input = criar_campo_motivo_ajuste_com_sugestoes("Motivo da alteração do valor médio calculated", "motivo_ajuste_key", motivo_ajuste_atual)
                     st.session_state["motivo_ajuste_key"] = motivo_ajuste_input
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
                 obs_gerais_atual = st.session_state.get("obs_gerais_key", "")
-                observacoes_gerais_input = criar_campo_observacoes_fixas("Insira as observações gerais, considerações de vistoria ou ressalvas técnicas:", "obs_gerais_key", obs_gerais_atual)
+                observacoes_gerais_input = criar_campo_observacoes_com_sugestoes("Insira as observações gerais, considerações de vistoria ou ressalvas técnicas:", "obs_gerais_key", obs_gerais_atual)
 
                 st.markdown("---")
                 st.subheader("6. Atribuição Manual de Notas FUNDAMENTAÇÃO-NBR")
