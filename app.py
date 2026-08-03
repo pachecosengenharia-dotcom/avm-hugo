@@ -1367,12 +1367,12 @@ with aba_juridico:
     st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
     j1, j2 = st.columns(2)
     matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias)", value=True, key="chk_mat_ok")
-    sem_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora)", value=True, key="chk_sem_onus")
+    pesquisa_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora)", value=True, key="chk_sem_onus")
     sem_acoes = j2.checkbox("Sem ações reipersecutórias", value=True, key="chk_sem_acoes")
     proprietario_ok = j2.checkbox("Vendedor é o proprietário registral", value=False, key="chk_prop_ok")
 
     if st.button("⚖️ Processar Análise Jurídica"):
-        aprovados = sum([matricula_ok, sem_onus, sem_acoes, proprietario_ok])
+        aprovados = sum([matricula_ok, pesquisa_onus, sem_acoes, proprietario_ok])
         st.session_state.status_juridico_global = aprovados == 4
         st.session_state.score_juridico_global = ["ALTO RISCO", "ALTO RISCO", "RISCO MODERADO", "RISCO BAIXO", "RISCO MÍNIMO"][aprovados]
         if st.session_state.status_juridico_global:
