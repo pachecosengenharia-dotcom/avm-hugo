@@ -34,7 +34,7 @@ if 'usuarios_cadastrados' not in st.session_state:
             "senha": "123",
             "nome": "Usuário Teste",
             "plano": "⏱️ Teste de 7 Dias (Grátis)",
-            "data_cadastro": datetime.now() - timedelta(days=8)
+            "data_cadastro": datetime.now() - timedelta(days=8)  # Simula 8º dia para validação do bloqueio
         }
     }
 
@@ -46,6 +46,7 @@ if 'autenticado' not in st.session_state:
         st.session_state.autenticado = True
         st.session_state.usuario_atual = usr_url
         
+        # BLINDAGEM CONTRA KEYERROR: Se o e-mail não estiver no dicionário inicial após F5, restaura automaticamente
         if usr_url not in st.session_state.usuarios_cadastrados:
             st.session_state.usuarios_cadastrados[usr_url] = {
                 "senha": "123",
@@ -136,6 +137,7 @@ if not st.session_state.autenticado:
 # =====================================================================
 usr_logado_chave = st.session_state.usuario_atual
 
+# Garante proteção absoluta contra KeyError ao acessar os dados do usuário logado
 if usr_logado_chave not in st.session_state.usuarios_cadastrados:
     st.session_state.usuarios_cadastrados[usr_logado_chave] = {
         "senha": "123",
@@ -176,57 +178,37 @@ if teste_expirado:
     st.stop()
 
 # =====================================================================
-# LISTAS FIXAS DE OPÇÕES SEPARADAS POR CAMPO
+# FUNÇÕES DE HISTÓRICO E ASSISTENTE DE DIGITAÇÃO NATIVO E FIXO
 # =====================================================================
-OPCOES_ESPECIFICACOES_FIXAS = [
-    "ÁREA DO LOTE EM M²",
-    "QUANTIDADE DE QUARTOS TOTAIS DO IMÓVEL",
-    "ÁREA CONSTRUÍDA COBERTA EM M²",
-    "1 = VENDA; 2 = OFERTA",
-    "1 = NORMAL/BAIXO; 2 = NORMAL; 3 = NORMAL/ALTO; 4 = ALTO",
-    "QUANTIDADE DE BANHEIROS PRIVATIVOS DO IMÓVEL",
-    "1 = REPAROS IMPORTANTES; 2 = REPAROS SIMPLES; 3 = BOM; 4 = NOVO",
-    "IDADE APARENTE DO IMÓVEL, EM ANOS",
-    "PV 2016",
-    "1 - JAN A MAR/2025; 2 - ABR A JUN/2025; 3 - JUL A SET/2025; 4 - OUT A DEZ/2025; 5 - JAN A MAR/2026; 6 - ABR A JUN/2026; 7 - JUL /2026"
-]
+def registrar_historico(campo_chave, valor):
+    if valor and isinstance(valor, str) and valor.strip():
+        if campo_chave not in st.session_state.historico_digitacao:
+            st.session_state.historico_digitacao[campo_chave] = []
+        if valor.strip() not in st.session_state.historico_digitacao[campo_chave]:
+            st.session_state.historico_digitacao[campo_chave].insert(0, valor.strip())
+            st.session_state.historico_digitacao[campo_chave] = st.session_state.historico_digitacao[campo_chave][:15]
 
-OPCOES_ESPECIFICAS_ITEM_4_5 = [
-    "MAJORADO EM FUNÇÃO DO IMÓVEL POSSUIR GERAÇÃO PRÓPRIA DE ENERGIA.",
-    "DEPRECIADO EM FUNÇÃO DO IMÓVEL POSSUIR ÁREA CONSTRUÍDA NÃO AVERBADA (SITUAÇÃO DESVALORIZANTE)",
-    "DEPRECIADO EM FUNÇÃO DA VARIÁVEL ORIGEM DA INFORMAÇÃO NÃO TER SIDO UTILIZADA NA EQUAÇÃO.",
-    "MAJORADO EM FUNÇÃO DA VARIÁVEL QUARTOS NÃO TER SIDO UTILIZADA NA EQUAÇÃO."
-]
-
-def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None, usar_lista_especial=False):
-    if usar_lista_especial:
-        opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICAS_ITEM_4_5
-    else:
-        opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICACOES_FIXAS
+def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None):
+    if campo_chave not in st.session_state.historico_digitacao:
+        st.session_state.historico_digitacao[campo_chave] = []
+        
+    historico = st.session_state.historico_digitacao.get(campo_chave, [])
+    opcoes_combo = ["-- Digitar novo ou selecionar do histórico --"] + historico
     
-    text_key = f"input_{campo_chave}"
-    sel_key = f"hist_sel_{campo_chave}"
-    
-    if text_key not in st.session_state:
-        st.session_state[text_key] = valor_atual
-
-    def ao_selecionar_opcao():
-        selecao = st.session_state.get(sel_key)
-        if selecao and selecao != "-- Selecionar da lista fixa --":
-            st.session_state[text_key] = selecao
-
     escolha_historico = st.selectbox(
         f"💡 Sugestões: {label}", 
         options=opcoes_combo, 
-        key=sel_key,
-        on_change=ao_selecionar_opcao
+        key=f"hist_sel_{campo_chave}"
     )
+    
+    val_base = escolha_historico if (escolha_historico and escolha_historico != "-- Digitar novo ou selecionar do histórico --") else valor_atual
 
     if tipo == "text":
-        val_input = st.text_input(label, value=st.session_state[text_key], placeholder=placeholder, key=text_key)
+        val_input = st.text_input(label, value=val_base, placeholder=placeholder, key=f"input_{campo_chave}")
     elif tipo == "textarea":
-        val_input = st.text_area(label, value=st.session_state[text_key], placeholder=placeholder, height=height, key=text_key)
+        val_input = st.text_area(label, value=val_base, placeholder=placeholder, height=height, key=f"input_{campo_chave}")
     
+    registrar_historico(campo_chave, val_input if isinstance(val_input, str) else str(val_input))
     return val_input
 
 # =====================================================================
@@ -1123,10 +1105,11 @@ with aba_avm:
                 tipos_classificacao_opcoes = ["Quantitativa", "Código Alocado", "Dicotômica", "Proxy", "Proxy Temporal", "Dependente"]
                 sinais_opcoes = ["+", "-"]
                 
+                # Cabeçalho da Tabela Visual de Atributos
                 col_h1, col_h2, col_h3, col_h4, col_h5, col_h6 = st.columns([1.2, 1, 1.8, 1.2, 0.8, 1.2])
                 col_h1.markdown("**Variável**")
                 col_h2.markdown("**Valor Avaliando**")
-                col_h3.markdown("**Especificação (Lista Fixa)**")
+                col_h3.markdown("**Especificação (Histórico)**")
                 col_h4.markdown("**Classificação**")
                 col_h5.markdown("**Sinal**")
                 col_h6.markdown("**Limites Amostra**")
@@ -1134,7 +1117,7 @@ with aba_avm:
 
                 for feat in features_selecionadas:
                     eh_inteiro = any(ci in feat.lower() for ci in campos_inteiros)
-                    min_amostra = df_amost_saneada[feat].min() if not df_amostra_saneada[feat].empty else 0.0
+                    min_amostra = df_amostra_saneada[feat].min() if not df_amostra_saneada[feat].empty else 0.0
                     max_amostra = df_amostra_saneada[feat].max() if not df_amostra_saneada[feat].empty else 0.0
                     
                     if eh_inteiro:
@@ -1159,7 +1142,7 @@ with aba_avm:
                         
                     with col_r3:
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Selecione ou digite...")
+                        esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Descreva...")
                         st.session_state.especificacoes_variaveis[feat] = esp_input
                         
                     with col_r4:
@@ -1192,11 +1175,11 @@ with aba_avm:
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
-                    motivo_ajuste_input = criar_campo_com_assistente("Motivo da alteração do valor médio calculado", "motivo_ajuste_key", "", placeholder="Selecione ou digite a justificativa...", usar_lista_especial=True)
+                    motivo_ajuste_input = criar_campo_com_assistente("Motivo da alteração do valor médio calculated", "motivo_ajuste_key", "", placeholder="Descreva aqui a justificativa...")
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
-                observacoes_gerais_input = criar_campo_com_assistente("Insira as observações gerais, considerações de vistoria ou ressalvas técnicas:", "obs_gerais_key", "", tipo="textarea", placeholder="Selecione ou digite as observações...", height=100, usar_lista_especial=True)
+                observacoes_gerais_input = criar_campo_com_assistente("Insira as observações gerais, considerações de vistoria ou ressalvas técnicas:", "obs_gerais_key", "", tipo="textarea", placeholder="Ex: Imóvel localizado em zona de expansão urbana...", height=100)
 
                 st.markdown("---")
                 st.subheader("6. Atribuição Manual de Notas FUNDAMENTAÇÃO-NBR")
@@ -1311,7 +1294,7 @@ with aba_avm:
                         var_max = ((v_max - v_medio) / v_medio) * 100
 
                         fundamentacao, precisao, soma_pontos, pontos_itens, max_p_reg_val, p_valor_f_calc = calcular_graus_nbr_rigoroso(
-                            n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, amplitude_ic_percentual, tem_extrapolacao_geral, notas_manuais_input, usar_manual=usar_todas_manuais
+                            n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, amplitude_ic_percentual, tem_extrapolacao_geral, notas_manuais_input, usar_todas_manuais
                         )
 
                         valores_dict_metricas = {
@@ -1367,12 +1350,12 @@ with aba_juridico:
     st.subheader("📜 Esteira de Risco Jurídico da Matrícula")
     j1, j2 = st.columns(2)
     matricula_ok = j1.checkbox("Matrícula atualizada (menos de 30 dias)", value=True, key="chk_mat_ok")
-    pesquisa_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora)", value=True, key="chk_sem_onus")
+    sem_onus = j1.checkbox("Livre de ônus reais (hipoteca, penhora)", value=True, key="chk_sem_onus")
     sem_acoes = j2.checkbox("Sem ações reipersecutórias", value=True, key="chk_sem_acoes")
     proprietario_ok = j2.checkbox("Vendedor é o proprietário registral", value=False, key="chk_prop_ok")
 
     if st.button("⚖️ Processar Análise Jurídica"):
-        aprovados = sum([matricula_ok, pesquisa_onus, sem_acoes, proprietario_ok])
+        aprovados = sum([matricula_ok, sem_onus, sem_acoes, proprietario_ok])
         st.session_state.status_juridico_global = aprovados == 4
         st.session_state.score_juridico_global = ["ALTO RISCO", "ALTO RISCO", "RISCO MODERADO", "RISCO BAIXO", "RISCO MÍNIMO"][aprovados]
         if st.session_state.status_juridico_global:
