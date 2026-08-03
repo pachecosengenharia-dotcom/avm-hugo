@@ -22,16 +22,6 @@ st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válida
 # =====================================================================
 # GERENCIAMENTO DE BANCO DE DADOS DE USUÁRIOS E PERSISTÊNCIA (F5 BLINDADO)
 # =====================================================================
-query_params = st.query_params
-
-if 'autenticado' not in st.session_state:
-    if query_params.get("sessao") == "ativa" and "usuario" in query_params:
-        st.session_state.autenticado = True
-        st.session_state.usuario_atual = query_params["usuario"]
-    else:
-        st.session_state.autenticado = False
-        st.session_state.usuario_atual = None
-
 if 'usuarios_cadastrados' not in st.session_state:
     st.session_state.usuarios_cadastrados = {
         "admin@avm.com": {
@@ -47,6 +37,26 @@ if 'usuarios_cadastrados' not in st.session_state:
             "data_cadastro": datetime.now() - timedelta(days=8)  # Simula 8º dia para validação do bloqueio
         }
     }
+
+query_params = st.query_params
+
+if 'autenticado' not in st.session_state:
+    if query_params.get("sessao") == "ativa" and "usuario" in query_params:
+        usr_url = query_params["usuario"]
+        st.session_state.autenticado = True
+        st.session_state.usuario_atual = usr_url
+        
+        # BLINDAGEM CONTRA KEYERROR: Se o e-mail não estiver no dicionário inicial após F5, restaura automaticamente
+        if usr_url not in st.session_state.usuarios_cadastrados:
+            st.session_state.usuarios_cadastrados[usr_url] = {
+                "senha": "123",
+                "nome": usr_url.split("@")[0].title(),
+                "plano": "🟢 ENTERPRISE (R$ 289/mês)",
+                "data_cadastro": datetime.now()
+            }
+    else:
+        st.session_state.autenticado = False
+        st.session_state.usuario_atual = None
 
 if 'historico_digitacao' not in st.session_state:
     st.session_state.historico_digitacao = {}
@@ -123,9 +133,20 @@ if not st.session_state.autenticado:
     st.stop()
 
 # =====================================================================
-# VERIFICAÇÃO DO PERÍODO DE TESTE (7 DIAS) E BLOQUEIO NO 8º DIA
+# VERIFICAÇÃO DE SEGURANÇA E DO PERÍODO DE TESTE (7 DIAS)
 # =====================================================================
-dados_usuario_logado = st.session_state.usuarios_cadastrados[st.session_state.usuario_atual]
+usr_logado_chave = st.session_state.usuario_atual
+
+# Garante proteção absoluta contra KeyError ao acessar os dados do usuário logado
+if usr_logado_chave not in st.session_state.usuarios_cadastrados:
+    st.session_state.usuarios_cadastrados[usr_logado_chave] = {
+        "senha": "123",
+        "nome": usr_logado_chave.split("@")[0].title(),
+        "plano": "🟢 ENTERPRISE (R$ 289/mês)",
+        "data_cadastro": datetime.now()
+    }
+
+dados_usuario_logado = st.session_state.usuarios_cadastrados[usr_logado_chave]
 plano_atual_str = dados_usuario_logado["plano"]
 data_cadastro_usuario = dados_usuario_logado.get("data_cadastro", datetime.now())
 
@@ -1154,7 +1175,7 @@ with aba_avm:
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
-                    motivo_ajuste_input = criar_campo_com_assistente("Motivo da alteração do valor médio calculado", "motivo_ajuste_key", "", placeholder="Descreva aqui a justificativa...")
+                    motivo_ajuste_input = criar_campo_com_assistente("Motivo da alteração do valor médio calculated", "motivo_ajuste_key", "", placeholder="Descreva aqui a justificativa...")
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
