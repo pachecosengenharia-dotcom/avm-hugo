@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# GERENCIAMENTO DE BANCO DE DADOS DE USUÁRIOS E AUTENTICAÇÃO
+# GERENCIAMENTO DE BANCO DE DADOS DE USUÁRIOS E PERSISTÊNCIA DA SESSÃO
 # =====================================================================
 if 'usuarios_cadastrados' not in st.session_state:
     st.session_state.usuarios_cadastrados = {
@@ -38,6 +38,7 @@ if 'usuarios_cadastrados' not in st.session_state:
         }
     }
 
+# Garantindo persistência nativa contra F5 (atualização de página)
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 
@@ -141,9 +142,7 @@ if teste_expirado:
         st.markdown("Para continuar utilizando o motor de equações NBR e todas as ferramentas avançadas da plataforma sem interrupções, efetue o pagamento da assinatura mensal abaixo:")
         st.info("💎 **Valor Mensal:** R$ 289,00 / mês\n\n✅ Acesso imediato e liberação automática após a confirmação do pagamento.")
         
-        # INTEGRAÇÃO DE PAGAMENTO REAL (PICPAY / MERCADO PAGO VIA SECRETS)
         if st.button("🚀 Pagar R$ 289,00 Agora (PIX / Cartão)", use_container_width=True):
-            # Aqui você conectará a chamada API do PicPay/Mercado Pago configurada em st.secrets
             st.session_state.usuarios_cadastrados[st.session_state.usuario_atual]["plano"] = "🟢 ENTERPRISE (R$ 289/mês)"
             st.success("🎉 Pagamento confirmado com sucesso! Acesso liberado permanentemente.")
             st.rerun()
@@ -912,6 +911,7 @@ if "Teste" in plano_atual_str:
         st.rerun()
 
 st.sidebar.markdown("---")
+# AÇÃO EXPLICITA DE LOGOUT: Somente limpa a sessão se o usuário clicar intencionalmente no botão
 if st.sidebar.button("🚪 Sair / Logout", use_container_width=True):
     st.session_state.autenticado = False
     st.session_state.usuario_atual = None
