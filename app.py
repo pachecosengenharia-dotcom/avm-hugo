@@ -34,7 +34,7 @@ if 'usuarios_cadastrados' not in st.session_state:
             "senha": "123",
             "nome": "Usuário Teste",
             "plano": "⏱️ Teste de 7 Dias (Grátis)",
-            "data_cadastro": datetime.now() - timedelta(days=8)
+            "data_cadastro": datetime.now() - timedelta(days=8)  # Simula 8º dia para validação do bloqueio
         }
     }
 
@@ -141,7 +141,9 @@ if teste_expirado:
         st.markdown("Para continuar utilizando o motor de equações NBR e todas as ferramentas avançadas da plataforma sem interrupções, efetue o pagamento da assinatura mensal abaixo:")
         st.info("💎 **Valor Mensal:** R$ 289,00 / mês\n\n✅ Acesso imediato e liberação automática após a confirmação do pagamento.")
         
-        if st.button("🚀 Pagar R$ 289,00 Agora e Liberar Acesso", use_container_width=True):
+        # INTEGRAÇÃO DE PAGAMENTO REAL (PICPAY / MERCADO PAGO VIA SECRETS)
+        if st.button("🚀 Pagar R$ 289,00 Agora (PIX / Cartão)", use_container_width=True):
+            # Aqui você conectará a chamada API do PicPay/Mercado Pago configurada em st.secrets
             st.session_state.usuarios_cadastrados[st.session_state.usuario_atual]["plano"] = "🟢 ENTERPRISE (R$ 289/mês)"
             st.success("🎉 Pagamento confirmado com sucesso! Acesso liberado permanentemente.")
             st.rerun()
@@ -668,7 +670,7 @@ def gerar_laudo_pdf_ia(tenant, tipologia, variavel_alvo, ordem_servico, endereco
     story.append(Paragraph("4. Planilha de Fundamentação e Precisão Normativa (ABNT NBR 14653)", subtitle_style))
     t_fund_data = [
         [Paragraph("Item", table_cell_bold), Paragraph("Descrição do Critério Normativo", table_cell_bold), Paragraph("Pontuação / Grau Obtido", table_cell_bold)],
-        [Paragraph("1 a 6", table_cell_style), Paragraph(f"Critérios NBR (Itens 1 a 6) | Fundamentacao: {fundamentacao} | Precisão: {precisao}", table_cell_style), Paragraph(f"{soma_pontos} PONTOS", table_cell_style)],
+        [Paragraph("1 a 6", table_cell_style), Paragraph(f"Critérios NBR (Itens 1 a 6) | Fundamentação: {fundamentacao} | Precisão: {precisao}", table_cell_style), Paragraph(f"{soma_pontos} PONTOS", table_cell_style)],
         [Paragraph("AUDITORIA", table_cell_bold), Paragraph(f"Métricas: R² = {r2} | Amplitude IC = {amplitude_ic_perc:.2f}% | Dados Efetivos = {n_dados} | Máx p-t: {max_p_regressor*100:.2f}% | p-F: {p_valor_f:.4f}", table_cell_style), Paragraph("ATENDIDO", table_cell_bold)]
     ]
 
