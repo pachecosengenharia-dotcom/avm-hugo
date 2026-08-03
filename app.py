@@ -20,8 +20,18 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Plataforma AVM SaaS - Motor de Equações Válidas NBR", page_icon="🏢", layout="wide")
 
 # =====================================================================
-# GERENCIAMENTO DE BANCO DE DADOS DE USUÁRIOS E PERSISTÊNCIA DA SESSÃO
+# GERENCIAMENTO DE BANCO DE DADOS DE USUÁRIOS E PERSISTÊNCIA (F5 BLINDADO)
 # =====================================================================
+query_params = st.query_params
+
+if 'autenticado' not in st.session_state:
+    if query_params.get("sessao") == "ativa" and "usuario" in query_params:
+        st.session_state.autenticado = True
+        st.session_state.usuario_atual = query_params["usuario"]
+    else:
+        st.session_state.autenticado = False
+        st.session_state.usuario_atual = None
+
 if 'usuarios_cadastrados' not in st.session_state:
     st.session_state.usuarios_cadastrados = {
         "admin@avm.com": {
@@ -37,13 +47,6 @@ if 'usuarios_cadastrados' not in st.session_state:
             "data_cadastro": datetime.now() - timedelta(days=8)  # Simula 8º dia para validação do bloqueio
         }
     }
-
-# Garantindo persistência nativa contra F5 (atualização de página)
-if 'autenticado' not in st.session_state:
-    st.session_state.autenticado = False
-
-if 'usuario_atual' not in st.session_state:
-    st.session_state.usuario_atual = None
 
 if 'historico_digitacao' not in st.session_state:
     st.session_state.historico_digitacao = {}
@@ -71,6 +74,8 @@ def tela_autenticacao():
                     if st.session_state.usuarios_cadastrados[email_login]["senha"] == senha_login:
                         st.session_state.autenticado = True
                         st.session_state.usuario_atual = email_login
+                        st.query_params["sessao"] = "ativa"
+                        st.query_params["usuario"] = email_login
                         st.success("Login realizado com sucesso!")
                         st.rerun()
                     else:
@@ -108,6 +113,8 @@ def tela_autenticacao():
                     }
                     st.session_state.autenticado = True
                     st.session_state.usuario_atual = novo_email
+                    st.query_params["sessao"] = "ativa"
+                    st.query_params["usuario"] = novo_email
                     st.success("Conta criada com sucesso! Bem-vindo(a) à plataforma.")
                     st.rerun()
 
@@ -131,6 +138,7 @@ if teste_expirado:
     if st.sidebar.button("🚪 Sair / Logout", use_container_width=True):
         st.session_state.autenticado = False
         st.session_state.usuario_atual = None
+        st.query_params.clear()
         st.rerun()
 
     st.error("⚠️ **Seu período de teste gratuito de 7 dias expirou!**")
@@ -911,10 +919,10 @@ if "Teste" in plano_atual_str:
         st.rerun()
 
 st.sidebar.markdown("---")
-# AÇÃO EXPLICITA DE LOGOUT: Somente limpa a sessão se o usuário clicar intencionalmente no botão
 if st.sidebar.button("🚪 Sair / Logout", use_container_width=True):
     st.session_state.autenticado = False
     st.session_state.usuario_atual = None
+    st.query_params.clear()
     st.rerun()
 
 st.sidebar.markdown("---")
