@@ -176,7 +176,7 @@ if teste_expirado:
     st.stop()
 
 # =====================================================================
-# LISTA FIXA DE OPÇÕES SOLICITADAS PARA AS ESPECIFICAÇÕES (COM BLOCOS ÚNICOS)
+# LISTAS FIXAS DE OPÇÕES SEPARADAS POR CAMPO
 # =====================================================================
 OPCOES_ESPECIFICACOES_FIXAS = [
     "ÁREA DO LOTE EM M²",
@@ -191,8 +191,18 @@ OPCOES_ESPECIFICACOES_FIXAS = [
     "1 - JAN A MAR/2025; 2 - ABR A JUN/2025; 3 - JUL A SET/2025; 4 - OUT A DEZ/2025; 5 - JAN A MAR/2026; 6 - ABR A JUN/2026; 7 - JUL /2026"
 ]
 
-def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None):
-    opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICACOES_FIXAS
+OPCOES_ESPECIFICAS_ITEM_4_ E_5 = [
+    "MAJORADO EM FUNÇÃO DO IMÓVEL POSSUIR GERAÇÃO PRÓPRIA DE ENERGIA.",
+    "DEPRECIADO EM FUNÇÃO DO IMÓVEL POSSUIR ÁREA CONSTRUÍDA NÃO AVERBADA (SITUAÇÃO DESVALORIZANTE)",
+    "DEPRECIADO EM FUNÇÃO DA VARIÁVEL ORIGEM DA INFORMAÇÃO NÃO TER SIDO UTILIZADA NA EQUAÇÃO.",
+    "MAJORADO EM FUNÇÃO DA VARIÁVEL QUARTOS NÃO TER SIDO UTILIZADA NA EQUAÇÃO."
+]
+
+def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None, usar_lista_especial=False):
+    if usar_lista_especial:
+        opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICAS_ITEM_4_ E_5
+    else:
+        opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICACOES_FIXAS
     
     text_key = f"input_{campo_chave}"
     sel_key = f"hist_sel_{campo_chave}"
@@ -1182,11 +1192,11 @@ with aba_avm:
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
-                    motivo_ajuste_input = criar_campo_com_assistente("Motivo da alteração do valor médio calculado", "motivo_ajuste_key", "", placeholder="Descreva aqui a justificativa...")
+                    motivo_ajuste_input = criar_campo_com_assistente("Motivo da alteração do valor médio calculado", "motivo_ajuste_key", "", placeholder="Selecione ou digite a justificativa...", usar_lista_especial=True)
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
-                observacoes_gerais_input = criar_campo_com_assistente("Insira as observações gerais, considerações de vistoria ou ressalvas técnicas:", "obs_gerais_key", "", tipo="textarea", placeholder="Ex: Imóvel localizado em zona de expansão urbana...", height=100)
+                observacoes_gerais_input = criar_campo_com_assistente("Insira as observações gerais, considerações de vistoria ou ressalvas técnicas:", "obs_gerais_key", "", tipo="textarea", placeholder="Selecione ou digite as observações...", height=100, usar_lista_especial=True)
 
                 st.markdown("---")
                 st.subheader("6. Atribuição Manual de Notas FUNDAMENTAÇÃO-NBR")
