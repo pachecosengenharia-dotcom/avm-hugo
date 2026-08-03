@@ -34,7 +34,7 @@ if 'usuarios_cadastrados' not in st.session_state:
             "senha": "123",
             "nome": "Usuário Teste",
             "plano": "⏱️ Teste de 7 Dias (Grátis)",
-            "data_cadastro": datetime.now() - timedelta(days=8)  # Simula 8º dia para validação do bloqueio
+            "data_cadastro": datetime.now() - timedelta(days=8)
         }
     }
 
@@ -46,7 +46,6 @@ if 'autenticado' not in st.session_state:
         st.session_state.autenticado = True
         st.session_state.usuario_atual = usr_url
         
-        # BLINDAGEM CONTRA KEYERROR: Se o e-mail não estiver no dicionário inicial após F5, restaura automaticamente
         if usr_url not in st.session_state.usuarios_cadastrados:
             st.session_state.usuarios_cadastrados[usr_url] = {
                 "senha": "123",
@@ -137,7 +136,6 @@ if not st.session_state.autenticado:
 # =====================================================================
 usr_logado_chave = st.session_state.usuario_atual
 
-# Garante proteção absoluta contra KeyError ao acessar os dados do usuário logado
 if usr_logado_chave not in st.session_state.usuarios_cadastrados:
     st.session_state.usuarios_cadastrados[usr_logado_chave] = {
         "senha": "123",
@@ -178,22 +176,29 @@ if teste_expirado:
     st.stop()
 
 # =====================================================================
-# FUNÇÕES DE HISTÓRICO E ASSISTENTE DE DIGITAÇÃO NATIVO E FIXO
+# LISTA FIXA DE OPÇÕES SOLICITADAS PARA AS ESPECIFICAÇÕES
 # =====================================================================
-def registrar_historico(campo_chave, valor):
-    if valor and isinstance(valor, str) and valor.strip():
-        if campo_chave not in st.session_state.historico_digitacao:
-            st.session_state.historico_digitacao[campo_chave] = []
-        if valor.strip() not in st.session_state.historico_digitacao[campo_chave]:
-            st.session_state.historico_digitacao[campo_chave].insert(0, valor.strip())
-            st.session_state.historico_digitacao[campo_chave] = st.session_state.historico_digitacao[campo_chave][:15]
+OPCOES_ESPECIFICACOES_FIXAS = [
+    "ÁREA DO LOTE EM M²",
+    "QUANTIDADE DE QUARTOS TOTAIS DO IMÓVEL",
+    "ÁREA CONSTRUÍDA COBERTA EM M²",
+    "1 = VENDA; 2 = OFERTA",
+    "1 = NORMAL/BAIXO; 2 = NORMAL; 3 = NORMAL/ALTO; 4 = ALTO",
+    "QUANTIDADE DE BANHEIROS PRIVATIVOS DO IMÓVEL",
+    "1 = REPAROS IMPORTANTES; 2 = REPAROS SIMPLES; 3 = BOM; 4 = NOVO",
+    "IDADE APARENTE DO IMÓVEL, EM ANOS",
+    "PV 2016",
+    "1 - JAN A MAR/2025",
+    "2 - ABR A JUN/2025",
+    "3 - JUL A SET/2025",
+    "4 - OUT A DEZ/2025",
+    "5 - JAN A MAR/2026",
+    "6 - ABR A JUN/2026",
+    "7 - JUL /2026"
+]
 
 def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None):
-    if campo_chave not in st.session_state.historico_digitacao:
-        st.session_state.historico_digitacao[campo_chave] = []
-        
-    historico = st.session_state.historico_digitacao.get(campo_chave, [])
-    opcoes_combo = ["-- Digitar novo ou selecionar do histórico --"] + historico
+    opcoes_combo = ["-- Selecionar da lista fixa ou digitar novo --"] + OPCOES_ESPECIFICACOES_FIXAS
     
     escolha_historico = st.selectbox(
         f"💡 Sugestões: {label}", 
@@ -201,14 +206,13 @@ def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", pla
         key=f"hist_sel_{campo_chave}"
     )
     
-    val_base = escolha_historico if (escolha_historico and escolha_historico != "-- Digitar novo ou selecionar do histórico --") else valor_atual
+    val_base = escolha_historico if (escolha_historico and escolha_historico != "-- Selecionar da lista fixa ou digitar novo --") else valor_atual
 
     if tipo == "text":
         val_input = st.text_input(label, value=val_base, placeholder=placeholder, key=f"input_{campo_chave}")
     elif tipo == "textarea":
         val_input = st.text_area(label, value=val_base, placeholder=placeholder, height=height, key=f"input_{campo_chave}")
     
-    registrar_historico(campo_chave, val_input if isinstance(val_input, str) else str(val_input))
     return val_input
 
 # =====================================================================
@@ -1105,11 +1109,10 @@ with aba_avm:
                 tipos_classificacao_opcoes = ["Quantitativa", "Código Alocado", "Dicotômica", "Proxy", "Proxy Temporal", "Dependente"]
                 sinais_opcoes = ["+", "-"]
                 
-                # Cabeçalho da Tabela Visual de Atributos
                 col_h1, col_h2, col_h3, col_h4, col_h5, col_h6 = st.columns([1.2, 1, 1.8, 1.2, 0.8, 1.2])
                 col_h1.markdown("**Variável**")
                 col_h2.markdown("**Valor Avaliando**")
-                col_h3.markdown("**Especificação (Histórico)**")
+                col_h3.markdown("**Especificação (Lista Fixa)**")
                 col_h4.markdown("**Classificação**")
                 col_h5.markdown("**Sinal**")
                 col_h6.markdown("**Limites Amostra**")
@@ -1142,7 +1145,7 @@ with aba_avm:
                         
                     with col_r3:
                         esp_atual = st.session_state.especificacoes_variaveis.get(feat, "")
-                        esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Descreva...")
+                        esp_input = criar_campo_com_assistente(f"Especificações ({feat})", f"esp_{tipologia_imovel}_{feat}", esp_atual, placeholder="Selecione ou digite...")
                         st.session_state.especificacoes_variaveis[feat] = esp_input
                         
                     with col_r4:
@@ -1175,7 +1178,7 @@ with aba_avm:
                 with col_aj2:
                     percentual_ajuste = st.number_input("Percentual de Depreciação / Majoração (%)", value=0.0, step=0.5, format="%.2f")
                 with col_aj3:
-                    motivo_ajuste_input = criar_campo_com_assistente("Motivo da alteração do valor médio calculated", "motivo_ajuste_key", "", placeholder="Descreva aqui a justificativa...")
+                    motivo_ajuste_input = criar_campo_com_assistente("Motivo da alteração do valor médio calculado", "motivo_ajuste_key", "", placeholder="Descreva aqui a justificativa...")
 
                 st.markdown("---")
                 st.subheader("5. Observações Gerais (Preenchimento Manual para o Laudo)")
