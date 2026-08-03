@@ -176,7 +176,7 @@ if teste_expirado:
     st.stop()
 
 # =====================================================================
-# LISTA FIXA DE OPÇÕES SOLICITADAS PARA AS ESPECIFICAÇÕES
+# LISTA FIXA DE OPÇÕES SOLICITADAS PARA AS ESPECIFICAÇÕES (COM BLOCOS ÚNICOS)
 # =====================================================================
 OPCOES_ESPECIFICACOES_FIXAS = [
     "ÁREA DO LOTE EM M²",
@@ -188,19 +188,12 @@ OPCOES_ESPECIFICACOES_FIXAS = [
     "1 = REPAROS IMPORTANTES; 2 = REPAROS SIMPLES; 3 = BOM; 4 = NOVO",
     "IDADE APARENTE DO IMÓVEL, EM ANOS",
     "PV 2016",
-    "1 - JAN A MAR/2025",
-    "2 - ABR A JUN/2025",
-    "3 - JUL A SET/2025",
-    "4 - OUT A DEZ/2025",
-    "5 - JAN A MAR/2026",
-    "6 - ABR A JUN/2026",
-    "7 - JUL /2026"
+    "1 - JAN A MAR/2025; 2 - ABR A JUN/2025; 3 - JUL A SET/2025; 4 - OUT A DEZ/2025; 5 - JAN A MAR/2026; 6 - ABR A JUN/2026; 7 - JUL /2026"
 ]
 
 def criar_campo_com_assistente(label, campo_chave, valor_atual, tipo="text", placeholder="", height=None):
     opcoes_combo = ["-- Selecionar da lista fixa --"] + OPCOES_ESPECIFICACOES_FIXAS
     
-    # Chave para armazenar o valor atual do texto no session_state
     text_key = f"input_{campo_chave}"
     sel_key = f"hist_sel_{campo_chave}"
     
@@ -1308,7 +1301,7 @@ with aba_avm:
                         var_max = ((v_max - v_medio) / v_medio) * 100
 
                         fundamentacao, precisao, soma_pontos, pontos_itens, max_p_reg_val, p_valor_f_calc = calcular_graus_nbr_rigoroso(
-                            n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, amplitude_ic_percentual, tem_extrapolacao_geral, notas_manuais_input, usar_todas_manuais
+                            n_dados_efetivos, r2, len(features_selecionadas), p_valores_t, p_valor_f, amplitude_ic_percentual, tem_extrapolacao_geral, notas_manuais_input, usar_manual=usar_todas_manuais
                         )
 
                         valores_dict_metricas = {
